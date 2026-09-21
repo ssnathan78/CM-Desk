@@ -529,6 +529,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@bull-board/api@npm:9.10.1":
+  version: 9.10.1
+  resolution: "@bull-board/api@npm:9.10.1"
+  dependencies:
+    redis-info: "npm:^3.1.0"
+    valibot: "npm:^1.5.0"
+  peerDependencies:
+    "@bull-board/ui": 9.10.1
+    bull: ^4.16.5
+    bullmq: ^5.56.0 || ^6.0.0
+  peerDependenciesMeta:
+    bull:
+      optional: true
+    bullmq:
+      optional: true
+  checksum: 10c0/516357f93fa12dd2f34f32485dbf43bb34804a427fc307bf115761fa52bddccc4b74fa7123ef064b994a2f180f373c49920b20415ee94f4d19e62221eac9ab7a
+  languageName: node
+  linkType: hard
+
 "@bull-board/api@npm:9.8.0, @bull-board/api@npm:^9.8.0":
   version: 9.8.0
   resolution: "@bull-board/api@npm:9.8.0"
@@ -559,12 +578,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@bull-board/ui@npm:9.8.0, @bull-board/ui@npm:^9.8.0":
+"@bull-board/ui@npm:9.8.0":
   version: 9.8.0
   resolution: "@bull-board/ui@npm:9.8.0"
   dependencies:
     "@bull-board/api": "npm:9.8.0"
   checksum: 10c0/4844c2393c8783e1282605271188f92eda7cf2d6df000414e7dc8c86f4d67aff1d8ec20ccec811889f423ab10bb4a649ffd73d5d827c6470324dd1c84ccb2663
+  languageName: node
+  linkType: hard
+
+"@bull-board/ui@npm:^9.10.1":
+  version: 9.10.1
+  resolution: "@bull-board/ui@npm:9.10.1"
+  dependencies:
+    "@bull-board/api": "npm:9.10.1"
+  checksum: 10c0/524aa7fb3e143200585762b6bb31aba5397e105b3c9638b8d3bc7071cc6eb5a517f01d2d331ff831b9ac52fcaf6bbc1439eee2e42e42ef27a1984522ea2dd6d8
   languageName: node
   linkType: hard
 
@@ -4088,7 +4116,7 @@ __metadata:
     "@biomejs/biome": "npm:^2.5.12"
     "@bull-board/api": "npm:^9.8.0"
     "@bull-board/express": "npm:^9.8.0"
-    "@bull-board/ui": "npm:^9.8.0"
+    "@bull-board/ui": "npm:^9.10.1"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.0"
     "@mui/icons-material": "npm:^9.4.0"
@@ -8853,6 +8881,18 @@ __metadata:
     "@types/istanbul-lib-coverage": "npm:^2.0.1"
     convert-source-map: "npm:^2.0.0"
   checksum: 10c0/968bcf1c7c88c04df1ffb463c179558a2ec17aa49e49376120504958239d9e9dad5281aa05f2a78542b8557f2be0b0b4c325710262f3b838b40d703d5ed30c23
+  languageName: node
+  linkType: hard
+
+"valibot@npm:^1.5.0":
+  version: 1.5.0
+  resolution: "valibot@npm:1.5.0"
+  peerDependencies:
+    typescript: ">=5"
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: 10c0/d49dab2b2fcbb477c894def73466de598b602859a47ab92b26d387c4d2a472cbfd4ef57b49eea91aeeff143c38f5a9523914dc5a73469ec93c7cfd4326eb5fbf
   languageName: node
   linkType: hard
 
