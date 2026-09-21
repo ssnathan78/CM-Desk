@@ -28,6 +28,8 @@ jest.mock("../../lib/jobControl", () => ({
 
 jest.mock("../../lib/chaseSettings", () => ({
   saveChaseSettings: jest.fn().mockResolvedValue({ paused: true, lots: 1 }),
+  pauseAllChaseBooks: jest.fn().mockResolvedValue(undefined),
+  listChaseBooks: jest.fn().mockResolvedValue([{ instrument: "NIFTY" }]),
 }))
 
 jest.mock("../../lib/drizzleDbUtils", () => ({
