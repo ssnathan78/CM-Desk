@@ -29,8 +29,13 @@ const STRATEGY_INSTRUMENTS: Record<string, Set<string>> = {
     INSTRUMENTS.NIFTY,
     INSTRUMENTS.BANKNIFTY,
     INSTRUMENTS.FINNIFTY,
+    INSTRUMENTS.MIDCPNIFTY,
   ]),
-  [STRATEGIES.ATM_STRANGLE]: new Set([INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY]),
+  [STRATEGIES.ATM_STRANGLE]: new Set([
+    INSTRUMENTS.NIFTY,
+    INSTRUMENTS.BANKNIFTY,
+    INSTRUMENTS.MIDCPNIFTY,
+  ]),
 }
 
 export type TradeValidationResult = { ok: true } | { ok: false; error: string }

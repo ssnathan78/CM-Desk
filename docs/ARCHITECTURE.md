@@ -170,7 +170,7 @@ See [TRADING_DOMAIN_MODEL.md](./TRADING_DOMAIN_MODEL.md). `transactions` remains
 ### Known partial features
 
 - Exit queue implements `INDIVIDUAL_LEG_SLM_1X` only; other exit enums appear in UI but are unwired in `exitTradingQueue.ts`
-- Strangle form may list FinNifty while punch-now page restricts indices
+- Strangle punch-now includes Nifty, BankNifty, and Midcap Nifty; FinNifty remains excluded from strangle validation
 - `runNow` market-open check is commented out in `pages/api/trades_day.ts`
 
 ## Environment variables

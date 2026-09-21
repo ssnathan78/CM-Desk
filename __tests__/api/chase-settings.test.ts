@@ -18,7 +18,7 @@ describe("/api/chase-settings", () => {
     expect(body.config.lots).toBeGreaterThanOrEqual(1)
     expect(body.config.emaPeriod).toBeTruthy()
     expect((body.books ?? []).map(book => book.instrument)).toEqual(
-      expect.arrayContaining(["NIFTY", "BANKNIFTY", "FINNIFTY"])
+      expect.arrayContaining(["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"])
     )
   })
 

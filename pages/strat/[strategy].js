@@ -20,7 +20,12 @@ const Strategy = () => {
             Straddle guide
           </Button>
           <AtmStraddleSetup
-            enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]}
+            enabledInstruments={[
+              INSTRUMENTS.NIFTY,
+              INSTRUMENTS.BANKNIFTY,
+              INSTRUMENTS.FINNIFTY,
+              INSTRUMENTS.MIDCPNIFTY,
+            ]}
             exitStrategies={[...SCHEDULEABLE_EXIT_STRATEGIES]}
           />
         </StratLayout>
@@ -33,7 +38,11 @@ const Strategy = () => {
             Strangle guide
           </Button>
           <AtmStrangleSetup
-            enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY]}
+            enabledInstruments={[
+              INSTRUMENTS.NIFTY,
+              INSTRUMENTS.BANKNIFTY,
+              INSTRUMENTS.MIDCPNIFTY,
+            ]}
             exitStrategies={[...SCHEDULEABLE_EXIT_STRATEGIES]}
           />
         </StratLayout>

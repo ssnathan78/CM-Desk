@@ -33,6 +33,12 @@ describe("schema guardrails", () => {
     expect(sql).toContain("legacy_60m")
   })
 
+  it("adds Midcap Nifty (MIDCPNIFTY) as a Chase book, off by default", () => {
+    const sql = readFileSync(resolve(__dirname, "../../drizzle/0016_chase_midcpnifty.sql"), "utf8")
+    expect(sql).toContain("MIDCPNIFTY")
+    expect(sql).toContain("false")
+  })
+
   it("adds extras jsonb for strangle entry fields", () => {
     const sql = readFileSync(resolve(__dirname, "../../drizzle/0003_plan_extras.sql"), "utf8")
     expect(sql).toContain("extras jsonb")

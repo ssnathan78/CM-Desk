@@ -117,6 +117,7 @@ export const DESK_INDEXES = [
   INSTRUMENTS.NIFTY,
   INSTRUMENTS.BANKNIFTY,
   INSTRUMENTS.FINNIFTY,
+  INSTRUMENTS.MIDCPNIFTY,
 ] as const
 
 export function staticIndexMeta(index: (typeof DESK_INDEXES)[number]) {

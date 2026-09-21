@@ -59,8 +59,14 @@ describe("validateInstrumentForStrategy", () => {
     expect(r.ok).toBe(false)
   })
 
-  it("straddle allows FINNIFTY", () => {
-    expect(validateInstrumentForStrategy(STRATEGIES.ATM_STRADDLE, INSTRUMENTS.FINNIFTY).ok).toBe(
+  it("strangle allows MIDCPNIFTY", () => {
+    expect(validateInstrumentForStrategy(STRATEGIES.ATM_STRANGLE, INSTRUMENTS.MIDCPNIFTY).ok).toBe(
+      true
+    )
+  })
+
+  it("straddle allows MIDCPNIFTY", () => {
+    expect(validateInstrumentForStrategy(STRATEGIES.ATM_STRADDLE, INSTRUMENTS.MIDCPNIFTY).ok).toBe(
       true
     )
   })
@@ -148,6 +154,11 @@ describe("validateTradeJobPayload", () => {
   it("rejects strangle on FINNIFTY", () => {
     const job = baseStrangleJob({ instrument: INSTRUMENTS.FINNIFTY })
     expect(validateTradeJobPayload(job).ok).toBe(false)
+  })
+
+  it("allows strangle on MIDCPNIFTY", () => {
+    const job = baseStrangleJob({ instrument: INSTRUMENTS.MIDCPNIFTY })
+    expect(validateTradeJobPayload(job).ok).toBe(true)
   })
 
   it("rejects inverted skew thresholds", () => {

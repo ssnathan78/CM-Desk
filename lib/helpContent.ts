@@ -24,8 +24,8 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "continuous",
         title: "Continuous — Chase",
         body: [
-          "Chase is a futures process that keeps running across days. Nifty, BankNifty, and FinNifty each have their own lots, EMA, pause, and status. It is not a weekday template.",
-          "Desk → Risk still treats Chase as one strategy: Paper vs Live, enabled, halt, max lots, and max open positions apply to all three books together. Pause and lots stay on the Chase page, per index.",
+          "Chase is a futures process that keeps running across days. Nifty, BankNifty, FinNifty, and Midcap Nifty (MIDCPNIFTY) each have their own lots, EMA, pause, and status. It is not a weekday template.",
+          "Desk → Risk still treats Chase as one strategy: Paper vs Live, enabled, halt, max lots, and max open positions apply to all Chase books together. Pause and lots stay on the Chase page, per index.",
           "Kill intraday on the dashboard does not pause Chase. Kill all (incl. Chase) does. Square off all open gets you out of current books without a halt; Chase can take the next signal.",
         ],
       },
@@ -183,7 +183,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
   chase: {
     title: "Chase",
     summary:
-      "Index futures trend-follow around a long EMA. Pick Nifty, BankNifty, and/or FinNifty. Positions can stay open across sessions.",
+      "Index futures trend-follow around a long EMA. Pick Nifty, BankNifty, FinNifty, and/or Midcap Nifty (MIDCPNIFTY). Positions can stay open across sessions.",
     sections: [
       {
         id: "instruments",
@@ -198,7 +198,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "How many futures lots to trade on that index. Lots are independent (Nifty can be 1 while BankNifty is 2). The page shows lots × lot size × last hourly close so you can see rupee notional before an order. Desk → Risk max notional and Chase max lots still apply to the whole Chase strategy.",
           "Pause is per index: after that book's LONG/SHORT is exited, do not enter again. Pending entry triggers are cancelled. Resume turns entries back on for that index only.",
-          "Reset to fresh signal on Chase is per index. Desk → Risk “Reset Chase to fresh signal” resets Nifty, BankNifty, and FinNifty together. Neither flatten an open futures book — use Square off on Chase, Today, or Desk → Positions.",
+          "Reset to fresh signal on Chase is per index. Desk → Risk “Reset Chase to fresh signal” resets every Chase index together. Neither flatten an open futures book — use Square off on Chase, Today, or Desk → Positions.",
         ],
       },
       {

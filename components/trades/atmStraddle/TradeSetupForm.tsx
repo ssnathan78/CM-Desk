@@ -72,8 +72,13 @@ const TradeSetupForm = ({
   const enabledInstruments =
     enabledInstrumentsProp ??
     (strategy === STRATEGIES.ATM_STRADDLE
-      ? [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]
-      : [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY])
+      ? [
+          INSTRUMENTS.NIFTY,
+          INSTRUMENTS.BANKNIFTY,
+          INSTRUMENTS.FINNIFTY,
+          INSTRUMENTS.MIDCPNIFTY,
+        ]
+      : [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.MIDCPNIFTY])
 
   const exitStrategies = (exitStrategiesProp ?? [...SCHEDULEABLE_EXIT_STRATEGIES]).filter(s =>
     EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(s)

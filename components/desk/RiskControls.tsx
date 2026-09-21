@@ -293,9 +293,9 @@ export default function RiskControls({
                 <Alert severity="warning">
                   Live also needs MOCK_ORDERS=false in the process and “Allow live orders” above.
                   Saving Paper → Live archives this strategy’s paper positions (no Kite order) and
-                  resets every Chase index to AWAITING_SIGNAL. Save is rejected if Kite or the live ledger still
-                  has size. Live flatten never uses paper qty. Switching Live → Paper is rejected
-                  while a live book is open.
+                  resets every Chase index to AWAITING_SIGNAL. Save is rejected if Kite or the live
+                  ledger still has size. Live flatten never uses paper qty. Switching Live → Paper
+                  is rejected while a live book is open.
                 </Alert>
               ) : (
                 <Typography color="text.secondary" variant="body2">
@@ -383,7 +383,7 @@ export default function RiskControls({
                   onClick={async () => {
                     if (
                       !window.confirm(
-                        "Reset Nifty, BankNifty, and FinNifty Chase status to AWAITING_SIGNAL? This does not flatten an open futures position. Use Square off on Chase or Desk → Positions to get out of a current book."
+                        "Reset Nifty, BankNifty, FinNifty, and Midcap Nifty Chase status to AWAITING_SIGNAL? This does not flatten an open futures position. Use Square off on Chase or Desk → Positions to get out of a current book."
                       )
                     ) {
                       return

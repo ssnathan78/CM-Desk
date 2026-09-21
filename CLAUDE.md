@@ -97,8 +97,8 @@ Run int/api/e2e with Docker deps: [docs/TESTING_STRATEGY.md](docs/TESTING_STRATE
 
 ## Domain
 
-- Nifty, BankNifty, FinNifty options. `hasWeeklyExpiry` is **Nifty only**.
-- Lot sizes (Jan 2026 NSE): Nifty 65, BankNifty 30, FinNifty 60.
+- Nifty, BankNifty, FinNifty, Midcap Nifty (`MIDCPNIFTY`) options. `hasWeeklyExpiry` is **Nifty only**.
+- Lot sizes (Jan 2026 NSE / Kite NFO): Nifty 65, BankNifty 30, FinNifty 60, Midcap Nifty 120. Strike step for Midcap Nifty options is 25. Cash underlying quote is `NIFTY MID SELECT`.
 - Dual P&amp;L: rupees in UI; points for `targetPnL` (do not merge them).
 
 ## File map

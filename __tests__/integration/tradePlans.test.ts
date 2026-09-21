@@ -197,8 +197,14 @@ describeDb("chase_settings", () => {
     const { rows } = await pool!.query(
       `SELECT instrument, lots, paused, enabled FROM chase_settings ORDER BY instrument`
     )
-    expect(rows.length).toBe(3)
-    expect(rows.map(row => row.instrument).sort()).toEqual(["BANKNIFTY", "FINNIFTY", "NIFTY"])
+    expect(rows.length).toBe(4)
+    expect(rows.map(row => row.instrument).sort()).toEqual([
+      "BANKNIFTY",
+      "FINNIFTY",
+      "MIDCPNIFTY",
+      "NIFTY",
+    ])
+    expect(rows.find(row => row.instrument === "MIDCPNIFTY")?.enabled).toBe(false)
     expect(Number(rows.find(row => row.instrument === "NIFTY")?.lots)).toBeGreaterThanOrEqual(1)
   })
 })
