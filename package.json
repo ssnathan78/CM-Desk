@@ -76,7 +76,7 @@
     "husky": "^9.1.7",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^30.5.1",
-    "jest-environment-jsdom": "^30.5.1",
+    "jest-environment-jsdom": "^30.5.2",
     "node-mocks-http": "^1.18.1",
     "prop-types": "^15.8.1",
     "react-test-renderer": "^19.2.8",
