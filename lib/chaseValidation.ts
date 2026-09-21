@@ -6,12 +6,14 @@ const CHASE_INDEXES = new Set<string>([
   INSTRUMENTS.NIFTY,
   INSTRUMENTS.BANKNIFTY,
   INSTRUMENTS.FINNIFTY,
+  INSTRUMENTS.MIDCPNIFTY,
 ])
 
 export function chaseIndexFromSymbol(symbol: string): string {
   const upper = String(symbol || "").toUpperCase()
   if (upper.startsWith("BANKNIFTY")) return "BANKNIFTY"
   if (upper.startsWith("FINNIFTY")) return "FINNIFTY"
+  if (upper.startsWith("MIDCPNIFTY")) return "MIDCPNIFTY"
   if (upper.startsWith("NIFTY")) return "NIFTY"
   return "NIFTY"
 }
@@ -47,12 +49,12 @@ export function validateChaseSettings(
       return { ok: false, error: "Select at least one index for Chase" }
     }
     if (patch.instruments.some(item => !CHASE_INDEXES.has(String(item)))) {
-      return { ok: false, error: "Chase instruments must be NIFTY, BANKNIFTY, or FINNIFTY" }
+      return { ok: false, error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY" }
     }
   }
   const instrument = (patch as { instrument?: string }).instrument
   if (instrument != null && !CHASE_INDEXES.has(String(instrument).toUpperCase())) {
-    return { ok: false, error: "Chase instruments must be NIFTY, BANKNIFTY, or FINNIFTY" }
+    return { ok: false, error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY" }
   }
   if (patch.emaPeriod != null) {
     const n = Number(patch.emaPeriod)

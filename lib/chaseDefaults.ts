@@ -32,7 +32,7 @@ export const CHASE_MASTER_DEFAULTS: ChaseEngineConfig = {
   openClassify: CHASE_OPEN_CLASSIFY.PDF_0916,
 }
 
-export const CHASE_INDEX_ORDER = ["NIFTY", "BANKNIFTY", "FINNIFTY"] as const
+export const CHASE_INDEX_ORDER = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"] as const
 
 export function defaultChaseBook(instrument: string, enabled = false): ChaseBookConfig {
   return {

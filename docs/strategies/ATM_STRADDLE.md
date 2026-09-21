@@ -20,7 +20,7 @@ This is a **same-session** structure. It is not Chase. Positions are **MIS** by 
 
 | Item | Rule |
 |---|---|
-| Indexes | Nifty, BankNifty, FinNifty (one per weekday plan; punch-now may tick several — each tick is a separate job) |
+| Indexes | Nifty, BankNifty, FinNifty, Midcap Nifty (`MIDCPNIFTY`) (one per weekday plan; punch-now may tick several — each tick is a separate job) |
 | Instruments | Current / next / monthly expiry options. Weekly UI is **Nifty only** (`hasWeeklyExpiry`) |
 | Product | `MIS` (default) or `NRML` |
 | Side | `SHORT` = sell both legs; `LONG` = buy both legs |
@@ -166,6 +166,8 @@ In-app copy: `/help/straddle`.
 
 **If Nifty trends and one SL hits, should I flatten the other?** No. Hold until auto square-off (or an operator square-off). That is the 9:20 trade.
 
-**Can I run FinNifty?** Yes on straddle. Strangle’s default margin table omits FinNifty; punch-now still depends on validation.
+**Can I run FinNifty?** Yes on straddle. Strangle’s punch-now form includes Midcap Nifty and still excludes FinNifty.
+
+**Can I run Midcap Nifty?** Yes on straddle, strangle, and Chase. Chase ships that book **off**. Kite NFO name is `MIDCPNIFTY` (lot 120, strike step 25, cash quote `NIFTY MID SELECT`).
 
 **Does skew use mid or LTP?** Live Kite prices via `getSkew` (LTP path). There is no bid/ask microstructure model.

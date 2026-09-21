@@ -18,7 +18,7 @@ This is a **same-session** MIS structure (NRML allowed but unusual here). It is 
 
 | Item | Rule |
 |---|---|
-| Indexes | Nifty and BankNifty on the default form. FinNifty is not in the strangle margin table; do not assume it is first-class |
+| Indexes | Nifty, BankNifty, and Midcap Nifty (`MIDCPNIFTY`) on the punch-now form. FinNifty is still not first-class on strangle |
 | Product / side / expiry | Same as straddle: MIS/NRML, SHORT/LONG, current/next/(weekly Nifty) |
 | ATM pivot | Same rounding as straddle: `round(LTP / step) * step` |
 | One template | One weekday plan row per weekday |

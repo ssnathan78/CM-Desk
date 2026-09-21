@@ -50,7 +50,12 @@ const PLAN_STRATEGIES = [STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE]
 const isPlanStrategy = (value: unknown): value is STRATEGIES =>
   PLAN_STRATEGIES.includes(value as STRATEGIES)
 
-const PLAN_INDEXES = [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY] as const
+const PLAN_INDEXES = [
+  INSTRUMENTS.NIFTY,
+  INSTRUMENTS.BANKNIFTY,
+  INSTRUMENTS.FINNIFTY,
+  INSTRUMENTS.MIDCPNIFTY,
+] as const
 
 type EditingSlot = {
   day: DailyPlansDayKey
@@ -99,11 +104,9 @@ const Plan = () => {
       const current = next[selectedStrategy] as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
       next[selectedStrategy] = {
         ...current,
-        instruments: {
-          [INSTRUMENTS.NIFTY]: free === INSTRUMENTS.NIFTY,
-          [INSTRUMENTS.BANKNIFTY]: free === INSTRUMENTS.BANKNIFTY,
-          [INSTRUMENTS.FINNIFTY]: free === INSTRUMENTS.FINNIFTY,
-        },
+        instruments: Object.fromEntries(
+          PLAN_INDEXES.map(index => [index, index === free])
+        ) as Record<INSTRUMENTS, boolean>,
         instrument: free,
       } as AvailablePlansConfig
     }
@@ -382,11 +385,10 @@ const Plan = () => {
     } as AvailablePlansConfig
     if (strategy !== STRATEGIES.CHASE) {
       const row = merged as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
-      const emptyIndexes = {
-        [INSTRUMENTS.NIFTY]: false,
-        [INSTRUMENTS.BANKNIFTY]: false,
-        [INSTRUMENTS.FINNIFTY]: false,
-      } as Record<INSTRUMENTS, boolean>
+      const emptyIndexes = Object.fromEntries(PLAN_INDEXES.map(index => [index, false])) as Record<
+        INSTRUMENTS,
+        boolean
+      >
       const fromConfig = row.instrument
         ? ({ [row.instrument]: true } as Record<INSTRUMENTS, boolean>)
         : { ...emptyIndexes, [INSTRUMENTS.NIFTY]: true }

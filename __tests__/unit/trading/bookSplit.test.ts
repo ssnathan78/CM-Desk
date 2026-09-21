@@ -185,5 +185,6 @@ describe("flattenRowPlan", () => {
     expect(chaseInstrumentFromTradingsymbol("BANKNIFTY26SEPFUT")).toBe("BANKNIFTY")
     expect(chaseInstrumentFromTradingsymbol("NIFTY26SEPFUT")).toBe("NIFTY")
     expect(chaseInstrumentFromTradingsymbol("FINNIFTY26SEPFUT")).toBe("FINNIFTY")
+    expect(chaseInstrumentFromTradingsymbol("MIDCPNIFTY26SEPFUT")).toBe("MIDCPNIFTY")
   })
 })

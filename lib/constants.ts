@@ -20,6 +20,7 @@ export enum INSTRUMENTS {
   NIFTY = "NIFTY",
   BANKNIFTY = "BANKNIFTY",
   FINNIFTY = "FINNIFTY",
+  MIDCPNIFTY = "MIDCPNIFTY",
 }
 
 export const CHASE_STATUS = {
@@ -82,6 +83,16 @@ export const INSTRUMENT_DETAILS: Record<INSTRUMENTS, INSTRUMENT_PROPERTIES> = {
     exchange: "NSE",
     strikeStepSize: 50,
     freezeQty: 1800,
+    hasWeeklyExpiry: false,
+  },
+  [INSTRUMENTS.MIDCPNIFTY]: {
+    lotSize: 120,
+    displayName: "MIDCPNIFTY",
+    underlyingSymbol: "NIFTY MID SELECT",
+    nfoSymbol: "MIDCPNIFTY",
+    exchange: "NSE",
+    strikeStepSize: 25,
+    freezeQty: 2800,
     hasWeeklyExpiry: false,
   },
 }
@@ -182,6 +193,7 @@ export const STRATEGIES_DETAILS = {
       [INSTRUMENTS.NIFTY]: 145000,
       [INSTRUMENTS.BANKNIFTY]: 150000,
       [INSTRUMENTS.FINNIFTY]: 100000,
+      [INSTRUMENTS.MIDCPNIFTY]: 130000,
     },
     defaultFormState: {
       instruments: getInstrumentsDefaultState(),
@@ -224,6 +236,7 @@ export const STRATEGIES_DETAILS = {
     margin1x: {
       [INSTRUMENTS.NIFTY]: 420000,
       [INSTRUMENTS.BANKNIFTY]: 425000,
+      [INSTRUMENTS.MIDCPNIFTY]: 410000,
     },
     defaultFormState: {
       instruments: getInstrumentsDefaultState(),

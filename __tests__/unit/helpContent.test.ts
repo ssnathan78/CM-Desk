@@ -58,7 +58,7 @@ describe("help content", () => {
     const chase = HELP_PAGES.chase.sections.find(s => s.id === "lots")?.body.join(" ") ?? ""
     const desk = HELP_PAGES.desk.sections.find(s => s.id === "continuous")?.body.join(" ") ?? ""
     expect(chase).toMatch(/Desk → Risk/i)
-    expect(chase).toMatch(/all three|Nifty, BankNifty, and FinNifty/i)
+    expect(chase).toMatch(/every Chase index|all Chase books|MIDCPNIFTY/i)
     expect(desk).toMatch(/Paper vs Live/i)
   })
 
