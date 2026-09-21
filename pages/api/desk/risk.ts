@@ -137,8 +137,11 @@ export default withSession(async (req, res) => {
             )
             if (key === "CHASE") {
               const { getChaseStatus } = await import("../../../lib/drizzleDbUtils")
-              const chase = await getChaseStatus("NIFTY")
-              if (chase?.tradingsymbol) symbols.add(chase.tradingsymbol)
+              const { CHASE_INDEX_ORDER } = await import("../../../lib/chaseDefaults")
+              for (const index of CHASE_INDEX_ORDER) {
+                const chase = await getChaseStatus(index)
+                if (chase?.tradingsymbol) symbols.add(chase.tradingsymbol)
+              }
             }
             for (const symbol of symbols) {
               const q = await getNetPositionQty(kite, symbol, { ledgerFallback: false })

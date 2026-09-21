@@ -29,6 +29,23 @@ It is **continuous**: each selected index has its own lots + engine config (not 
 
 Kill **intraday** does **not** pause Chase. Kill **all** does, and tries to flatten Chase futures.
 
+The hourly worker loops **enabled** books in one job: each enabled index updates its own futures EMA and then `generateSignal` for that index. BankNifty and FinNifty are **not** updated while their book is off, unless that book is already LONG/SHORT / AWAITING_* (the minute SL job still runs then). Signals on Desk are tagged per index.
+
+---
+
+## Desk → Risk (one Chase row)
+
+Chase books are independent on `/chase`. Desk → Risk still has **one** Chase strategy:
+
+| Control | Scope |
+|---|---|
+| Execution Paper / Live | All Chase indexes. You cannot paper Nifty and live BankNifty. Paper → Live archives every Chase paper position and resets **all three** `chase_status` rows. |
+| Strategy enabled / halted | All Chase orders (entry, and for disabled: even SL/flatten). Halt still allows flatten/SL. |
+| Max lots / max open positions / max notional | Shared across Chase. Two enabled indexes both count toward Chase open-position and notional caps. |
+| Reset Chase to fresh signal | All three indexes (`POST /api/chase-settings` `action: reset-signal` with no `instrument`). Chase page Reset is per index. |
+
+`MOCK_ORDERS=true` still blocks Kite for the whole process. Live Chase also needs Allow live orders + Chase Execution = Live.
+
 ---
 
 ## 3. Inputs & formulas
@@ -74,7 +91,7 @@ AWAITING_SHORT ──entry SL-M @ day's low──►  SHORT
 
 **LONG/SHORT requires a fill, not the candle alone.** A risk reject (`MAX_NOTIONAL`, `MAX_LOTS`, live blocked, …) leaves Chase in `AWAITING_*`. The minute job retries MARKET only after lots come from `chase_settings` (not a same-day `job_executions` row, which Chase does not create). If status was flipped without a ledger/Kite position, the next hourly job treats it as a phantom and returns to `AWAITING_SIGNAL` so that hour can signal again.
 
-Operator escape hatch: **Chase → Reset to fresh signal** (`POST /api/chase-settings` `action: reset-signal`). That does not flatten an open book.
+Operator escape hatch: **Chase page → Reset signal** (one index) or **Desk → Risk → Reset Chase to fresh signal** (all three). `POST /api/chase-settings` `action: reset-signal` with `instrument` resets one book; omitting `instrument` resets Nifty, BankNifty, and FinNifty. That does not flatten an open book.
 
 Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit) instead of leaving the old trigger in place.
 
