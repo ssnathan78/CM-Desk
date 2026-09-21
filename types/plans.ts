@@ -50,6 +50,7 @@ export interface ATM_STRADDLE_CONFIG extends SavedPlanMeta {
   instruments: Record<INSTRUMENTS, boolean>
   name: string
   lots: number
+  lotsByInstrument?: Partial<Record<INSTRUMENTS, number>>
   thresholdSkewPercent: number
   takeTradeIrrespectiveSkew: boolean
   maxSkewPercent: number
@@ -75,6 +76,7 @@ export interface ATM_STRANGLE_CONFIG extends SavedPlanMeta {
   instruments: Record<INSTRUMENTS, boolean>
   name: string
   lots: number
+  lotsByInstrument?: Partial<Record<INSTRUMENTS, number>>
   slmPercent: number
   inverted: boolean
   entryStrategy: STRANGLE_ENTRY_STRATEGIES

@@ -219,10 +219,9 @@ export async function flattenOpenPositions(input: {
   }
 
   if (input.scope.kind === "strategy" && input.scope.strategy === "CHASE") {
-    const { getChaseSettings } = await import("./chaseSettings")
-    const chase = await getChaseSettings()
-    for (const instrument of chase.instruments?.length ? chase.instruments : ["NIFTY"]) {
-      chaseInstruments.add(instrument)
+    const { listChaseBooks } = await import("./chaseSettings")
+    for (const book of await listChaseBooks()) {
+      chaseInstruments.add(book.instrument)
     }
   }
 

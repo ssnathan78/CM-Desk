@@ -50,11 +50,7 @@ const PLAN_STRATEGIES = [STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE]
 const isPlanStrategy = (value: unknown): value is STRATEGIES =>
   PLAN_STRATEGIES.includes(value as STRATEGIES)
 
-const SINGLE_INDEX = {
-  [INSTRUMENTS.NIFTY]: true,
-  [INSTRUMENTS.BANKNIFTY]: false,
-  [INSTRUMENTS.FINNIFTY]: false,
-} as Record<INSTRUMENTS, boolean>
+const PLAN_INDEXES = [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY] as const
 
 type EditingSlot = {
   day: DailyPlansDayKey
@@ -94,10 +90,21 @@ const Plan = () => {
   const startAdd = (dayOfWeek: DailyPlansDayKey, selectedStrategy: STRATEGIES) => {
     const next = resetDefaultStratState()
     if (selectedStrategy !== STRATEGIES.CHASE) {
+      const used = new Set(
+        Object.values(dayState[dayOfWeek].strategies)
+          .filter(config => config.strategy === selectedStrategy)
+          .map(config => config.instrument)
+      )
+      const free = PLAN_INDEXES.find(index => !used.has(index)) ?? INSTRUMENTS.NIFTY
       const current = next[selectedStrategy] as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
       next[selectedStrategy] = {
         ...current,
-        instruments: { ...SINGLE_INDEX },
+        instruments: {
+          [INSTRUMENTS.NIFTY]: free === INSTRUMENTS.NIFTY,
+          [INSTRUMENTS.BANKNIFTY]: free === INSTRUMENTS.BANKNIFTY,
+          [INSTRUMENTS.FINNIFTY]: free === INSTRUMENTS.FINNIFTY,
+        },
+        instrument: free,
       } as AvailablePlansConfig
     }
     setStratState(next)
@@ -138,8 +145,13 @@ const Plan = () => {
     const {
       instruments: _instruments,
       disableInstrumentChange: _disable,
+      lotsByInstrument: _lotsByInstrument,
       ...rest
-    } = props as AvailablePlansConfig & { instruments?: unknown; disableInstrumentChange?: unknown }
+    } = props as AvailablePlansConfig & {
+      instruments?: unknown
+      disableInstrumentChange?: unknown
+      lotsByInstrument?: unknown
+    }
     return rest as AvailablePlansConfig
   }
 
@@ -205,11 +217,13 @@ const Plan = () => {
         const straddleOrStrangleConfig = selectedConfig as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
         const config = Object.keys(straddleOrStrangleConfig.instruments)
           .filter(instrument => straddleOrStrangleConfig.instruments[instrument])
-          .slice(0, 1)
           .map(
             (instrument): AvailablePlansConfig => ({
               ...selectedConfig,
               ...formattedStateForApiProps,
+              lots:
+                straddleOrStrangleConfig.lotsByInstrument?.[instrument as INSTRUMENTS] ??
+                selectedConfig.lots,
               instrument: instrument as INSTRUMENTS,
               strategy: currentEditStrategy as any,
             })
@@ -225,8 +239,8 @@ const Plan = () => {
           dayOfWeek: currentEditDay?.toUpperCase(),
           config,
         })
-
-        updatedConfig = { [newStrategyConfig.id]: newStrategyConfig }
+        const created = Array.isArray(newStrategyConfig) ? newStrategyConfig : [newStrategyConfig]
+        updatedConfig = Object.fromEntries(created.map((row: { id: string }) => [row.id, row]))
       }
 
       setDayState({
@@ -548,10 +562,10 @@ const Plan = () => {
           <Box>
             <Typography variant="h6">{title}</Typography>
             <Typography variant="caption" color="text.secondary">
-              One weekday template. Index (not the name) is what gets traded.
+              One weekday template per index. Name is only a label.
             </Typography>
           </Box>
-          {rows.length === 0 ? (
+          {rows.length < PLAN_INDEXES.length ? (
             <Button
               size="small"
               variant="outlined"
@@ -563,9 +577,9 @@ const Plan = () => {
           ) : null}
         </Stack>
 
-        {rows.length > 1 ? (
+        {rows.length > PLAN_INDEXES.length ? (
           <Typography color="warning.main" variant="body2" sx={{ mb: 1 }}>
-            More than one row is saved for this weekday. Keep one and delete the extras.
+            Extra rows are saved for this weekday. Keep one per index and delete the extras.
           </Typography>
         ) : null}
 

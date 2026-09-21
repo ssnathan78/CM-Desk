@@ -1,5 +1,4 @@
 import type { KiteUser } from "../types/misc"
-import { saveChaseSettings } from "./chaseSettings"
 import { CHASE_STATUS } from "./constants"
 import { updateChaseStatus } from "./drizzleDbUtils"
 import { flattenOpenPositions } from "./flattenOpen"
@@ -23,16 +22,12 @@ export async function runDeskKill(scope: KillDeskScope, user: KiteUser) {
 
   if (scope === "all") {
     try {
-      await saveChaseSettings({ paused: true })
-    } catch (e) {
-      logger.error("[runDeskKill] could not pause Chase", e)
-    }
-    try {
-      const { getChaseSettings } = await import("./chaseSettings")
-      const chase = await getChaseSettings()
-      for (const instrument of chase.instruments?.length ? chase.instruments : ["NIFTY"]) {
+      const { listChaseBooks, pauseAllChaseBooks } = await import("./chaseSettings")
+      await pauseAllChaseBooks()
+      const books = await listChaseBooks()
+      for (const book of books) {
         await updateChaseStatus({
-          instrument,
+          instrument: book.instrument,
           status: CHASE_STATUS.AWAITING_SIGNAL,
           updatedAt: new Date(),
         })

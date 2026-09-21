@@ -44,14 +44,14 @@ export default withSession(async (req: NextApiRequest, res: NextApiResponse) => 
           if (err?.code === "23505" || err?.cause?.code === "23505") {
             return res.status(409).json({
               error:
-                "This weekday already has a template for that strategy. Edit the existing one.",
+                "This weekday already has a template for that strategy and index. Edit the existing one.",
             })
           }
           throw err
         }
       }
 
-      return res.json(results[0] || {})
+      return res.json(results.length <= 1 ? results[0] || {} : results)
     }
 
     if (req.method === "PUT") {

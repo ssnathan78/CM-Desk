@@ -156,7 +156,11 @@ export const tradePlans = pgTable(
     index("idx_trade_plans_created_at").on(table.createdAt),
     index("idx_trade_plans_instrument").on(table.instrument),
     index("idx_trade_plans_strategy").on(table.strategy),
-    uniqueIndex("trade_plans_day_strategy_uidx").on(table.dayOfWeek, table.strategy),
+    uniqueIndex("trade_plans_day_strategy_instrument_uidx").on(
+      table.dayOfWeek,
+      table.strategy,
+      table.instrument
+    ),
   ]
 )
 
@@ -167,13 +171,13 @@ export const strategyDefaults = pgTable("strategy_defaults", {
 })
 
 export const chaseSettings = pgTable("chase_settings", {
-  id: integer("id").primaryKey(),
+  instrument: text("instrument").primaryKey(),
   lots: integer("lots").notNull().default(1),
   emaPeriod: integer("ema_period").notNull().default(40),
   bufferPercent: numeric("buffer_percent").notNull().default("0.2"),
   entryLimitOffset: numeric("entry_limit_offset").notNull().default("5"),
   paused: boolean("paused").notNull().default(false),
-  instruments: jsonb("instruments").notNull().default(["NIFTY"]),
+  enabled: boolean("enabled").notNull().default(false),
   openClassify: text("open_classify").notNull().default("pdf_0916"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })

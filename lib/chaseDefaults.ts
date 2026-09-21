@@ -16,6 +16,12 @@ export type ChaseEngineConfig = {
   openClassify: ChaseOpenClassify
 }
 
+/** One Chase engine book. Lots / buffer / pause are per index. */
+export type ChaseBookConfig = ChaseEngineConfig & {
+  instrument: string
+  enabled: boolean
+}
+
 export const CHASE_MASTER_DEFAULTS: ChaseEngineConfig = {
   lots: 1,
   emaPeriod: 40,
@@ -24,6 +30,32 @@ export const CHASE_MASTER_DEFAULTS: ChaseEngineConfig = {
   paused: false,
   instruments: ["NIFTY"],
   openClassify: CHASE_OPEN_CLASSIFY.PDF_0916,
+}
+
+export const CHASE_INDEX_ORDER = ["NIFTY", "BANKNIFTY", "FINNIFTY"] as const
+
+export function defaultChaseBook(instrument: string, enabled = false): ChaseBookConfig {
+  return {
+    ...CHASE_MASTER_DEFAULTS,
+    instrument,
+    enabled,
+    instruments: enabled ? [instrument] : [],
+    paused: !enabled,
+  }
+}
+
+export function aggregateChaseConfig(books: ChaseBookConfig[]): ChaseEngineConfig {
+  const enabled = books.filter(book => book.enabled)
+  const primary = enabled[0] ?? books.find(book => book.instrument === "NIFTY") ?? books[0]
+  return {
+    lots: primary?.lots ?? CHASE_MASTER_DEFAULTS.lots,
+    emaPeriod: primary?.emaPeriod ?? CHASE_MASTER_DEFAULTS.emaPeriod,
+    bufferPercent: primary?.bufferPercent ?? CHASE_MASTER_DEFAULTS.bufferPercent,
+    entryLimitOffset: primary?.entryLimitOffset ?? CHASE_MASTER_DEFAULTS.entryLimitOffset,
+    paused: enabled.length ? enabled.every(book => book.paused) : true,
+    instruments: enabled.map(book => book.instrument),
+    openClassify: primary?.openClassify ?? CHASE_MASTER_DEFAULTS.openClassify,
+  }
 }
 
 export function chaseTolerances(ema: number, bufferPercent: number) {

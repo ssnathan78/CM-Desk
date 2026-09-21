@@ -141,7 +141,7 @@ export function planApiErrorMessage(err: any): string {
     return `Missing required field (${column || "unknown"}).`
   }
   if (code === "23505") {
-    return "This weekday already has a template for that strategy. Edit the existing one."
+    return "This weekday already has a template for that strategy and index. Edit the existing one."
   }
   return err?.cause?.detail || err?.message || "Could not save template"
 }

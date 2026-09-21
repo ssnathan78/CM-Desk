@@ -1,6 +1,7 @@
 import dayjs from "dayjs"
 
-import { getChaseSettings } from "../chaseSettings"
+import { type ChaseBookConfig } from "../chaseDefaults"
+import { getChaseSettings, listChaseBooks } from "../chaseSettings"
 import { nowDayjs } from "../clock"
 import { getChaseStatus } from "../drizzleDbUtils"
 import { getIndexInstruments } from "../kiteUtils"
@@ -43,6 +44,7 @@ export type DeskInstrumentSnapshot = {
     emaPeriod: number
     bufferPercent: number
     entryLimitOffset: number
+    books: ChaseBookConfig[]
   }
   indexes: DeskIndexContracts[]
 }
@@ -55,6 +57,7 @@ export async function buildDeskInstrumentSnapshot(input?: {
 }): Promise<DeskInstrumentSnapshot> {
   const now = nowDayjs()
   const chase = await getChaseSettings()
+  const books = await listChaseBooks()
   const selected = new Set(chase.instruments)
 
   let slices: InstrumentSlice[] = input?.instruments ?? []
@@ -75,7 +78,7 @@ export async function buildDeskInstrumentSnapshot(input?: {
   const indexes: DeskIndexContracts[] = []
   for (const index of DESK_INDEXES) {
     const meta = staticIndexMeta(index)
-    const status = selected.has(index) ? await getChaseStatus(index) : null
+    const status = await getChaseStatus(index)
     const futs = futuresChain(slices, index, now)
     const selection = chaseFuturesSelection(futs, now)
     const optionDates = optionExpiryDates(slices, index, now)
@@ -108,6 +111,7 @@ export async function buildDeskInstrumentSnapshot(input?: {
       emaPeriod: chase.emaPeriod,
       bufferPercent: chase.bufferPercent,
       entryLimitOffset: chase.entryLimitOffset,
+      books,
     },
     indexes,
   }

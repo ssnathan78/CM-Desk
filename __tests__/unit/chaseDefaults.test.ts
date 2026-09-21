@@ -1,8 +1,10 @@
 import {
+  aggregateChaseConfig,
   CHASE_MASTER_DEFAULTS,
   chaseAllowsNewEntry,
   chaseManagesOpenPosition,
   chaseTolerances,
+  defaultChaseBook,
 } from "../../lib/chaseDefaults"
 
 describe("chaseTolerances", () => {
@@ -17,6 +19,18 @@ describe("chaseTolerances", () => {
     const wide = chaseTolerances(10000, 1)
     expect(wide.longTolerance).toBeGreaterThan(tight.longTolerance)
     expect(wide.shortTolerance).toBeLessThan(tight.shortTolerance)
+  })
+})
+
+describe("aggregateChaseConfig", () => {
+  it("keeps lots independent per enabled book", () => {
+    const nifty = { ...defaultChaseBook("NIFTY", true), lots: 1 }
+    const bank = { ...defaultChaseBook("BANKNIFTY", true), lots: 3, paused: false }
+    const fin = defaultChaseBook("FINNIFTY", false)
+    const aggregated = aggregateChaseConfig([nifty, bank, fin])
+    expect(aggregated.instruments).toEqual(["NIFTY", "BANKNIFTY"])
+    expect(aggregated.lots).toBe(1)
+    expect(aggregated.paused).toBe(false)
   })
 })
 

@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm"
 
-import { getChaseSettings } from "../chaseSettings"
+import { listEnabledChaseBooks } from "../chaseSettings"
 import { nowDayjs } from "../clock"
 import { INSTRUMENT_DETAILS, type INSTRUMENTS } from "../constants"
 import { db } from "../drizzle"
@@ -79,21 +79,22 @@ export async function buildDeskSetupNotional(): Promise<DeskSetupNotional> {
   const maxNotionalInr = risk.maxNotionalInr
   const rows: SetupNotionalRow[] = []
 
-  const chase = await getChaseSettings()
-  for (const index of chase.instruments) {
+  const chaseBooks = await listEnabledChaseBooks()
+  for (const book of chaseBooks) {
+    const index = book.instrument
     const lotSize =
       lotSizeForInstrument(index) || INSTRUMENT_DETAILS[index as INSTRUMENTS]?.lotSize || 0
     const quote = await lastCloseForIndex(index)
     const price = quote?.price ?? null
-    const qty = chase.lots * lotSize
-    const notional = price ? chaseFuturesNotionalInr({ lots: chase.lots, lotSize, price }) : null
+    const qty = book.lots * lotSize
+    const notional = price ? chaseFuturesNotionalInr({ lots: book.lots, lotSize, price }) : null
     const cap = notionalVsCap(notional ?? 0, maxNotionalInr, qty)
     rows.push({
       source: "CHASE",
       label: `Chase ${index}`,
       strategy: "CHASE",
       instrument: index,
-      lots: chase.lots,
+      lots: book.lots,
       lotSize,
       qty,
       legs: 1,
@@ -105,8 +106,8 @@ export async function buildDeskSetupNotional(): Promise<DeskSetupNotional> {
       maxNotionalInr,
       overCap: Boolean(notional && cap.overCap),
       detail: notional
-        ? `${chase.lots} lot × ${lotSize} × ₹${formatInr(price || 0)} = ₹${formatInr(notional)}`
-        : `${chase.lots} lot × ${lotSize} = ${qty} qty (need a futures price for rupee notional)`,
+        ? `${book.lots} lot × ${lotSize} × ₹${formatInr(price || 0)} = ₹${formatInr(notional)}`
+        : `${book.lots} lot × ${lotSize} = ${qty} qty (need a futures price for rupee notional)`,
     })
   }
 

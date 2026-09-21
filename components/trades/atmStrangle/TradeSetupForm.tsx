@@ -173,7 +173,7 @@ const TradeSetupForm = ({
                 name="lots"
                 value={state.lots ?? ""}
                 error={Boolean(lotsError)}
-                helperText={lotsError || ""}
+                helperText={lotsError || "Default lots for every ticked index unless overridden below"}
                 onChange={e => {
                   setLotsError(null)
                   onChange({ lots: coerceLots(e.target.value) })
@@ -181,6 +181,29 @@ const TradeSetupForm = ({
                 label="Lots"
               />
             </Grid>
+            {(
+              Object.keys(state.instruments || {}) as INSTRUMENTS[]
+            )
+              .filter(key => state.instruments?.[key])
+              .map(instrument => (
+                <Grid size={{ xs: 12, sm: 4 }} key={`lots-${instrument}`}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    label={`${instrument} lots`}
+                    value={state.lotsByInstrument?.[instrument] ?? state.lots ?? ""}
+                    onChange={e => {
+                      setLotsError(null)
+                      onChange({
+                        lotsByInstrument: {
+                          ...(state.lotsByInstrument || {}),
+                          [instrument]: coerceLots(e.target.value),
+                        },
+                      })
+                    }}
+                  />
+                </Grid>
+              ))}
             <Grid size={12}>
               <OptionNotionalPreview
                 lots={Number(state.lots) || 0}

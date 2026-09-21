@@ -10,7 +10,8 @@ import {
   chaseStatusHasPosition,
   splitChaseLedgerQty,
 } from "./chaseFill"
-import { getChaseEngineConfig, getChaseSettings } from "./chaseSettings"
+import { getChaseBook } from "./chaseSettings"
+import { chaseIndexFromSymbol } from "./chaseValidation"
 import { CHASE_STATUS } from "./constants"
 import { getChaseStatus, updateChaseStatus } from "./drizzleDbUtils"
 import {
@@ -195,9 +196,9 @@ async function placeEntryTriggerOrder(
   triggerPrice: number,
   accessToken: string
 ): Promise<void> {
-  const settings = await getChaseSettings()
-  if (!chaseAllowsNewEntry(settings.paused)) {
-    logger.info("[generateSignal] Chase is paused — skipping new entry order")
+  const settings = await getChaseBook(chaseIndexFromSymbol(instrument.tradingsymbol))
+  if (!settings.enabled || !chaseAllowsNewEntry(settings.paused)) {
+    logger.info("[generateSignal] Chase is paused or disabled — skipping new entry order")
     return
   }
   const lots = settings.lots ?? 0
@@ -252,7 +253,7 @@ async function placeEntryTriggerOrder(
     return
   }
 
-  const { entryLimitOffset } = await getChaseEngineConfig()
+  const { entryLimitOffset } = settings
   const ltpData = await kite.getLTP(`NFO:${instrument.tradingsymbol}`)
   const ltp: number = (ltpData as any)[`NFO:${instrument.tradingsymbol}`]?.last_price ?? 0
   const alreadyBreached = side === "BUY" ? ltp >= triggerPrice : ltp <= triggerPrice
@@ -336,11 +337,9 @@ export const generateSignal = async (
     createdAt,
   } = chaseStatusData
 
-  const settings = await getChaseSettings()
-  if (
-    !chaseAllowsNewEntry(settings.paused) &&
-    !chaseManagesOpenPosition(settings.paused, currentStatus)
-  ) {
+  const settings = await getChaseBook(nfoSymbol)
+  const blockNewEntries = !settings.enabled || !chaseAllowsNewEntry(settings.paused)
+  if (blockNewEntries && !chaseManagesOpenPosition(settings.paused, currentStatus)) {
     if (
       currentStatus === CHASE_STATUS.AWAITING_LONG ||
       currentStatus === CHASE_STATUS.AWAITING_SHORT
@@ -493,7 +492,7 @@ export const generateSignal = async (
       logger.error("[generateSignal] error updating chase_status:", error)
     } else {
       const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
-      const lots = chaseLotsFromConfig((await getChaseSettings()).lots)
+      const lots = chaseLotsFromConfig(settings.lots)
       const quantity = lots * (instrument.lotSize ?? 1)
       await placeSL(instrument.tradingsymbol, exitSide, quantity, accessToken, stoploss)
     }
@@ -509,7 +508,7 @@ export const generateSignal = async (
       key: `chase:eod:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DD")}`,
     })
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
-    const { bufferPercent } = await getChaseEngineConfig()
+    const { bufferPercent } = settings
     const { longTolerance, shortTolerance } = chaseTolerances(instrument.ema, bufferPercent)
     logger.info(
       `[generateSignal] awaiting signal; longTolerance=${longTolerance} shortTolerance=${shortTolerance}`
@@ -678,7 +677,7 @@ export const generateSignal = async (
         logger.error("[generateSignal] error promoting filled pending entry:", error)
         return
       }
-      const lots = chaseLotsFromConfig((await getChaseSettings()).lots)
+      const lots = chaseLotsFromConfig(settings.lots)
       const quantity = lots * (instrument.lotSize ?? 1)
       if (quantity > 0 && stoploss) {
         const exitSide = pendingSide === "LONG" ? "SELL" : "BUY"
@@ -686,7 +685,7 @@ export const generateSignal = async (
       }
       return
     }
-    const { bufferPercent } = await getChaseEngineConfig()
+    const { bufferPercent } = settings
     const { longTolerance, shortTolerance } = chaseTolerances(instrument.ema, bufferPercent)
 
     if (hour === 16) {

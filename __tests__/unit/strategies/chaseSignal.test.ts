@@ -29,6 +29,15 @@ jest.mock("../../../lib/drizzleDbUtils", () => ({
 jest.mock("../../../lib/chaseSettings", () => ({
   getChaseSettings: jest.fn().mockResolvedValue({ lots: 1, paused: false }),
   getChaseEngineConfig: jest.fn().mockResolvedValue({ bufferPercent: 0.2, entryLimitOffset: 5 }),
+  getChaseBook: jest.fn().mockResolvedValue({
+    instrument: "NIFTY",
+    lots: 1,
+    paused: false,
+    enabled: true,
+    bufferPercent: 0.2,
+    entryLimitOffset: 5,
+    emaPeriod: 40,
+  }),
 }))
 
 jest.mock("../../../lib/utils", () => ({
@@ -134,8 +143,8 @@ describe("generateSignal pause cancels pending", () => {
       status: CHASE_STATUS.AWAITING_LONG,
       tradingsymbol: "NIFTY25SEPFUT",
     })
-    const { getChaseSettings } = require("../../../lib/chaseSettings")
-    getChaseSettings.mockResolvedValue({ lots: 1, paused: true })
+    const { getChaseBook } = require("../../../lib/chaseSettings")
+    getChaseBook.mockResolvedValue({ lots: 1, paused: true, enabled: true })
 
     const { generateSignal } = await import("../../../lib/chaseSignal")
     await generateSignal(
@@ -226,9 +235,16 @@ describe("decideChaseEntryAction", () => {
 describe("generateSignal entry order failure stays awaiting", () => {
   it("keeps AWAITING_SHORT and does not throw when the entry order fails", async () => {
     const { getChaseStatus, updateChaseStatus } = require("../../../lib/drizzleDbUtils")
-    const { getChaseSettings } = require("../../../lib/chaseSettings")
+    const { getChaseBook } = require("../../../lib/chaseSettings")
     const { placeKiteOrder, getKiteInstance } = require("../../../lib/kiteUtils")
-    getChaseSettings.mockResolvedValue({ lots: 2, paused: false })
+    getChaseBook.mockResolvedValue({
+      lots: 2,
+      paused: false,
+      enabled: true,
+      bufferPercent: 0.2,
+      entryLimitOffset: 5,
+      emaPeriod: 40,
+    })
     getChaseStatus.mockResolvedValue({
       status: CHASE_STATUS.AWAITING_SIGNAL,
       tradingsymbol: null,
@@ -267,10 +283,17 @@ describe("generateSignal entry order failure stays awaiting", () => {
 describe("generateSignal phantom LONG/SHORT", () => {
   it("resets SHORT with no fill and evaluates a fresh signal", async () => {
     const { getChaseStatus, updateChaseStatus } = require("../../../lib/drizzleDbUtils")
-    const { getChaseSettings } = require("../../../lib/chaseSettings")
+    const { getChaseBook } = require("../../../lib/chaseSettings")
     const { placeKiteOrder, getKiteInstance } = require("../../../lib/kiteUtils")
     const { getOpenPositions } = require("../../../lib/trading/ledger")
-    getChaseSettings.mockResolvedValue({ lots: 2, paused: false })
+    getChaseBook.mockResolvedValue({
+      lots: 2,
+      paused: false,
+      enabled: true,
+      bufferPercent: 0.2,
+      entryLimitOffset: 5,
+      emaPeriod: 40,
+    })
     getOpenPositions.mockResolvedValue([])
     getChaseStatus.mockResolvedValue({
       status: CHASE_STATUS.SHORT,
@@ -310,10 +333,17 @@ describe("generateSignal phantom LONG/SHORT", () => {
 
   it("holds SHORT when the paper book actually has size", async () => {
     const { getChaseStatus, updateChaseStatus } = require("../../../lib/drizzleDbUtils")
-    const { getChaseSettings } = require("../../../lib/chaseSettings")
+    const { getChaseBook } = require("../../../lib/chaseSettings")
     const { placeKiteOrder } = require("../../../lib/kiteUtils")
     const { getOpenPositions } = require("../../../lib/trading/ledger")
-    getChaseSettings.mockResolvedValue({ lots: 2, paused: false })
+    getChaseBook.mockResolvedValue({
+      lots: 2,
+      paused: false,
+      enabled: true,
+      bufferPercent: 0.2,
+      entryLimitOffset: 5,
+      emaPeriod: 40,
+    })
     getOpenPositions.mockResolvedValue([{ tradingsymbol: "NIFTY26SEPFUT", quantity: -130 }])
     getChaseStatus.mockResolvedValue({
       status: CHASE_STATUS.SHORT,

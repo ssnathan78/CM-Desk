@@ -1,5 +1,5 @@
 import { chaseStatusHasPosition } from "./chaseFill"
-import { getChaseSettings } from "./chaseSettings"
+import { getChaseBook } from "./chaseSettings"
 import { resolveChaseBookBreakdown } from "./chaseSignal"
 import { CHASE_STATUS } from "./constants"
 import { getChaseStatus, updateChaseStatus } from "./drizzleDbUtils"
@@ -72,7 +72,7 @@ export async function resetChaseSignalState(input: {
     }
   }
 
-  const chase = await getChaseSettings()
+  const chase = await getChaseBook(instrument)
   logger.info(`[resetChaseSignalState] ${instrument} ${previousStatus} → AWAITING_SIGNAL`, {
     lots: chase.lots,
   })

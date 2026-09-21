@@ -74,6 +74,7 @@ jest.mock("../lib/drizzleDbUtils", () => ({
   patchDbTrade: jest.fn().mockResolvedValue(undefined),
   updateChaseStatus: jest.fn().mockResolvedValue(undefined),
   getChaseSettings: jest.fn().mockResolvedValue({ lots: 1, paused: false }),
+  getChaseBook: jest.fn().mockResolvedValue({ lots: 1, paused: false, enabled: true }),
   saveChaseSettings: jest.fn().mockResolvedValue({ lots: 1, paused: false }),
 }))
 
