@@ -1,0 +1,16 @@
+[Unit]
+Description=CM-Desk trading app
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/cm-desk
+Environment=NODE_ENV=production
+Environment=TZ=Asia/Kolkata
+EnvironmentFile=/opt/cm-desk/.env
+ExecStart=/usr/bin/yarn start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
