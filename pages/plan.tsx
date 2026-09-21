@@ -382,12 +382,17 @@ const Plan = () => {
     } as AvailablePlansConfig
     if (strategy !== STRATEGIES.CHASE) {
       const row = merged as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
+      const emptyIndexes = {
+        [INSTRUMENTS.NIFTY]: false,
+        [INSTRUMENTS.BANKNIFTY]: false,
+        [INSTRUMENTS.FINNIFTY]: false,
+      } as Record<INSTRUMENTS, boolean>
       const fromConfig = row.instrument
         ? ({ [row.instrument]: true } as Record<INSTRUMENTS, boolean>)
-        : { ...SINGLE_INDEX }
+        : { ...emptyIndexes, [INSTRUMENTS.NIFTY]: true }
       setStratState({
         ...stratState,
-        [strategy]: { ...row, instruments: { ...SINGLE_INDEX, ...fromConfig } },
+        [strategy]: { ...row, instruments: { ...emptyIndexes, ...fromConfig } },
       })
       return
     }
