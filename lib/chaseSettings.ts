@@ -4,9 +4,9 @@ import {
   aggregateChaseConfig,
   CHASE_INDEX_ORDER,
   CHASE_MASTER_DEFAULTS,
-  defaultChaseBook,
   type ChaseBookConfig,
   type ChaseEngineConfig,
+  defaultChaseBook,
 } from "./chaseDefaults"
 import { normalizeChaseOpenClassify } from "./chaseOpenClassify"
 import { normalizeChaseInstruments, validateChaseSettings } from "./chaseValidation"
@@ -45,7 +45,8 @@ function toBook(row: {
 function completeBooks(rows: ChaseBookConfig[]): ChaseBookConfig[] {
   const byInstrument = new Map(rows.map(row => [row.instrument, row]))
   return CHASE_INDEX_ORDER.map(
-    instrument => byInstrument.get(instrument) ?? defaultChaseBook(instrument, instrument === "NIFTY")
+    instrument =>
+      byInstrument.get(instrument) ?? defaultChaseBook(instrument, instrument === "NIFTY")
   )
 }
 

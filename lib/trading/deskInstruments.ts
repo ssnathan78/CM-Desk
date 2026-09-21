@@ -1,6 +1,6 @@
 import dayjs from "dayjs"
 
-import { type ChaseBookConfig } from "../chaseDefaults"
+import type { ChaseBookConfig } from "../chaseDefaults"
 import { getChaseSettings, listChaseBooks } from "../chaseSettings"
 import { nowDayjs } from "../clock"
 import { getChaseStatus } from "../drizzleDbUtils"

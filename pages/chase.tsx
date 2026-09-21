@@ -19,8 +19,8 @@ import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
 import {
   CHASE_INDEX_ORDER,
   CHASE_OPEN_CLASSIFY,
-  defaultChaseBook,
   type ChaseBookConfig,
+  defaultChaseBook,
 } from "../lib/chaseDefaults"
 import { normalizeChaseOpenClassify } from "../lib/chaseOpenClassify"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
@@ -87,7 +87,9 @@ const ChasePlanPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reset-signal", instrument }),
       })
-      setStatus(`${instrument} reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal.`)
+      setStatus(
+        `${instrument} reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal.`
+      )
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
@@ -125,7 +127,11 @@ const ChasePlanPage = () => {
       <Stack spacing={2} sx={{ mb: 2 }}>
         {books.map(book => (
           <Paper key={book.instrument} sx={{ p: 2.5 }}>
-            <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center", flexWrap: "wrap" }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ mb: 2, alignItems: "center", flexWrap: "wrap" }}
+            >
               <Typography variant="h6">{book.instrument}</Typography>
               <Chip
                 size="small"
@@ -246,7 +252,9 @@ const ChasePlanPage = () => {
                 }
                 helperText="PDF uses the 09:16 candle close vs overnight hourly EMA. Legacy steps 40-EMA on a 60-minute bar."
               >
-                <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF — 09:16 candle (default)</MenuItem>
+                <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>
+                  PDF — 09:16 candle (default)
+                </MenuItem>
                 <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy — 60-minute bar</MenuItem>
               </TextField>
             </Stack>
@@ -273,7 +281,12 @@ const ChasePlanPage = () => {
         ))}
       </Stack>
 
-      <Button color="warning" variant="contained" onClick={() => setFlattenOpen(true)} sx={{ mb: 2 }}>
+      <Button
+        color="warning"
+        variant="contained"
+        onClick={() => setFlattenOpen(true)}
+        sx={{ mb: 2 }}
+      >
         Square off all Chase books
       </Button>
 

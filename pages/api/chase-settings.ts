@@ -1,5 +1,10 @@
 import { sendApiError } from "../../lib/apiErrors"
-import { getChaseSettings, listChaseBooks, resetChaseBooks, saveChaseSettings } from "../../lib/chaseSettings"
+import {
+  getChaseSettings,
+  listChaseBooks,
+  resetChaseBooks,
+  saveChaseSettings,
+} from "../../lib/chaseSettings"
 import { validateChaseSettings } from "../../lib/chaseValidation"
 import logger from "../../lib/logger"
 import withSession from "../../lib/session"

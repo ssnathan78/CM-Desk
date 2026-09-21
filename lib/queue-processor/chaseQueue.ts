@@ -511,7 +511,8 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           `[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, calculating EMA freshly`
         )
         stepped = await withRemoteRetry(
-          async () => calculateEma(activeInstrumentData as any, null, accessToken, chaseConfig.emaPeriod),
+          async () =>
+            calculateEma(activeInstrumentData as any, null, accessToken, chaseConfig.emaPeriod),
           ms(40)
         )
       } else {
@@ -549,7 +550,8 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           `[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, seeding EMA for 09:16 classify`
         )
         const seeded = await withRemoteRetry(
-          async () => calculateEma(activeInstrumentData as any, null, accessToken, chaseConfig.emaPeriod),
+          async () =>
+            calculateEma(activeInstrumentData as any, null, accessToken, chaseConfig.emaPeriod),
           ms(40)
         )
         overnightEma = seeded?.ema ?? null
