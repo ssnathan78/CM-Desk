@@ -1,0 +1,14 @@
+name: cm-desk
+# Not used in production. Droplet + server.js — see docs/DEPLOYMENT.md
+services:
+- name: cm-desk
+  github:
+    repo: ssnathan78/CM-Desk
+    branch: master
+  build_command: yarn install --immutable && yarn build
+  run_command: yarn start
+  envs:
+  - key: NODE_ENV
+    value: production
+  http_port: 3000
+  source_dir: ./

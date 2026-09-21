@@ -1,0 +1,60 @@
+name: CI
+
+# Not used as a deploy gate. Production is the Droplet (`docs/DEPLOYMENT.md`).
+# Keep the job for a manual run from the Actions tab.
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/trading_db
+      REDIS_URL: redis://127.0.0.1:6379
+      SECRET_COOKIE_PASSWORD: test-secret-cookie-password-min-32-chars
+      KITE_API_KEY: test_key
+      KITE_API_SECRET: test_secret
+      MOCK_ORDERS: "true"
+      SESSION_COOKIE_SECURE: "false"
+      TZ: Asia/Kolkata
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trading_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d trading_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: yarn
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn lint
+      - run: yarn unit-test
+      - run: yarn sim-test
+      - run: yarn migrate
+      - run: yarn int-test --runInBand --forceExit
+      - run: yarn api-test --runInBand --forceExit
+      - run: yarn build
+      - run: yarn npm audit --environment production --severity moderate
+      - run: npx playwright install --with-deps chromium
+      - run: yarn e2e-test
