@@ -38,11 +38,7 @@ const Strategy = () => {
             Strangle guide
           </Button>
           <AtmStrangleSetup
-            enabledInstruments={[
-              INSTRUMENTS.NIFTY,
-              INSTRUMENTS.BANKNIFTY,
-              INSTRUMENTS.MIDCPNIFTY,
-            ]}
+            enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.MIDCPNIFTY]}
             exitStrategies={[...SCHEDULEABLE_EXIT_STRATEGIES]}
           />
         </StratLayout>
