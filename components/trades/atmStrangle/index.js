@@ -38,7 +38,11 @@ const AtmStrangle = ({
   const [submitError, setSubmitError] = useState(null)
 
   const onSubmit = async (formattedStateForApiProps = {}, runNow = false) => {
-    const ready = jobsForPunch({ instruments: state.instruments, lots: state.lots })
+    const ready = jobsForPunch({
+      instruments: state.instruments,
+      lots: state.lots,
+      lotsByInstrument: state.lotsByInstrument,
+    })
     if (!ready.ok) {
       setSubmitError(ready.error)
       return
@@ -67,6 +71,7 @@ const AtmStrangle = ({
           }
           return handleSyncJob({
             ...payload,
+            lots: ready.lotsByInstrument[instrument] ?? payload.lots,
             instrument,
             strategy,
           })

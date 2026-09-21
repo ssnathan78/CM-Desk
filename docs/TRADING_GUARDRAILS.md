@@ -59,7 +59,7 @@ Live Kite still needs the triple gate: `MOCK_ORDERS=false` + Allow live orders +
 | Tests | `riskEngine.test.ts`, `notional.test.ts` |
 | UI | Chase / straddle / strangle setup and Desk → Risk show configured notional vs the cap **before** punch |
 
-Plan/job validation still caps lots at 100 (`validateLots`). The **order** cannot exceed risk max lots. Chase lots are `chase_settings.lots`, not a weekday `job_executions` row.
+Plan/job validation still caps lots at 100 (`validateLots`). The **order** cannot exceed risk max lots. Chase lots are `chase_settings.lots` for that index, not a weekday `job_executions` row.
 
 ## Open position / working order / rate
 

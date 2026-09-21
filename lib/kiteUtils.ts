@@ -161,7 +161,8 @@ export async function getPreviousTradingDay(accessToken: string): Promise<Date> 
 export async function calculateEma(
   instrument: Instrument,
   prevEma: number | null,
-  accessToken: string
+  accessToken: string,
+  emaPeriodOverride?: number
 ): Promise<{ ema: number; highestHigh: number; lowestLow: number; lastClose: number } | null> {
   const instrumentToken = Number(instrument.instrument_token)
   if (Number.isNaN(instrumentToken)) {
@@ -174,7 +175,10 @@ export async function calculateEma(
   let candles: HistoricalData[] = []
   const kite = getKiteInstance(accessToken)
   const now = dayjs()
-  const { emaPeriod } = await getChaseEngineConfig()
+  const emaPeriod =
+    emaPeriodOverride && emaPeriodOverride > 0
+      ? emaPeriodOverride
+      : (await getChaseEngineConfig()).emaPeriod
 
   if (prevEma === null) {
     candles = await kite.getHistoricalData(

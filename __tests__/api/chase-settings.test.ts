@@ -14,9 +14,12 @@ describe("/api/chase-settings", () => {
   it("GET returns chase config", async () => {
     const result = await invokeApi(chaseSettingsHandler, { method: "GET", user })
     expect(result.status).toBe(200)
-    const body = result.body as { config: { lots: number; emaPeriod: number } }
+    const body = result.body as { config: { lots: number; emaPeriod: number }; books?: { instrument: string }[] }
     expect(body.config.lots).toBeGreaterThanOrEqual(1)
     expect(body.config.emaPeriod).toBeTruthy()
+    expect((body.books ?? []).map(book => book.instrument)).toEqual(
+      expect.arrayContaining(["NIFTY", "BANKNIFTY", "FINNIFTY"])
+    )
   })
 
   it("PUT updates lots and pause flag", async () => {
@@ -29,6 +32,28 @@ describe("/api/chase-settings", () => {
     const body = result.body as { config: { lots: number; paused: boolean } }
     expect(body.config.lots).toBe(2)
     expect(body.config.paused).toBe(true)
+  })
+
+  it("PUT updates one Chase book without changing the others", async () => {
+    await invokeApi(chaseSettingsHandler, {
+      method: "PUT",
+      user,
+      body: { config: { instrument: "NIFTY", lots: 1, enabled: true } },
+    })
+    const result = await invokeApi(chaseSettingsHandler, {
+      method: "PUT",
+      user,
+      body: { config: { instrument: "BANKNIFTY", lots: 4, enabled: true, paused: false } },
+    })
+    expect(result.status).toBe(200)
+    const body = result.body as {
+      books: { instrument: string; lots: number; enabled: boolean }[]
+    }
+    const nifty = body.books.find(book => book.instrument === "NIFTY")
+    const bank = body.books.find(book => book.instrument === "BANKNIFTY")
+    expect(nifty?.lots).toBe(1)
+    expect(bank?.lots).toBe(4)
+    expect(bank?.enabled).toBe(true)
   })
 
   it("PUT saves selected Chase indexes", async () => {

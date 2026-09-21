@@ -1,6 +1,5 @@
 import { sendApiError } from "../../lib/apiErrors"
-import { CHASE_MASTER_DEFAULTS } from "../../lib/chaseDefaults"
-import { getChaseSettings, saveChaseSettings } from "../../lib/chaseSettings"
+import { getChaseSettings, listChaseBooks, resetChaseBooks, saveChaseSettings } from "../../lib/chaseSettings"
 import { validateChaseSettings } from "../../lib/chaseValidation"
 import logger from "../../lib/logger"
 import withSession from "../../lib/session"
@@ -13,12 +12,13 @@ export default withSession(async (req, res) => {
 
   try {
     if (req.method === "GET") {
-      const config = await getChaseSettings()
+      const [config, books] = await Promise.all([getChaseSettings(), listChaseBooks()])
       try {
         const { buildDeskSetupNotional } = await import("../../lib/trading/setupNotional")
         const setups = await buildDeskSetupNotional()
         return res.json({
           config,
+          books,
           notional: {
             maxNotionalInr: setups.maxNotionalInr,
             rows: setups.rows.filter(row => row.source === "CHASE"),
@@ -26,12 +26,15 @@ export default withSession(async (req, res) => {
         })
       } catch (e) {
         logger.warn("[chase-settings] notional preview unavailable", e)
-        return res.json({ config })
+        return res.json({ config, books })
       }
     }
 
     if (req.method === "PUT") {
-      const patch = req.body?.config || {}
+      const patch = {
+        ...(req.body?.config || {}),
+        instrument: req.body?.instrument || req.body?.config?.instrument,
+      }
       const { getMaxLotsForStrategy } = await import("../../lib/trading/riskSettings")
       const validation = validateChaseSettings(patch, {
         maxLots: await getMaxLotsForStrategy("CHASE"),
@@ -40,12 +43,14 @@ export default withSession(async (req, res) => {
         return res.status(400).json({ error: validation.error })
       }
       const config = await saveChaseSettings(patch)
-      return res.json({ config })
+      const books = await listChaseBooks()
+      return res.json({ config, books })
     }
 
     if (req.method === "POST" && req.body?.action === "reset") {
-      const config = await saveChaseSettings({ ...CHASE_MASTER_DEFAULTS, paused: false })
-      return res.json({ config })
+      const config = await resetChaseBooks()
+      const books = await listChaseBooks()
+      return res.json({ config, books })
     }
 
     if (req.method === "POST" && req.body?.action === "reset-signal") {
@@ -62,8 +67,8 @@ export default withSession(async (req, res) => {
       if (!result.ok) {
         return res.status(409).json(result)
       }
-      const config = await getChaseSettings()
-      return res.json({ config, reset: result })
+      const [config, books] = await Promise.all([getChaseSettings(), listChaseBooks()])
+      return res.json({ config, books, reset: result })
     }
 
     return res.status(405).json({ error: "Method not allowed" })

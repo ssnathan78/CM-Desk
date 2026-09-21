@@ -1,18 +1,28 @@
-import { Alert, Button, Chip, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material"
+import {
+  Alert,
+  Button,
+  Chip,
+  FormControlLabel,
+  MenuItem,
+  Paper,
+  Stack,
+  Switch,
+  TextField,
+  Typography,
+} from "@mui/material"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
-import InstrumentPicker from "../components/lib/InstrumentPicker"
 import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
 import {
-  CHASE_MASTER_DEFAULTS,
+  CHASE_INDEX_ORDER,
   CHASE_OPEN_CLASSIFY,
-  type ChaseEngineConfig,
+  defaultChaseBook,
+  type ChaseBookConfig,
 } from "../lib/chaseDefaults"
 import { normalizeChaseOpenClassify } from "../lib/chaseOpenClassify"
-import { INSTRUMENTS } from "../lib/constants"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
 import useUser from "../lib/useUser"
@@ -20,27 +30,30 @@ import useUser from "../lib/useUser"
 const ChasePlanPage = () => {
   useUser({ redirectTo: "/" })
   const { data, error, mutate } = useChaseSettings()
-  const [state, setState] = useState<ChaseEngineConfig>(CHASE_MASTER_DEFAULTS)
+  const [books, setBooks] = useState<ChaseBookConfig[]>(
+    CHASE_INDEX_ORDER.map(instrument => defaultChaseBook(instrument, instrument === "NIFTY"))
+  )
   const [status, setStatus] = useState("")
-  const [resetOpen, setResetOpen] = useState(false)
+  const [resetInstrument, setResetInstrument] = useState<string | null>(null)
   const [flattenOpen, setFlattenOpen] = useState(false)
 
   useEffect(() => {
-    if (data?.config) {
-      setState({ ...CHASE_MASTER_DEFAULTS, ...data.config })
+    if (data?.books?.length) {
+      setBooks(data.books)
     }
   }, [data])
 
-  const save = async (patch: Partial<ChaseEngineConfig> = {}) => {
-    const next = { ...state, ...patch }
+  const saveBook = async (instrument: string, patch: Partial<ChaseBookConfig> = {}) => {
+    const current = books.find(book => book.instrument === instrument)
+    const next = { ...current, ...patch, instrument }
     try {
-      const saved = await fetchJson<{ config: ChaseEngineConfig }>("/api/chase-settings", {
+      const saved = await fetchJson<{ books: ChaseBookConfig[] }>("/api/chase-settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ config: next }),
       })
-      setState({ ...CHASE_MASTER_DEFAULTS, ...saved.config })
-      setStatus("Saved.")
+      if (saved.books?.length) setBooks(saved.books)
+      setStatus(`Saved ${instrument}.`)
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
@@ -66,17 +79,15 @@ const ChasePlanPage = () => {
     }
   }
 
-  const resetSignal = async () => {
-    setResetOpen(false)
+  const resetSignal = async (instrument: string) => {
+    setResetInstrument(null)
     try {
       await fetchJson("/api/chase-settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset-signal" }),
+        body: JSON.stringify({ action: "reset-signal", instrument }),
       })
-      setStatus(
-        "Chase status reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal."
-      )
+      setStatus(`${instrument} reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal.`)
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
@@ -104,114 +115,167 @@ const ChasePlanPage = () => {
         Chase
       </Typography>
       <Typography color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-        Futures trend-follow around a long EMA. Pick one or more indexes — each runs its own Chase
-        book. This is not a weekday template and it is not squared off with MIS straddles.
+        Futures trend-follow around a long EMA. Each index is its own Chase book — lots, buffer,
+        pause, and 09:16 classify are independent. This is not a weekday template.
       </Typography>
       <Button component={Link} href="/help/chase" size="small" sx={{ mb: 2 }}>
         Chase guide
       </Button>
 
-      <Paper sx={{ p: 2.5, mb: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center", flexWrap: "wrap" }}>
-          <Typography variant="h6">Trading</Typography>
-          <Chip
-            size="small"
-            color={state.paused ? "warning" : "success"}
-            label={state.paused ? "Paused — no new entries" : "Live — new entries allowed"}
-          />
-        </Stack>
+      <Stack spacing={2} sx={{ mb: 2 }}>
+        {books.map(book => (
+          <Paper key={book.instrument} sx={{ p: 2.5 }}>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center", flexWrap: "wrap" }}>
+              <Typography variant="h6">{book.instrument}</Typography>
+              <Chip
+                size="small"
+                color={!book.enabled ? "default" : book.paused ? "warning" : "success"}
+                label={
+                  !book.enabled
+                    ? "Off"
+                    : book.paused
+                      ? "Paused — no new entries"
+                      : "Live — new entries allowed"
+                }
+              />
+            </Stack>
+            <Stack spacing={2}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={book.enabled}
+                    onChange={e =>
+                      setBooks(current =>
+                        current.map(row =>
+                          row.instrument === book.instrument
+                            ? { ...row, enabled: e.target.checked }
+                            : row
+                        )
+                      )
+                    }
+                  />
+                }
+                label="Trade this index"
+              />
+              <TextField
+                label="Lots"
+                type="number"
+                size="small"
+                fullWidth
+                value={book.lots}
+                onChange={e =>
+                  setBooks(current =>
+                    current.map(row =>
+                      row.instrument === book.instrument
+                        ? { ...row, lots: Number(e.target.value) }
+                        : row
+                    )
+                  )
+                }
+              />
+              <ChaseNotionalPreview
+                lots={book.lots}
+                instruments={[book.instrument]}
+                maxNotionalInr={data.notional?.maxNotionalInr ?? 0}
+                priceByIndex={Object.fromEntries(
+                  (data.notional?.rows ?? []).map(row => [row.instrument, row.price])
+                )}
+              />
+              <TextField
+                label="EMA period"
+                type="number"
+                size="small"
+                fullWidth
+                value={book.emaPeriod}
+                onChange={e =>
+                  setBooks(current =>
+                    current.map(row =>
+                      row.instrument === book.instrument
+                        ? { ...row, emaPeriod: Number(e.target.value) }
+                        : row
+                    )
+                  )
+                }
+              />
+              <TextField
+                label="Buffer %"
+                type="number"
+                size="small"
+                fullWidth
+                value={book.bufferPercent}
+                onChange={e =>
+                  setBooks(current =>
+                    current.map(row =>
+                      row.instrument === book.instrument
+                        ? { ...row, bufferPercent: Number(e.target.value) }
+                        : row
+                    )
+                  )
+                }
+              />
+              <TextField
+                label="Entry limit offset"
+                type="number"
+                size="small"
+                fullWidth
+                value={book.entryLimitOffset}
+                onChange={e =>
+                  setBooks(current =>
+                    current.map(row =>
+                      row.instrument === book.instrument
+                        ? { ...row, entryLimitOffset: Number(e.target.value) }
+                        : row
+                    )
+                  )
+                }
+              />
+              <TextField
+                select
+                label="09:16 morning classify"
+                size="small"
+                fullWidth
+                value={book.openClassify}
+                onChange={e =>
+                  setBooks(current =>
+                    current.map(row =>
+                      row.instrument === book.instrument
+                        ? { ...row, openClassify: normalizeChaseOpenClassify(e.target.value) }
+                        : row
+                    )
+                  )
+                }
+                helperText="PDF uses the 09:16 candle close vs overnight hourly EMA. Legacy steps 40-EMA on a 60-minute bar."
+              >
+                <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF — 09:16 candle (default)</MenuItem>
+                <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy — 60-minute bar</MenuItem>
+              </TextField>
+            </Stack>
+            <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
+              <Button variant="contained" onClick={() => saveBook(book.instrument)}>
+                Save {book.instrument}
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => saveBook(book.instrument, { paused: !book.paused })}
+                disabled={!book.enabled}
+              >
+                {book.paused ? "Resume entries" : "Pause entries"}
+              </Button>
+              <Button
+                color="warning"
+                variant="outlined"
+                onClick={() => setResetInstrument(book.instrument)}
+              >
+                Reset signal
+              </Button>
+            </Stack>
+          </Paper>
+        ))}
+      </Stack>
 
-        <Stack spacing={2}>
-          <InstrumentPicker
-            single={false}
-            hint="Tick every index Chase should trade. Each index has its own futures book and signals."
-            enabledInstruments={[INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.FINNIFTY]}
-            instruments={{
-              [INSTRUMENTS.NIFTY]: (state.instruments ?? ["NIFTY"]).includes(INSTRUMENTS.NIFTY),
-              [INSTRUMENTS.BANKNIFTY]: (state.instruments ?? []).includes(INSTRUMENTS.BANKNIFTY),
-              [INSTRUMENTS.FINNIFTY]: (state.instruments ?? []).includes(INSTRUMENTS.FINNIFTY),
-            }}
-            onChange={next =>
-              setState({
-                ...state,
-                instruments: (Object.keys(next) as INSTRUMENTS[]).filter(key => next[key]),
-              })
-            }
-          />
-          <TextField
-            label="Lots"
-            type="number"
-            size="small"
-            fullWidth
-            value={state.lots}
-            onChange={e => setState({ ...state, lots: Number(e.target.value) })}
-          />
-          <ChaseNotionalPreview
-            lots={state.lots}
-            instruments={state.instruments}
-            maxNotionalInr={data.notional?.maxNotionalInr ?? 0}
-            priceByIndex={Object.fromEntries(
-              (data.notional?.rows ?? []).map(row => [row.instrument, row.price])
-            )}
-          />
-          <TextField
-            label="EMA period"
-            type="number"
-            size="small"
-            fullWidth
-            value={state.emaPeriod}
-            onChange={e => setState({ ...state, emaPeriod: Number(e.target.value) })}
-          />
-          <TextField
-            label="Buffer %"
-            type="number"
-            size="small"
-            fullWidth
-            value={state.bufferPercent}
-            onChange={e => setState({ ...state, bufferPercent: Number(e.target.value) })}
-          />
-          <TextField
-            label="Entry limit offset"
-            type="number"
-            size="small"
-            fullWidth
-            value={state.entryLimitOffset}
-            onChange={e => setState({ ...state, entryLimitOffset: Number(e.target.value) })}
-          />
-          <TextField
-            select
-            label="09:16 morning classify"
-            size="small"
-            fullWidth
-            value={state.openClassify}
-            onChange={e =>
-              setState({
-                ...state,
-                openClassify: normalizeChaseOpenClassify(e.target.value),
-              })
-            }
-            helperText="PDF uses the 09:16 candle close vs overnight hourly EMA. Legacy steps 40-EMA on a 60-minute bar (Anil port)."
-          >
-            <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF — 09:16 candle (default)</MenuItem>
-            <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy — 60-minute bar</MenuItem>
-          </TextField>
-        </Stack>
-
-        <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-          <Button variant="contained" onClick={() => save()}>
-            Save
-          </Button>
-          <Button variant="outlined" onClick={() => save({ paused: !state.paused })}>
-            {state.paused ? "Resume entries" : "Pause entries"}
-          </Button>
-          <Button color="warning" variant="contained" onClick={() => setFlattenOpen(true)}>
-            Square off current
-          </Button>
-          <Button color="warning" variant="outlined" onClick={() => setResetOpen(true)}>
-            Reset to fresh signal
-          </Button>
-        </Stack>
-      </Paper>
+      <Button color="warning" variant="contained" onClick={() => setFlattenOpen(true)} sx={{ mb: 2 }}>
+        Square off all Chase books
+      </Button>
 
       {status ? (
         <Alert
@@ -226,20 +290,20 @@ const ChasePlanPage = () => {
       <ConfirmDialog
         open={flattenOpen}
         title="Square off Chase?"
-        message="This flattens the current Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk."
+        message="This flattens every Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk."
         confirmLabel="Square off"
         confirmColor="warning"
         onConfirm={() => void squareOffChase()}
         onCancel={() => setFlattenOpen(false)}
       />
       <ConfirmDialog
-        open={resetOpen}
-        title="Reset Chase to a fresh signal?"
-        message="This sets Chase back to AWAITING_SIGNAL and cancels a pending entry trigger. It does not flatten an open futures position. Use Square off when you want out of the current book."
+        open={Boolean(resetInstrument)}
+        title={`Reset ${resetInstrument || "Chase"} to a fresh signal?`}
+        message="This sets that index back to AWAITING_SIGNAL and cancels a pending entry trigger. It does not flatten an open futures position. Use Square off when you want out of the current book."
         confirmLabel="Reset signal"
         confirmColor="warning"
-        onConfirm={() => void resetSignal()}
-        onCancel={() => setResetOpen(false)}
+        onConfirm={() => resetInstrument && void resetSignal(resetInstrument)}
+        onCancel={() => setResetInstrument(null)}
       />
     </Layout>
   )

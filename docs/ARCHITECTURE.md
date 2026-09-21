@@ -137,8 +137,8 @@ Postgres via Drizzle (`lib/schema.ts`). Migrations in `drizzle/`.
 
 | Table | Purpose |
 |-------|---------|
-| `trade_plans` | Weekday templates; unique `(day_of_week, strategy)` |
-| `chase_settings` | Single-row Chase config |
+| `trade_plans` | Weekday templates; unique `(day_of_week, strategy, instrument)` |
+| `chase_settings` | One Chase book per index (`instrument` PK) |
 | `strategy_defaults` | Master JSON per strategy |
 | `job_executions` | Scheduled/live jobs (audit; not daily-deleted) |
 | `transactions` | Completed orders (`order_id` unique) |

@@ -10,7 +10,7 @@ This document is what **this app** does. Differences vs the operator Chase rule 
 
 Chase is a **long/short trend-follow** on **index futures**, not options. It uses a **40-period EMA of hourly HLC3**, ±0.2% signal bands, ±0.4% T1 bands (for the **morning-after** stop, not for entry), and **day high/low** for the pending entry and initial stop.
 
-It is **continuous**: one lots + engine config (not a weekday template). Positions are **NRML** and can stay open across sessions. Hourly monitoring is done by this desk rather than by hand.
+It is **continuous**: each selected index has its own lots + engine config (not a weekday template). Positions are **NRML** and can stay open across sessions. Hourly monitoring is done by this desk rather than by hand.
 
 **Edge hypothesis:** Hourly closes outside a thin EMA band mark the start of a trend. Enter on a break of the day’s extreme; risk the other extreme (or the EMA if that is further). Trail using T1 logic the next morning and EMA thereafter.
 
@@ -20,12 +20,12 @@ It is **continuous**: one lots + engine config (not a weekday template). Positio
 
 | Item | Rule |
 |---|---|
-| Indexes | Operator-selected: Nifty (default), BankNifty, FinNifty. Each has its own `chase_status` |
+| Indexes | Operator-selected: Nifty (default), BankNifty, FinNifty. Each has its own `chase_status` and `chase_settings` row |
 | Contract | Near **futures** (`getFnOExpiries`). On expiry day the worker also loads the next month for rollover |
 | Product | `NRML` |
-| Sizing | `lots × futures lot_size` |
+| Sizing | `lots × futures lot_size` **per index** |
 | Pyramiding | None. One position (or pending entry) per index |
-| Pause | After LONG/SHORT is flat, do not enter. Pending SL-M entries are cancelled |
+| Pause | Per index. After LONG/SHORT is flat, do not enter. Pending SL-M entries are cancelled |
 
 Kill **intraday** does **not** pause Chase. Kill **all** does, and tries to flatten Chase futures.
 
@@ -43,7 +43,7 @@ Shipped engine (`CHASE_MASTER_DEFAULTS` / `/chase`):
 | T1 | 0.4% hard-coded | `longT1 = round(ema * 1.004)`, `shortT1 = round(ema * 0.996)` |
 | 09:16 classify | `openClassify` on Chase settings (DB) | Default `pdf_0916`: overnight 16:15 EMA + 09:16 session close/H-L. `legacy_60m`: step 40-EMA on the last 60-minute bar. |
 | Entry limit offset | 5 ₹ | SL **limit** = trigger ± 5 on the pending entry order |
-| Lots | 1 | Per selected index |
+| Lots | 1 | Per index (`chase_settings.lots` for that instrument) |
 
 Helper: `chaseTolerances(ema, bufferPercent)` in `lib/chaseDefaults.ts`.
 

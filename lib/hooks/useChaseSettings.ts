@@ -1,10 +1,11 @@
 import useSWR from "swr"
-import type { ChaseEngineConfig } from "../chaseDefaults"
+import type { ChaseBookConfig, ChaseEngineConfig } from "../chaseDefaults"
 import fetchJson from "../fetchJson"
 import type { SetupNotionalRow } from "../trading/setupNotional"
 
 type ChaseSettingsResponse = {
   config: ChaseEngineConfig
+  books?: ChaseBookConfig[]
   notional?: {
     maxNotionalInr: number
     rows: SetupNotionalRow[]

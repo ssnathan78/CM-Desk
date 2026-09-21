@@ -7,7 +7,11 @@ describe("jobsForPunch", () => {
       lots: 1,
       instruments: { [INSTRUMENTS.NIFTY]: true, [INSTRUMENTS.BANKNIFTY]: false },
     })
-    expect(result).toEqual({ ok: true, instruments: [INSTRUMENTS.NIFTY] })
+    expect(result).toEqual({
+      ok: true,
+      instruments: [INSTRUMENTS.NIFTY],
+      lotsByInstrument: { [INSTRUMENTS.NIFTY]: 1 },
+    })
   })
 
   it("fans out two jobs when Nifty and BankNifty are ticked", () => {
@@ -18,6 +22,10 @@ describe("jobsForPunch", () => {
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.instruments).toEqual([INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY])
+      expect(result.lotsByInstrument).toEqual({
+        [INSTRUMENTS.NIFTY]: 2,
+        [INSTRUMENTS.BANKNIFTY]: 2,
+      })
     }
   })
 
@@ -33,15 +41,18 @@ describe("jobsForPunch", () => {
     }
   })
 
-  it("fails lots before listing instruments", () => {
+  it("uses per-index lots when punching more than one index", () => {
     const result = jobsForPunch({
-      lots: 0,
-      instruments: { [INSTRUMENTS.NIFTY]: true },
+      lots: 1,
+      lotsByInstrument: { [INSTRUMENTS.NIFTY]: 2, [INSTRUMENTS.BANKNIFTY]: 4 },
+      instruments: { [INSTRUMENTS.NIFTY]: true, [INSTRUMENTS.BANKNIFTY]: true },
     })
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.instruments).toEqual([])
-      expect(result.error).toMatch(/lots/i)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.lotsByInstrument).toEqual({
+        [INSTRUMENTS.NIFTY]: 2,
+        [INSTRUMENTS.BANKNIFTY]: 4,
+      })
     }
   })
 })

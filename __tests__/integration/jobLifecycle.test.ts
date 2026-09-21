@@ -57,8 +57,10 @@ describeDb("chase_settings single row", () => {
 
   afterAll(async () => pool.end())
 
-  it("row id=1 exists after migration", async () => {
-    const { rows } = await pool.query(`SELECT id, lots FROM chase_settings WHERE id = 1`)
+  it("has a NIFTY Chase book after migration", async () => {
+    const { rows } = await pool.query(
+      `SELECT instrument, lots FROM chase_settings WHERE instrument = 'NIFTY'`
+    )
     expect(rows.length).toBe(1)
     expect(rows[0].lots).toBeGreaterThanOrEqual(1)
   })

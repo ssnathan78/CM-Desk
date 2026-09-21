@@ -17,7 +17,7 @@ import {
   planChaseSlBreachFlatten,
 } from "../chaseFill"
 import { normalizeChaseOpenClassify, resolveChaseMorningSnapshot } from "../chaseOpenClassify"
-import { getChaseSettings } from "../chaseSettings"
+import { getChaseBook, listChaseBooks } from "../chaseSettings"
 import {
   decideChaseEntryAction,
   generateSignal,
@@ -290,11 +290,11 @@ async function processCalculateEMA(job: Job) {
   }
 
   const now = nowDayjs()
-  const chaseConfig = await getChaseSettings()
-  const selected = chaseConfig.instruments?.length ? chaseConfig.instruments : ["NIFTY"]
+  const books = (await listChaseBooks()).filter(book => book.enabled)
   const allResults: any[] = []
 
-  for (const nfoSymbol of selected) {
+  for (const book of books) {
+    const nfoSymbol = book.instrument
     const futuresInstruments = await getFnOExpiries(nfoSymbol, "FUT")
     if (!futuresInstruments.length) {
       logger.warn(`[processCalculateEMA] no FUT instruments found for ${nfoSymbol}`)
@@ -346,7 +346,12 @@ async function processCalculateEMA(job: Job) {
               idempotencyKey: `alert:chase-ema-gap:${instrument.tradingsymbol}:${now.format("YYYY-MM-DD-HH:mm")}`,
             })
           }
-          const emaResult = await calculateEma(instrument, prevEmaResolution.prevEma, accessToken)
+          const emaResult = await calculateEma(
+            instrument,
+            prevEmaResolution.prevEma,
+            accessToken,
+            book.emaPeriod
+          )
           if (!emaResult) {
             logger.warn(
               `[processCalculateEMA] skipped for ${instrument.tradingsymbol} due to insufficient candle data or no current-day candles`
@@ -396,10 +401,16 @@ async function processCalculateEMA(job: Job) {
 }
 
 async function processUpdateSL(job: Job) {
-  const chaseConfig = await getChaseSettings()
-  const selected = chaseConfig.instruments?.length ? chaseConfig.instruments : ["NIFTY"]
-  for (const nfoSymbol of selected) {
-    await processUpdateSLForInstrument(job, nfoSymbol)
+  const books = await listChaseBooks()
+  for (const book of books) {
+    const statusRow = await getChaseStatus(book.instrument)
+    const open =
+      statusRow?.status === CHASE_STATUS.LONG ||
+      statusRow?.status === CHASE_STATUS.SHORT ||
+      statusRow?.status === CHASE_STATUS.AWAITING_LONG ||
+      statusRow?.status === CHASE_STATUS.AWAITING_SHORT
+    if (!book.enabled && !open) continue
+    await processUpdateSLForInstrument(job, book.instrument)
   }
 }
 
@@ -459,7 +470,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
   const futuresInstruments = await getFnOExpiries(nfoSymbol, "FUT")
   const kite = getKiteInstance(accessToken)
 
-  const chaseConfig = await getChaseSettings()
+  const chaseConfig = await getChaseBook(nfoSymbol)
   const lots = chaseLotsFromConfig(chaseConfig.lots)
   const isAutomated = lots > 0
   const activeInstrumentData = futuresInstruments.find(
@@ -500,7 +511,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           `[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, calculating EMA freshly`
         )
         stepped = await withRemoteRetry(
-          async () => calculateEma(activeInstrumentData as any, null, accessToken),
+          async () => calculateEma(activeInstrumentData as any, null, accessToken, chaseConfig.emaPeriod),
           ms(40)
         )
       } else {
@@ -538,7 +549,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           `[processUpdateSL] prevRow not from previous trading day at 4:15 PM IST, seeding EMA for 09:16 classify`
         )
         const seeded = await withRemoteRetry(
-          async () => calculateEma(activeInstrumentData as any, null, accessToken),
+          async () => calculateEma(activeInstrumentData as any, null, accessToken, chaseConfig.emaPeriod),
           ms(40)
         )
         overnightEma = seeded?.ema ?? null
@@ -867,7 +878,12 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
   ) {
     const nextInstrument = futuresInstruments[1]
     const prevRow = await getLatestEma(nextInstrument.tradingsymbol)
-    const emaResult = await calculateEma(nextInstrument, prevRow?.ema ?? null, accessToken)
+    const emaResult = await calculateEma(
+      nextInstrument,
+      prevRow?.ema ?? null,
+      accessToken,
+      chaseConfig.emaPeriod
+    )
     if (!emaResult) {
       logger.error(`[processUpdateSL] rollover EMA calc failed for ${nextInstrument.tradingsymbol}`)
       return null

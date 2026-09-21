@@ -54,8 +54,8 @@ Defined in `lib/queue.ts`:
 
 | Table | Role |
 |---|---|
-| `trade_plans` | Saved weekday templates (one per strategy per day) |
-| `chase_settings` | Single Chase plan (lots, EMA, buffer, pause) |
+| `trade_plans` | Saved weekday templates (one per strategy per index per day) |
+| `chase_settings` | One Chase book per index (lots, EMA, buffer, pause, enabled) |
 | `job_executions` | Job lifecycle (audit; not deleted by daily cleanup) |
 | `transactions` | Completed Kite orders (`order_id` unique) |
 | `accesstoken` | Today's access token |

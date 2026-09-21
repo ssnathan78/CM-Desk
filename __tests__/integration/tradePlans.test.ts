@@ -59,7 +59,7 @@ describeDb("trade_plans uniqueness", () => {
     }
   })
 
-  it("rejects a second row for the same weekday + strategy", async () => {
+  it("rejects a second row for the same weekday + strategy + index", async () => {
     const mapped = mapPlanToDb(
       {
         name: "jest-uniqueness",
@@ -75,6 +75,23 @@ describeDb("trade_plans uniqueness", () => {
     ids.push(first.id)
 
     await expect(insertMapped(pool!, { ...mapped, name: "duplicate" })).rejects.toThrow()
+  })
+
+  it("allows the same weekday + strategy on a second index", async () => {
+    const mapped = mapPlanToDb(
+      {
+        name: "jest-banknifty",
+        strategy: "ATM_STRADDLE",
+        instrument: "BANKNIFTY",
+        expiryType: "CURRENT",
+        productType: "MIS",
+        lots: 1,
+      },
+      "SATURDAY"
+    )
+    const row = await insertMapped(pool!, mapped)
+    ids.push(row.id)
+    expect(row.strategy).toBe("ATM_STRADDLE")
   })
 })
 
@@ -176,12 +193,13 @@ describeDb("strategy_defaults", () => {
 })
 
 describeDb("chase_settings", () => {
-  it("has exactly one Chase plan row", async () => {
-    const { rows } = await pool!.query(`SELECT id, lots, paused FROM chase_settings`)
-    expect(rows).toHaveLength(1)
-    expect(Number(rows[0].id)).toBe(1)
-    expect(Number(rows[0].lots)).toBeGreaterThanOrEqual(1)
-    expect(typeof rows[0].paused).toBe("boolean")
+  it("has one Chase plan row per index", async () => {
+    const { rows } = await pool!.query(
+      `SELECT instrument, lots, paused, enabled FROM chase_settings ORDER BY instrument`
+    )
+    expect(rows.length).toBe(3)
+    expect(rows.map(row => row.instrument).sort()).toEqual(["BANKNIFTY", "FINNIFTY", "NIFTY"])
+    expect(Number(rows.find(row => row.instrument === "NIFTY")?.lots)).toBeGreaterThanOrEqual(1)
   })
 })
 

@@ -51,11 +51,19 @@ export default withSession(async (req: NextApiRequest, res: NextApiResponse) => 
     const copied: Weekday[] = []
 
     const existingPlans = await db
-      .select({ id: tradePlans.id, dayOfWeek: tradePlans.dayOfWeek })
+      .select({
+        id: tradePlans.id,
+        dayOfWeek: tradePlans.dayOfWeek,
+        instrument: tradePlans.instrument,
+      })
       .from(tradePlans)
       .where(and(inArray(tradePlans.dayOfWeek, [...targetDays]), eq(tradePlans.strategy, strategy)))
 
-    const existingByDay = new Map(existingPlans.map(row => [row.dayOfWeek, row.id]))
+    const existingByDay = new Map(
+      existingPlans
+        .filter(row => row.instrument === source.instrument)
+        .map(row => [row.dayOfWeek, row.id])
+    )
 
     for (const day of targetDays) {
       const payload = { ...rest, dayOfWeek: day, updatedAt: new Date() }
