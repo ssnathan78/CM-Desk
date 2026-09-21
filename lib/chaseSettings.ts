@@ -1,5 +1,3 @@
-import { eq } from "drizzle-orm"
-
 import {
   aggregateChaseConfig,
   CHASE_INDEX_ORDER,
