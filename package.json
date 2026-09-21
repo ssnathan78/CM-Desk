@@ -75,7 +75,7 @@
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
     "identity-obj-proxy": "^3.0.0",
-    "jest": "^30.5.1",
+    "jest": "^30.5.2",
     "jest-environment-jsdom": "^30.5.1",
     "node-mocks-http": "^1.18.1",
     "prop-types": "^15.8.1",
