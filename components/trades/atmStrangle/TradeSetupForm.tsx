@@ -76,8 +76,11 @@ const TradeSetupForm = ({
 }: ATMStrangleTradeSetupFormProps) => {
   const isSchedulingDisabled = false
 
-  const enabledInstruments =
-    enabledInstrumentsProp ?? [INSTRUMENTS.NIFTY, INSTRUMENTS.BANKNIFTY, INSTRUMENTS.MIDCPNIFTY]
+  const enabledInstruments = enabledInstrumentsProp ?? [
+    INSTRUMENTS.NIFTY,
+    INSTRUMENTS.BANKNIFTY,
+    INSTRUMENTS.MIDCPNIFTY,
+  ]
 
   const exitStrategies = (exitStrategiesProp ?? [...SCHEDULEABLE_EXIT_STRATEGIES]).filter(s =>
     EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE.has(s)

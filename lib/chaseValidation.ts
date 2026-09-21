@@ -49,12 +49,18 @@ export function validateChaseSettings(
       return { ok: false, error: "Select at least one index for Chase" }
     }
     if (patch.instruments.some(item => !CHASE_INDEXES.has(String(item)))) {
-      return { ok: false, error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY" }
+      return {
+        ok: false,
+        error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY",
+      }
     }
   }
   const instrument = (patch as { instrument?: string }).instrument
   if (instrument != null && !CHASE_INDEXES.has(String(instrument).toUpperCase())) {
-    return { ok: false, error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY" }
+    return {
+      ok: false,
+      error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY",
+    }
   }
   if (patch.emaPeriod != null) {
     const n = Number(patch.emaPeriod)
