@@ -59,16 +59,23 @@ export default withSession(async (req, res) => {
     }
 
     if (req.method === "POST" && req.body?.action === "reset-signal") {
-      const { resetChaseSignalState } = await import("../../lib/chaseReset")
+      const { resetAllChaseSignalState, resetChaseSignalState } = await import(
+        "../../lib/chaseReset"
+      )
       const instrument =
         typeof req.body?.instrument === "string" && req.body.instrument.trim()
           ? req.body.instrument.trim().toUpperCase()
-          : "NIFTY"
-      const result = await resetChaseSignalState({
-        instrument,
-        accessToken: user.session?.access_token,
-        force: Boolean(req.body?.force),
-      })
+          : null
+      const result = instrument
+        ? await resetChaseSignalState({
+            instrument,
+            accessToken: user.session?.access_token,
+            force: Boolean(req.body?.force),
+          })
+        : await resetAllChaseSignalState({
+            accessToken: user.session?.access_token,
+            force: Boolean(req.body?.force),
+          })
       if (!result.ok) {
         return res.status(409).json(result)
       }

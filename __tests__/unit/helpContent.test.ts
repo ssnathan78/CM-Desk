@@ -54,6 +54,14 @@ describe("help content", () => {
     expect(risk?.body.join(" ")).not.toMatch(/Combined premium exit: flatten/i)
   })
 
+  it("explains Chase per-index books vs shared Desk Risk", () => {
+    const chase = HELP_PAGES.chase.sections.find(s => s.id === "lots")?.body.join(" ") ?? ""
+    const desk = HELP_PAGES.desk.sections.find(s => s.id === "continuous")?.body.join(" ") ?? ""
+    expect(chase).toMatch(/Desk → Risk/i)
+    expect(chase).toMatch(/all three|Nifty, BankNifty, and FinNifty/i)
+    expect(desk).toMatch(/Paper vs Live/i)
+  })
+
   it("keeps HelpTopic keys aligned with HELP_PAGES", () => {
     const keys = Object.keys(HELP_PAGES) as HelpTopic[]
     expect([...keys].sort()).toEqual([...HELP_TOPICS].sort())

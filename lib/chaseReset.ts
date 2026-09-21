@@ -78,3 +78,28 @@ export async function resetChaseSignalState(input: {
   })
   return { ok: true, instrument, previousStatus }
 }
+
+export async function resetAllChaseSignalState(input: {
+  accessToken?: string
+  force?: boolean
+}): Promise<
+  | { ok: true; results: ChaseResetResult[] }
+  | { ok: false; error: string; results: ChaseResetResult[] }
+> {
+  const { CHASE_INDEX_ORDER } = await import("./chaseDefaults")
+  const results: ChaseResetResult[] = []
+  for (const instrument of CHASE_INDEX_ORDER) {
+    results.push(
+      await resetChaseSignalState({
+        instrument,
+        accessToken: input.accessToken,
+        force: input.force,
+      })
+    )
+  }
+  const failed = results.find(row => !row.ok)
+  if (failed && !failed.ok) {
+    return { ok: false, error: failed.error, results }
+  }
+  return { ok: true, results }
+}

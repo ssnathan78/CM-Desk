@@ -74,9 +74,9 @@ There is **no backtester** in this repo. There is no implied live edge from hist
 
 ### Chase
 
-**What it does.** Nifty futures around a long EMA with a buffer. States: awaiting signal → awaiting long/short (SL-M entry) → long/short with SL → rollover near expiry.
+**What it does.** Index futures (Nifty, BankNifty, FinNifty) around a long EMA with a buffer. Each index has its own lots/status/EMA; Desk → Risk Paper vs Live is still one Chase switch. States: awaiting signal → awaiting long/short (SL-M entry) → long/short with SL → rollover near expiry.
 
-**Assumptions.** Daily/2-min closes are timely; EMA regime persists; SL-M fills **when the trigger is tagged** (paper resting stops now match that; they must not fill at submit); overnight gaps are acceptable for NRML futures; one Chase position.
+**Assumptions.** Daily/2-min closes are timely; EMA regime persists; SL-M fills **when the trigger is tagged** (paper resting stops now match that; they must not fill at submit); overnight gaps are acceptable for NRML futures; at most one Chase position **per index**.
 
 **When it fails.** Chop around EMA (whipsaw). Gap through SL overnight. SL breach previously **updated DB only and did not flatten** (now MARKET flatten). `placeKiteOrder` used to skip the ensurer — still does, but now goes through `placeOrder` + risk gate + mock short-circuit. EMA “today” filter has used UTC (residual).
 

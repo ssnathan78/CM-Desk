@@ -10,22 +10,22 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
   desk: {
     title: "How the desk is organised",
     summary:
-      "CM-Desk is a personal algo desk for Indian index options and one Nifty futures chase. Intraday structures and Chase are not the same kind of trade.",
+      "CM-Desk is a personal algo desk for Indian index options and Chase on index futures. Intraday structures and Chase are not the same kind of trade.",
     sections: [
       {
         id: "intraday",
         title: "Intraday — Straddle and Strangle",
         body: [
           "These are same-session option structures (classic 9:20: sell CE and PE together, each with its own stop). You either punch them now from the strategy page, or the weekday plan schedules them at the saved run time.",
-          "They use MIS by default. When one stop hits, the other wing stays until auto square-off. Each weekday holds at most one template per strategy.",
+          "They use MIS by default. When one stop hits, the other wing stays until auto square-off. Each weekday holds at most one template per strategy per index.",
         ],
       },
       {
         id: "continuous",
         title: "Continuous — Chase",
         body: [
-          "Chase is a Nifty futures process that keeps running across days. It is not a weekday template.",
-          "There is a single lots + engine configuration. Pause skips new entries after the current position is flat; resume allows the next signal.",
+          "Chase is a futures process that keeps running across days. Nifty, BankNifty, and FinNifty each have their own lots, EMA, pause, and status. It is not a weekday template.",
+          "Desk → Risk still treats Chase as one strategy: Paper vs Live, enabled, halt, max lots, and max open positions apply to all three books together. Pause and lots stay on the Chase page, per index.",
           "Kill intraday on the dashboard does not pause Chase. Kill all (incl. Chase) does. Square off all open gets you out of current books without a halt; Chase can take the next signal.",
         ],
       },
@@ -189,23 +189,23 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "instruments",
         title: "Indexes",
         body: [
-          "Tick every index you want Chase to trade. Each index has its own status, signals, and futures contract. Unticking an index stops new work on that book after the current position is managed.",
+          "Enable each index on Chase. Each index has its own status, signals, EMA series, and futures contract. Turning an index off skips new hourly EMA/signal work on that book; an already-open LONG/SHORT is still managed until flat.",
         ],
       },
       {
         id: "lots",
         title: "Lots",
         body: [
-          "How many futures lots to trade on each selected index. The page shows lots × lot size × last hourly close so you can see rupee notional before an order. Desk → Risk max notional rejects the order if that size is over the cap.",
-          "Pause: after the current LONG/SHORT is exited, do not enter again. Pending entry triggers are cancelled. Resume turns entries back on.",
-          "Reset to fresh signal: use this when Chase shows LONG/SHORT or HOLD but no order filled (for example a MAX_NOTIONAL reject). It returns the engine to AWAITING_SIGNAL. It does not flatten an open futures book — use Square off current on this page, Today, or Desk → Positions.",
+          "How many futures lots to trade on that index. Lots are independent (Nifty can be 1 while BankNifty is 2). The page shows lots × lot size × last hourly close so you can see rupee notional before an order. Desk → Risk max notional and Chase max lots still apply to the whole Chase strategy.",
+          "Pause is per index: after that book's LONG/SHORT is exited, do not enter again. Pending entry triggers are cancelled. Resume turns entries back on for that index only.",
+          "Reset to fresh signal on Chase is per index. Desk → Risk “Reset Chase to fresh signal” resets Nifty, BankNifty, and FinNifty together. Neither flatten an open futures book — use Square off on Chase, Today, or Desk → Positions.",
         ],
       },
       {
         id: "ema",
         title: "EMA period",
         body: [
-          "Length of the exponential moving average on hourly typical price (H+L+C)/3. Shipped value is 40.",
+          "Length of the exponential moving average on hourly typical price (H+L+C)/3. Shipped value is 40. Each enabled index uses its own period and stores its own EMA rows.",
           "A longer period is slower and filters noise; a shorter period turns more often.",
           "If an hourly EMA job was missed, the next hour continues from the last stored EMA rather than rebuilding from history. Desk shows CHASE_EMA_GAP. New entries that hour still run.",
         ],
