@@ -24,6 +24,7 @@ import {
 import { db } from "./drizzle"
 import { calculate40EMA } from "./ema"
 import { allSettled } from "./es6-promise"
+import { formatThrownMessage } from "./kiteError"
 import logger from "./logger"
 import { aggregateFillsBySymbol } from "./pnl"
 import { jobExecutions, orders as ledgerOrders } from "./schema"
@@ -426,7 +427,7 @@ export async function placeOrder(
     })
     return result
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
+    const message = formatThrownMessage(e)
     await markOrderSubmitted({
       orderId: ledgerOrderId,
       status: "FAILED",
@@ -513,6 +514,8 @@ export async function asyncGetIndexInstruments(exchange = "NFO"): Promise<Instru
 export const getIndexInstruments = memoizer(asyncGetIndexInstruments, {
   maxAge: millisecondsTill7(),
   promise: true,
+  // Default parameters make function.length 0. memoizee would then share one cache entry.
+  length: 1,
 })
 
 /**
@@ -1350,6 +1353,9 @@ const getFnOExpiriesRaw = async (
 export const getFnOExpiries = memoizer(getFnOExpiriesRaw, {
   maxAge: millisecondsTill7(),
   promise: true,
+  // Default parameters make function.length 0, so every underlying shared the first
+  // result (Chase BankNifty and Midcap both received NIFTY futures).
+  length: 2,
 })
 
 /**
@@ -1360,6 +1366,7 @@ export const getFnOExpiries = memoizer(getFnOExpiriesRaw, {
 export const getNiftyOptionExpiries = memoizer(getFnOExpiries, {
   maxAge: millisecondsTill7(),
   promise: true,
+  length: 2,
 })
 
 /**

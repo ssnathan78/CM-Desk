@@ -14,6 +14,7 @@ import { getChaseBook } from "./chaseSettings"
 import { chaseIndexFromSymbol } from "./chaseValidation"
 import { CHASE_STATUS } from "./constants"
 import { getChaseStatus, updateChaseStatus } from "./drizzleDbUtils"
+import { formatThrownMessage } from "./kiteError"
 import {
   cancelOrder,
   getKiteInstance,
@@ -559,9 +560,9 @@ export const generateSignal = async (
             kind: "ENTRY",
             instrument: nfoSymbol,
             tradingsymbol: instrument.tradingsymbol,
-            summary: `Entry order failed — staying AWAITING_LONG so Chase can retry: ${
-              entryErr instanceof Error ? entryErr.message : String(entryErr)
-            }`,
+            summary: `Entry order failed — staying AWAITING_LONG so Chase can retry: ${formatThrownMessage(
+              entryErr
+            )}`,
             features: { status: CHASE_STATUS.AWAITING_LONG },
             key: `chase:entry-fail:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
           })
@@ -615,9 +616,9 @@ export const generateSignal = async (
             kind: "ENTRY",
             instrument: nfoSymbol,
             tradingsymbol: instrument.tradingsymbol,
-            summary: `Entry order failed — staying AWAITING_SHORT so Chase can retry: ${
-              entryErr instanceof Error ? entryErr.message : String(entryErr)
-            }`,
+            summary: `Entry order failed — staying AWAITING_SHORT so Chase can retry: ${formatThrownMessage(
+              entryErr
+            )}`,
             features: { status: CHASE_STATUS.AWAITING_SHORT },
             key: `chase:entry-fail:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
           })
@@ -844,9 +845,9 @@ export const generateSignal = async (
           kind: "ENTRY",
           instrument: nfoSymbol,
           tradingsymbol: instrument.tradingsymbol,
-          summary: `Entry retry failed — staying ${currentStatus}: ${
-            entryErr instanceof Error ? entryErr.message : String(entryErr)
-          }`,
+          summary: `Entry retry failed — staying ${currentStatus}: ${formatThrownMessage(
+            entryErr
+          )}`,
           features: { status: currentStatus },
           key: `chase:entry-retry:${nfoSymbol}:${instrument.tradingsymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
         })

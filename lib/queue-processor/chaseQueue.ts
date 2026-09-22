@@ -34,6 +34,7 @@ import {
   insertEma,
   updateChaseStatus,
 } from "../drizzleDbUtils"
+import { formatThrownMessage } from "../kiteError"
 import {
   calculate40EMA,
   calculateEma,
@@ -266,7 +267,7 @@ async function ensureChaseEntryFilled(args: {
       orderTag: "chase",
       kind: "ENTRY",
       outcome: "REJECT",
-      summary: `Entry retry failed — ${e instanceof Error ? e.message : String(e)}`,
+      summary: `Entry retry failed — ${formatThrownMessage(e)}`,
       features: { side: args.side },
       idempotencyKey: `chase:entry-retry-fail:${args.tradingsymbol}:${new Date().toISOString().slice(0, 16)}`,
     })
