@@ -15,6 +15,7 @@ export {
   splitLedgerQty,
   squareOffQtySource,
 } from "./bookSplit"
+export { clearPaperBook, PAPER_CLEAR_CONFIRM, paperClearBlocked } from "./clearPaperBook"
 export { clearPhantomPosition, PHANTOM_CLEAR_CONFIRM } from "./clearPhantomBook"
 export { parseFeedPeriod, periodBounds } from "./feedWindow"
 export { prepareStrategyGoLive } from "./goLive"
