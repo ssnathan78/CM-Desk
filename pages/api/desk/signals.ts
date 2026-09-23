@@ -11,6 +11,7 @@ export default withSession(async (req, res) => {
     if (req.method === "GET") {
       const period = parseFeedPeriod(req.query.period)
       const strategy = typeof req.query.strategy === "string" ? req.query.strategy : null
+      const instrument = typeof req.query.instrument === "string" ? req.query.instrument : null
       const planRef = typeof req.query.planRef === "string" ? req.query.planRef : null
       const jobId = typeof req.query.jobId === "string" ? req.query.jobId : null
       const orderTag = typeof req.query.orderTag === "string" ? req.query.orderTag : null
@@ -18,6 +19,7 @@ export default withSession(async (req, res) => {
         await listStrategySignals({
           period,
           strategy: strategy || null,
+          instrument: instrument || null,
           planRef: planRef || null,
           jobId: jobId || null,
           orderTag: orderTag || null,

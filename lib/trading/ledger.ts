@@ -34,6 +34,7 @@ import {
   type OrderPurpose,
   type OrderStatus,
   type Provenance,
+  provenanceAfterFill,
   type RiskResult,
   type Side,
 } from "./types"
@@ -137,7 +138,12 @@ export async function recordDecision(input: {
         decisionId: id,
         jobId: input.jobId,
         severity: failed ? "ERROR" : "INFO",
-        summary: input.reason || input.intent || input.action,
+        summary: [
+          input.tradingsymbol || input.instrument,
+          input.reason || input.intent || input.action,
+        ]
+          .filter(Boolean)
+          .join(" — "),
         detail: {
           action: input.action,
           risk: input.riskResult,
@@ -377,7 +383,9 @@ export async function markOrderSubmitted(input: {
       eventType: next === "FAILED" ? "BROKER_ERROR" : "ORDER_SUBMITTED",
       orderId: current.id,
       jobId: current.jobId,
-      summary: input.brokerOrderId || input.errorInfo || next,
+      summary: [current.side, current.tradingsymbol, input.brokerOrderId || input.errorInfo || next]
+        .filter(Boolean)
+        .join(" "),
       idempotencyKey: `order-sub:${current.id}:${input.brokerOrderId || next}`,
     })
   }
@@ -547,7 +555,9 @@ export async function applyBrokerOrderSnapshot(
         eventType: "ORDER_CANCELLED",
         orderId: row.id,
         jobId: row.jobId,
-        summary: kiteOrder.status_message || "cancelled",
+        summary: [row.tradingsymbol, kiteOrder.status_message || "cancelled"]
+          .filter(Boolean)
+          .join(" — "),
         idempotencyKey: `can:${row.id}:${brokerOrderId || ""}`,
       })
     }
@@ -602,6 +612,19 @@ export async function applyBrokerOrderSnapshot(
   }
 
   return { orderId: row.id, fillIds }
+}
+
+/** Write terminal Kite orders into the ledger as soon as Chase sees them, not only at the 15:30 sync. */
+export async function syncTerminalKiteOrders(kiteOrders: unknown[]): Promise<void> {
+  for (const raw of kiteOrders) {
+    if (!raw || typeof raw !== "object") continue
+    const order = raw as { status?: string; filled_quantity?: number }
+    const status = String(order.status || "")
+    const filled = Number(order.filled_quantity || 0)
+    if (status === "COMPLETE" || status === "CANCELLED" || status === "REJECTED" || filled > 0) {
+      await applyBrokerOrderSnapshot(raw as Parameters<typeof applyBrokerOrderSnapshot>[0])
+    }
+  }
 }
 
 async function insertFill(input: {
@@ -741,6 +764,11 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
     )
 
     const nextStatus = result.next.quantity === 0 ? "FLAT" : "OPEN"
+    const nextProvenance = provenanceAfterFill({
+      positionProvenance: pos.provenance,
+      positionQty: Number(pos.quantity),
+      fillProvenance: fill.provenance,
+    })
     await client.query(
       `UPDATE positions SET
          quantity = $2,
@@ -754,7 +782,7 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
          updated_at = now(),
          status = $10,
          strategy = COALESCE(strategy, $11),
-         provenance = COALESCE(provenance, $12)
+         provenance = $12
        WHERE id = $1`,
       [
         pos.id,
@@ -768,7 +796,7 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
         fill.occurred_at,
         nextStatus,
         fill.strategy,
-        fill.provenance || "LIVE",
+        nextProvenance,
       ]
     )
 

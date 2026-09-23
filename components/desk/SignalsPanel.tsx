@@ -35,10 +35,12 @@ export default function SignalsPanel({
   filters,
   period,
   strategy,
+  instrument,
   planRef,
   jobId,
   onPeriod,
   onStrategy,
+  onInstrument,
   onPlanRef,
   onJobId,
   onClear,
@@ -47,10 +49,12 @@ export default function SignalsPanel({
   filters: SignalFilters
   period: FeedPeriod
   strategy: string
+  instrument: string
   planRef: string
   jobId: string
   onPeriod: (period: FeedPeriod) => void
   onStrategy: (value: string) => void
+  onInstrument: (value: string) => void
   onPlanRef: (value: string) => void
   onJobId: (value: string) => void
   onClear: (period: FeedPeriod) => void
@@ -59,7 +63,8 @@ export default function SignalsPanel({
     <Paper sx={{ overflow: "hidden" }}>
       <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
         Persisted evaluations: Chase hourly EMA vs close, straddle skew samples, strangle strike
-        picks. Filter by strategy, weekday plan, or a single job/trade.
+        picks. Instrument separates Nifty, BankNifty, FinNifty, and Midcap. Job filters a scheduled
+        straddle or strangle trade. Chase does not create a job, so that list stays “All jobs”.
       </Typography>
       <FeedToolbar
         period={period}
@@ -85,6 +90,24 @@ export default function SignalsPanel({
               size="small"
               sx={{ minWidth: { xs: "100%", md: 160 }, width: { xs: "100%", md: "auto" } }}
             >
+              <InputLabel>Instrument</InputLabel>
+              <Select
+                label="Instrument"
+                value={instrument}
+                onChange={e => onInstrument(e.target.value)}
+              >
+                <MenuItem value="">All instruments</MenuItem>
+                {filters.instruments.map(key => (
+                  <MenuItem key={key} value={key}>
+                    {key}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl
+              size="small"
+              sx={{ minWidth: { xs: "100%", md: 160 }, width: { xs: "100%", md: "auto" } }}
+            >
               <InputLabel>Plan</InputLabel>
               <Select label="Plan" value={planRef} onChange={e => onPlanRef(e.target.value)}>
                 <MenuItem value="">All plans</MenuItem>
@@ -99,9 +122,9 @@ export default function SignalsPanel({
               size="small"
               sx={{ minWidth: { xs: "100%", md: 200 }, width: { xs: "100%", md: "auto" } }}
             >
-              <InputLabel>Trade / job</InputLabel>
-              <Select label="Trade / job" value={jobId} onChange={e => onJobId(e.target.value)}>
-                <MenuItem value="">All trades</MenuItem>
+              <InputLabel>Job</InputLabel>
+              <Select label="Job" value={jobId} onChange={e => onJobId(e.target.value)}>
+                <MenuItem value="">All jobs</MenuItem>
                 {filters.jobs.map(job => (
                   <MenuItem key={job.id} value={job.id}>
                     {job.name || job.orderTag || job.id}

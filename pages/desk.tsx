@@ -138,6 +138,7 @@ export default function DeskPage() {
   const [tradeTo, setTradeTo] = useState("")
   const [feedPeriod, setFeedPeriod] = useState<FeedPeriod>("all")
   const [signalStrategy, setSignalStrategy] = useState("")
+  const [signalInstrument, setSignalInstrument] = useState("")
   const [signalPlan, setSignalPlan] = useState("")
   const [signalJob, setSignalJob] = useState("")
   const [clearOpen, setClearOpen] = useState<{
@@ -172,6 +173,7 @@ export default function DeskPage() {
   const alertQs = new URLSearchParams({ period: feedPeriod })
   const signalQs = new URLSearchParams({ period: feedPeriod })
   if (signalStrategy) signalQs.set("strategy", signalStrategy)
+  if (signalInstrument) signalQs.set("instrument", signalInstrument)
   if (signalPlan) signalQs.set("planRef", signalPlan)
   if (signalJob) signalQs.set("jobId", signalJob)
   const { data: alertsData, mutate: mutateAlerts } = useSWR(
@@ -201,7 +203,12 @@ export default function DeskPage() {
   const alertErrors = Number(alertsData?.errorCount ?? 0)
   const alertWarns = Number(alertsData?.warnCount ?? 0)
   const signals = signalsData?.signals ?? []
-  const signalFilters = signalsData?.filters ?? { strategies: [], planRefs: [], jobs: [] }
+  const signalFilters = signalsData?.filters ?? {
+    strategies: [],
+    instruments: [],
+    planRefs: [],
+    jobs: [],
+  }
   const risk = riskData?.settings
   const deskHalted = Boolean(risk?.deskHalted)
 
@@ -736,10 +743,12 @@ export default function DeskPage() {
           filters={signalFilters}
           period={feedPeriod}
           strategy={signalStrategy}
+          instrument={signalInstrument}
           planRef={signalPlan}
           jobId={signalJob}
           onPeriod={setFeedPeriod}
           onStrategy={setSignalStrategy}
+          onInstrument={setSignalInstrument}
           onPlanRef={setSignalPlan}
           onJobId={setSignalJob}
           onClear={mode => setClearOpen({ feed: "signals", mode })}
@@ -791,6 +800,7 @@ export default function DeskPage() {
                   <TableRow>
                     <TableCell>When</TableCell>
                     <TableCell>Event</TableCell>
+                    <TableCell>Instrument</TableCell>
                     <TableCell>Actor</TableCell>
                     <TableCell>Summary</TableCell>
                   </TableRow>
@@ -800,6 +810,7 @@ export default function DeskPage() {
                     <TableRow key={String(row.id)}>
                       <TableCell>{when(row.occurredAt as string)}</TableCell>
                       <TableCell>{String(row.eventType)}</TableCell>
+                      <TableCell>{String(row.instrument || "—")}</TableCell>
                       <TableCell>{String(row.actor)}</TableCell>
                       <TableCell>{String(row.summary || "—")}</TableCell>
                     </TableRow>

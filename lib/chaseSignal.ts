@@ -317,6 +317,11 @@ async function placeEntryTriggerOrder(
   }
 }
 
+/** 13:15 on a later day trails the stop. Every other in-position hour, including entry-day 13:15, is a hold. */
+export function chaseSkipsHourlyHold(hour: number, entryDate: string, today: string): boolean {
+  return hour === 13 && entryDate !== today
+}
+
 export const generateSignal = async (
   instruments: ChaseInstrument[],
   todaysDate: string,
@@ -425,7 +430,7 @@ export const generateSignal = async (
 
   if (
     (currentStatus === CHASE_STATUS.LONG || currentStatus === CHASE_STATUS.SHORT) &&
-    hour !== 13
+    !chaseSkipsHourlyHold(hour, createdAtDate, currentDate)
   ) {
     logger.info("[generateSignal] chase already long/short, skipping")
     await persistChaseSignal({

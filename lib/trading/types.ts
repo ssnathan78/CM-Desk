@@ -98,6 +98,27 @@ export function provenanceInBook(
   return provenance === "LIVE" || provenance === "RECONCILED" || provenance === "MIGRATED"
 }
 
+/**
+ * A cleared paper row must not keep today's live fill. Flat PAPER/MOCK plus a live
+ * fill becomes that fill's book. An open paper quantity is left alone.
+ */
+export function provenanceAfterFill(input: {
+  positionProvenance?: string | null
+  positionQty: number
+  fillProvenance?: string | null
+}): Provenance {
+  const fillBook = ledgerProvenance(input.fillProvenance)
+  const positionBook = ledgerProvenance(input.positionProvenance)
+  if (
+    !isSyntheticProvenance(fillBook) &&
+    isSyntheticProvenance(positionBook) &&
+    Number(input.positionQty) === 0
+  ) {
+    return fillBook
+  }
+  return positionBook
+}
+
 /** Missing provenance is paper, never live. Live must be set explicitly. */
 export function ledgerProvenance(value?: string | null): Provenance {
   if (

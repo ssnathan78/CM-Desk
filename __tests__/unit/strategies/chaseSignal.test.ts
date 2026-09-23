@@ -6,7 +6,12 @@ dayjs.extend(utc)
 dayjs.extend(tz)
 
 import { chaseAllowsNewEntry, chaseTolerances } from "../../../lib/chaseDefaults"
-import { decideChaseEntryAction, getAcceptedPrevEma, resolveChasePrevEma } from "../../../lib/chaseSignal"
+import {
+  chaseSkipsHourlyHold,
+  decideChaseEntryAction,
+  getAcceptedPrevEma,
+  resolveChasePrevEma,
+} from "../../../lib/chaseSignal"
 import { CHASE_STATUS } from "../../../lib/constants"
 
 jest.mock("../../../lib/kiteUtils", () => ({
@@ -370,5 +375,13 @@ describe("generateSignal phantom LONG/SHORT", () => {
     )
     expect(updateChaseStatus).not.toHaveBeenCalled()
     expect(placeKiteOrder).not.toHaveBeenCalled()
+  })
+})
+
+describe("chaseSkipsHourlyHold", () => {
+  it("holds on the entry day at 13:15 and trails only on a later day", () => {
+    expect(chaseSkipsHourlyHold(13, "2026-09-23", "2026-09-23")).toBe(false)
+    expect(chaseSkipsHourlyHold(13, "2026-09-23", "2026-09-24")).toBe(true)
+    expect(chaseSkipsHourlyHold(14, "2026-09-23", "2026-09-23")).toBe(false)
   })
 })
