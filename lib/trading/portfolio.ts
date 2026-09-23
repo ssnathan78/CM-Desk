@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, lte, or, type SQL } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, isNotNull, lte, or, type SQL } from "drizzle-orm"
 
 import { db, pool } from "../drizzle"
 import {
@@ -380,7 +380,35 @@ export async function listDecisions(query: number | TradeListQuery = 100) {
 }
 
 export async function listAudit(limit = 150) {
-  return db.select().from(auditEvents).orderBy(desc(auditEvents.occurredAt)).limit(limit)
+  const rows = await db
+    .select()
+    .from(auditEvents)
+    .orderBy(desc(auditEvents.occurredAt))
+    .limit(limit)
+  const orderIds = rows.map(row => row.orderId).filter((id): id is string => Boolean(id))
+  const linked = orderIds.length
+    ? await db
+        .select({
+          id: orders.id,
+          tradingsymbol: orders.tradingsymbol,
+          side: orders.side,
+        })
+        .from(orders)
+        .where(inArray(orders.id, orderIds))
+    : []
+  const byOrder = new Map(linked.map(row => [row.id, row]))
+  return rows.map(row => {
+    const detail =
+      row.detail && typeof row.detail === "object" && !Array.isArray(row.detail)
+        ? (row.detail as Record<string, unknown>)
+        : {}
+    const linkedOrder = row.orderId ? byOrder.get(row.orderId) : undefined
+    const instrument =
+      linkedOrder?.tradingsymbol ||
+      (typeof detail.instrument === "string" ? detail.instrument : null) ||
+      (typeof detail.tradingsymbol === "string" ? detail.tradingsymbol : null)
+    return { ...row, instrument }
+  })
 }
 
 export async function listRecon(limit = 50) {

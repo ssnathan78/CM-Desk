@@ -35,6 +35,7 @@ import {
   getOpenPositions,
   markOrderSubmitted,
   safeRecordOrderFromKiteProps,
+  syncTerminalKiteOrders,
 } from "./trading/ledger"
 import { cancelPaperWorkingOrders, shouldFillPaperOrderNow } from "./trading/paperExecution"
 import { executionProvenance, inferOrderRole, isPaperStrategy } from "./trading/riskEngine"
@@ -1568,6 +1569,7 @@ export async function placeSL(
     }
   }
   const orders = (await kite.getOrders()) as Order[]
+  await syncTerminalKiteOrders(orders)
   const existingSL = orders.find(
     o =>
       o.tradingsymbol === tradingsymbol &&

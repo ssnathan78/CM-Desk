@@ -46,7 +46,7 @@ import {
 } from "../kiteUtils"
 import logger from "../logger"
 import { CHASE_Q_NAME, redisConnection } from "../queue"
-import { getOpenOrders, recordDecision } from "../trading/ledger"
+import { getOpenOrders, recordDecision, syncTerminalKiteOrders } from "../trading/ledger"
 import { matchPaperWorkingStops } from "../trading/paperExecution"
 import { recordStrategySignal } from "../trading/signals"
 import { ms, postToSlack, toIst, withRemoteRetry } from "../utils"
@@ -191,6 +191,7 @@ async function ensureChaseEntryFilled(args: {
         transaction_type?: string | null
         status?: string | null
       }>
+      await syncTerminalKiteOrders(kiteOrders)
     } catch (e) {
       logger.warn(
         `[processUpdateSL] live orderbook unavailable — not placing a second ${args.side} entry`,
@@ -1057,6 +1058,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       if (!book.paperBook) {
         try {
           kiteOrders = (await kite.getOrders()) as typeof kiteOrders
+          await syncTerminalKiteOrders(kiteOrders)
         } catch (e) {
           logger.warn("[processUpdateSL] live orderbook unavailable during SL hit", e)
         }
@@ -1310,6 +1312,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
             transaction_type?: string | null
             status?: string | null
           }>
+          await syncTerminalKiteOrders(kiteOrders)
         } catch (e) {
           logger.warn(
             `[processUpdateSL] live orderbook unavailable — treating ${side} as wait, not punching lots`,

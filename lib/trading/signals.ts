@@ -51,6 +51,7 @@ export type StrategySignal = {
 
 export type SignalFilters = {
   strategies: string[]
+  instruments: string[]
   planRefs: string[]
   jobs: { id: string; name: string | null; orderTag: string | null }[]
 }
@@ -168,6 +169,7 @@ export async function deleteSignalsForPeriod(period: FeedPeriod) {
 export async function listStrategySignals(query: {
   period?: FeedPeriod
   strategy?: string | null
+  instrument?: string | null
   planRef?: string | null
   jobId?: string | null
   orderTag?: string | null
@@ -179,6 +181,7 @@ export async function listStrategySignals(query: {
   if (from) clauses.push(gte(strategySignals.occurredAt, from))
   if (to) clauses.push(lt(strategySignals.occurredAt, to))
   if (query.strategy) clauses.push(eq(strategySignals.strategy, query.strategy))
+  if (query.instrument) clauses.push(eq(strategySignals.instrument, query.instrument))
   if (query.planRef) clauses.push(eq(strategySignals.planRef, query.planRef))
   if (query.jobId) clauses.push(eq(strategySignals.jobId, query.jobId))
   if (query.orderTag) clauses.push(eq(strategySignals.orderTag, query.orderTag))
@@ -193,6 +196,7 @@ export async function listStrategySignals(query: {
     db
       .select({
         strategy: strategySignals.strategy,
+        instrument: strategySignals.instrument,
         planRef: strategySignals.planRef,
         jobId: strategySignals.jobId,
         jobName: strategySignals.jobName,
@@ -206,10 +210,12 @@ export async function listStrategySignals(query: {
 
   const visible = rows.filter(row => !isHiddenByClears(row.occurredAt, clears))
   const strategies = new Set<string>()
+  const instruments = new Set<string>()
   const planRefs = new Set<string>()
   const jobs = new Map<string, { id: string; name: string | null; orderTag: string | null }>()
   for (const row of filterRows) {
     if (row.strategy) strategies.add(row.strategy)
+    if (row.instrument) instruments.add(row.instrument)
     if (row.planRef) planRefs.add(row.planRef)
     if (row.jobId) {
       jobs.set(row.jobId, { id: row.jobId, name: row.jobName, orderTag: row.orderTag })
@@ -234,6 +240,7 @@ export async function listStrategySignals(query: {
     })),
     filters: {
       strategies: [...strategies].sort(),
+      instruments: [...instruments].sort(),
       planRefs: [...planRefs].sort(),
       jobs: [...jobs.values()],
     },
