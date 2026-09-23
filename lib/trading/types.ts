@@ -119,6 +119,21 @@ export function provenanceAfterFill(input: {
   return positionBook
 }
 
+/**
+ * A flat paper or mock position must not carry its realized P&L into a live fill.
+ * A flat live position keeps its own realized P&L for the next live cycle.
+ */
+export function resetsBookOnFill(input: {
+  positionProvenance?: string | null
+  positionQty: number
+  fillProvenance?: string | null
+}): boolean {
+  if (Number(input.positionQty) !== 0) return false
+  const next = provenanceAfterFill(input)
+  const current = ledgerProvenance(input.positionProvenance)
+  return isSyntheticProvenance(current) && !isSyntheticProvenance(next)
+}
+
 /** Missing provenance is paper, never live. Live must be set explicitly. */
 export function ledgerProvenance(value?: string | null): Provenance {
   if (

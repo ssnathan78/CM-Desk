@@ -105,6 +105,14 @@ reconciliation **sums** internal quantities per
 Unattributed broker activity (manual Kite order, unknown tag) is stored with
 `job_id` null and `provenance = RECONCILED`.
 
+A flat paper or mock position that later receives a live fill is retagged to
+that fill’s book and starts realized P&L at zero. The closed paper trade stays
+on the paper book. Desk → Positions → **Clear paper book** deletes paper and
+mock orders, fills, trades, decisions, flat paper positions, and the activity
+tied to them. It also removes realized P&L a live row still carries from that
+paper cycle. It does not send a broker order and refuses while a paper
+position is open or a paper order is still working.
+
 ## 3. Lifecycle and mutability
 
 | Entity | Mutable? | Notes |

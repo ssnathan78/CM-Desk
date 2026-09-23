@@ -141,6 +141,7 @@ export default function DeskPage() {
   const [signalInstrument, setSignalInstrument] = useState("")
   const [signalPlan, setSignalPlan] = useState("")
   const [signalJob, setSignalJob] = useState("")
+  const [paperClearOpen, setPaperClearOpen] = useState(false)
   const [clearOpen, setClearOpen] = useState<{
     feed: "alerts" | "signals"
     mode: FeedClearMode
@@ -153,7 +154,9 @@ export default function DeskPage() {
   const { data: positionData, mutate: mutatePositions } = useSWR(
     user?.isLoggedIn ? `/api/desk/positions${bookQs}` : null
   )
-  const { data: orderData } = useSWR(user?.isLoggedIn ? `/api/desk/orders${bookQs}` : null)
+  const { data: orderData, mutate: mutateOrders } = useSWR(
+    user?.isLoggedIn ? `/api/desk/orders${bookQs}` : null
+  )
   const tradeRange =
     tradePreset === "custom"
       ? {
@@ -166,10 +169,12 @@ export default function DeskPage() {
   if (tradeRange.from) tradeQuery.set("from", tradeRange.from)
   if (tradeRange.to) tradeQuery.set("to", tradeRange.to)
   const tradeQs = tradeQuery.toString()
-  const { data: tradeData } = useSWR(
+  const { data: tradeData, mutate: mutateTrades } = useSWR(
     user?.isLoggedIn ? `/api/desk/trades${tradeQs ? `?${tradeQs}` : ""}` : null
   )
-  const { data: activityData } = useSWR(user?.isLoggedIn ? `/api/desk/activity${bookQs}` : null)
+  const { data: activityData, mutate: mutateActivity } = useSWR(
+    user?.isLoggedIn ? `/api/desk/activity${bookQs}` : null
+  )
   const alertQs = new URLSearchParams({ period: feedPeriod })
   const signalQs = new URLSearchParams({ period: feedPeriod })
   if (signalStrategy) signalQs.set("strategy", signalStrategy)
@@ -340,6 +345,40 @@ export default function DeskPage() {
         }}
       />
       <ConfirmDialog
+        open={paperClearOpen}
+        title="Clear the paper book?"
+        message="Removes paper and mock orders, fills, trades, decisions, flat paper positions, and the activity tied to them. Live and reconciled rows stay. Realized profit that a live position still carries from an earlier paper cycle is removed. Square off any open paper position and cancel working paper orders first. The broker is not contacted."
+        confirmLabel="Clear paper book"
+        confirmColor="warning"
+        onCancel={() => setPaperClearOpen(false)}
+        onConfirm={async () => {
+          setPaperClearOpen(false)
+          try {
+            const result = await fetchJson<{ counts: Record<string, number> }>(
+              "/api/desk/positions",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "clear-paper", confirm: "CLEAR PAPER" }),
+              }
+            )
+            const c = result.counts
+            setReconMsg(
+              `Cleared paper book: ${c.orders ?? 0} orders, ${c.trades ?? 0} trades, ${c.positionsReset ?? 0} live rows reset`
+            )
+            await Promise.all([
+              mutatePositions(),
+              mutatePortfolio(),
+              mutateOrders(),
+              mutateTrades(),
+              mutateActivity(),
+            ])
+          } catch (e) {
+            setReconMsg(e instanceof Error ? e.message : "Clear paper book failed")
+          }
+        }}
+      />
+      <ConfirmDialog
         open={Boolean(flattenRow)}
         title="Square off this position?"
         message={
@@ -492,6 +531,14 @@ export default function DeskPage() {
               <MenuItem value="LIVE">Live / recon</MenuItem>
             </Select>
           </FormControl>
+          <Button
+            size="small"
+            color="warning"
+            variant="outlined"
+            onClick={() => setPaperClearOpen(true)}
+          >
+            Clear paper book
+          </Button>
           {tab === "trades" ? (
             <>
               <FormControl size="small" sx={filterFieldSx}>

@@ -36,6 +36,7 @@ import {
   type Provenance,
   provenanceAfterFill,
   type RiskResult,
+  resetsBookOnFill,
   type Side,
 } from "./types"
 
@@ -752,16 +753,21 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
       fees: moneyFromUnknown(pos.fees),
       openedAt: pos.opened_at ? new Date(pos.opened_at) : null,
     }
-    const result = applyFillToPosition(
-      before.quantity === 0 && !pos.opened_at ? emptyPosition() : before,
-      {
-        side: fill.side,
-        quantity: Number(fill.quantity),
-        price: moneyFromUnknown(fill.price),
-        fee: moneyFromUnknown(fill.fee_amount),
-        at: new Date(fill.occurred_at),
-      }
-    )
+    const freshBook =
+      before.quantity === 0 &&
+      (!pos.opened_at ||
+        resetsBookOnFill({
+          positionProvenance: pos.provenance,
+          positionQty: before.quantity,
+          fillProvenance: fill.provenance,
+        }))
+    const result = applyFillToPosition(freshBook ? emptyPosition() : before, {
+      side: fill.side,
+      quantity: Number(fill.quantity),
+      price: moneyFromUnknown(fill.price),
+      fee: moneyFromUnknown(fill.fee_amount),
+      at: new Date(fill.occurred_at),
+    })
 
     const nextStatus = result.next.quantity === 0 ? "FLAT" : "OPEN"
     const nextProvenance = provenanceAfterFill({

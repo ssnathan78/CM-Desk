@@ -299,6 +299,52 @@ describeDb("trading ledger lifecycle", () => {
     expect(rows[0].status).toBe("SUBMITTED")
   })
 
+  it("does not carry closed paper realized P&L onto the next live fill", async () => {
+    const sym = `TESTPAPER${Date.now()}FUT`
+    await bookTestFill({
+      tradingsymbol: sym,
+      side: "SELL",
+      quantity: 130,
+      price: "100",
+      provenance: "PAPER",
+      product: "NRML",
+    })
+    await bookTestFill({
+      tradingsymbol: sym,
+      side: "BUY",
+      quantity: 130,
+      price: "90",
+      provenance: "PAPER",
+      product: "NRML",
+      purpose: "EXIT",
+      exitReason: "STRATEGY",
+    })
+    const closed = await pool.query(
+      `SELECT realized_pnl::float AS realized, quantity, provenance FROM positions WHERE tradingsymbol = $1`,
+      [sym]
+    )
+    expect(closed.rows[0].quantity).toBe(0)
+    expect(closed.rows[0].provenance).toBe("PAPER")
+    expect(closed.rows[0].realized).toBe(1300)
+
+    await bookTestFill({
+      tradingsymbol: sym,
+      side: "BUY",
+      quantity: 130,
+      price: "200",
+      provenance: "LIVE",
+      product: "NRML",
+    })
+    const live = await pool.query(
+      `SELECT realized_pnl::float AS realized, quantity, provenance, status FROM positions WHERE tradingsymbol = $1`,
+      [sym]
+    )
+    expect(live.rows[0].quantity).toBe(130)
+    expect(live.rows[0].status).toBe("OPEN")
+    expect(live.rows[0].provenance).toBe("LIVE")
+    expect(live.rows[0].realized).toBe(0)
+  })
+
   it("reconcile matching broker qty records no position mismatch for that symbol", async () => {
     const s = `${symbol}REC`
     await bookTestFill({ tradingsymbol: s, side: "BUY", quantity: 30, price: "10", product: "MIS" })
