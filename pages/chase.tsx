@@ -220,6 +220,24 @@ const ChasePlanPage = () => {
                 }
               />
               <TextField
+                label="Market protection %"
+                type="number"
+                size="small"
+                fullWidth
+                value={book.marketProtectionPercent}
+                slotProps={{ htmlInput: { step: 0.05, min: 0.25, max: 5 } }}
+                onChange={e =>
+                  setBooks(current =>
+                    current.map(row =>
+                      row.instrument === book.instrument
+                        ? { ...row, marketProtectionPercent: Number(e.target.value) }
+                        : row
+                    )
+                  )
+                }
+                helperText="Chase market orders become a limit this percent away from the last price. 1.5% stays inside the exchange band."
+              />
+              <TextField
                 label="Entry limit offset"
                 type="number"
                 size="small"

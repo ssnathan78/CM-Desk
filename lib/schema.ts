@@ -176,6 +176,7 @@ export const chaseSettings = pgTable("chase_settings", {
   emaPeriod: integer("ema_period").notNull().default(40),
   bufferPercent: numeric("buffer_percent").notNull().default("0.2"),
   entryLimitOffset: numeric("entry_limit_offset").notNull().default("5"),
+  marketProtectionPercent: numeric("market_protection_percent").notNull().default("1.5"),
   paused: boolean("paused").notNull().default(false),
   enabled: boolean("enabled").notNull().default(false),
   openClassify: text("open_classify").notNull().default("pdf_0916"),

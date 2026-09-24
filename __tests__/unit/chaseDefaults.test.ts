@@ -3,8 +3,10 @@ import {
   CHASE_MASTER_DEFAULTS,
   chaseAllowsNewEntry,
   chaseManagesOpenPosition,
+  chaseMarketProtectionPrice,
   chaseTolerances,
   defaultChaseBook,
+  normalizeChaseMarketProtection,
 } from "../../lib/chaseDefaults"
 
 describe("chaseTolerances", () => {
@@ -41,10 +43,27 @@ describe("CHASE_MASTER_DEFAULTS", () => {
       emaPeriod: 40,
       bufferPercent: 0.2,
       entryLimitOffset: 5,
+      marketProtectionPercent: 1.5,
       paused: false,
       instruments: ["NIFTY"],
       openClassify: "pdf_0916",
     })
+  })
+})
+
+describe("chaseMarketProtectionPrice", () => {
+  it("defaults a missing percent to 1.5", () => {
+    expect(normalizeChaseMarketProtection(undefined)).toBe(1.5)
+    expect(normalizeChaseMarketProtection(9)).toBe(5)
+    expect(normalizeChaseMarketProtection(0)).toBe(0.25)
+  })
+
+  it("keeps a 1.5% Nifty sell inside the 10:22 exchange band and a 2% sell outside it", () => {
+    const ltp = 23223
+    const exchangeFloor = 22759.3
+    expect(chaseMarketProtectionPrice(ltp, "SELL", 2)).toBeLessThan(exchangeFloor)
+    expect(chaseMarketProtectionPrice(ltp, "SELL", 1.5)).toBeGreaterThan(exchangeFloor)
+    expect(chaseMarketProtectionPrice(ltp, "SELL", 1.75)).toBeGreaterThan(exchangeFloor)
   })
 })
 

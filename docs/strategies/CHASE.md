@@ -60,6 +60,7 @@ Shipped engine (`CHASE_MASTER_DEFAULTS` / `/chase`):
 | T1 | 0.4% hard-coded | `longT1 = round(ema * 1.004)`, `shortT1 = round(ema * 0.996)` |
 | 09:16 classify | `openClassify` on Chase settings (DB) | Default `pdf_0916`: overnight 16:15 EMA + 09:16 session close/H-L. `legacy_60m`: step 40-EMA on the last 60-minute bar. |
 | Entry limit offset | 5 ₹ | SL **limit** = trigger ± 5 on the pending entry order |
+| Market protection | 1.5% | Per index. A Chase market order is sent as a limit this percent away from the last price, so the fill cannot print further than that. 2% sat just outside the exchange limit-price band. |
 | Lots | 1 | Per index (`chase_settings.lots` for that instrument) |
 
 Helper: `chaseTolerances(ema, bufferPercent)` in `lib/chaseDefaults.ts`.

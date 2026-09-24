@@ -308,6 +308,32 @@ async function resolveQuoteLtp(args: {
   }
 }
 
+async function resolveMarketProtection(
+  kiteOrder: {
+    market_protection?: number
+    order_type?: string
+    tag?: string
+    tradingsymbol?: string
+  },
+  strategy?: string
+): Promise<number> {
+  if (kiteOrder.market_protection != null && Number.isFinite(Number(kiteOrder.market_protection))) {
+    return Number(kiteOrder.market_protection)
+  }
+  const market = String(kiteOrder.order_type || "").toUpperCase() === "MARKET"
+  const chase = kiteOrder.tag === "chase" || strategy === "CHASE"
+  if (market && chase && kiteOrder.tradingsymbol) {
+    try {
+      const { chaseMarketProtectionForSymbol } = await import("./chaseSettings")
+      return await chaseMarketProtectionForSymbol(kiteOrder.tradingsymbol)
+    } catch (e) {
+      logger.warn("[placeOrder] Chase market protection unavailable, using 1.5", e)
+      return 1.5
+    }
+  }
+  return 2
+}
+
 export async function placeOrder(
   kite: KiteConnectInstance,
   variety: Variety,
@@ -417,9 +443,10 @@ export async function placeOrder(
       return { order_id: mockId }
     }
 
+    const marketProtection = await resolveMarketProtection(kiteOrder, strategy)
     const result = await kite.placeOrder(variety, {
       ...kiteOrder,
-      market_protection: (kiteOrder as any).market_protection ?? 2,
+      market_protection: marketProtection,
     } as PlaceOrderParams)
     await markOrderSubmitted({
       orderId: ledgerOrderId,
