@@ -946,7 +946,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         if (existingSLOrder) {
           await kite.modifyOrder("regular", existingSLOrder.order_id, {
             order_type: "MARKET",
-            market_protection: 2,
+            market_protection: chaseConfig.marketProtectionPercent,
           } as any)
           logger.info(
             `[processUpdateSL] Converted SL order ${existingSLOrder.order_id} to MARKET for ${tradingsymbol} rollover`
@@ -1087,7 +1087,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         if (existingSL?.order_id) {
           await kite.modifyOrder("regular", existingSL.order_id, {
             order_type: "MARKET",
-            market_protection: 2,
+            market_protection: chaseConfig.marketProtectionPercent,
           } as any)
           logger.info(
             `[processUpdateSL] Converted working SL ${existingSL.order_id} to MARKET for ${tradingsymbol}`

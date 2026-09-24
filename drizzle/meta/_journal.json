@@ -127,6 +127,13 @@
       "when": 1756980000017,
       "tag": "0016_chase_midcpnifty",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1756980000018,
+      "tag": "0017_chase_market_protection",
+      "breakpoints": true
     }
   ]
 }

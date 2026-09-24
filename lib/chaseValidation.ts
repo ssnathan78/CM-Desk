@@ -80,6 +80,12 @@ export function validateChaseSettings(
       return { ok: false, error: "entryLimitOffset must be between 0 and 100" }
     }
   }
+  if (patch.marketProtectionPercent != null) {
+    const n = Number(patch.marketProtectionPercent)
+    if (!Number.isFinite(n) || n < 0.25 || n > 5) {
+      return { ok: false, error: "marketProtectionPercent must be between 0.25 and 5" }
+    }
+  }
   if (patch.openClassify != null && !isChaseOpenClassify(patch.openClassify)) {
     return { ok: false, error: "openClassify must be pdf_0916 or legacy_60m" }
   }

@@ -10,6 +10,11 @@ export type ChaseEngineConfig = {
   emaPeriod: number
   bufferPercent: number
   entryLimitOffset: number
+  /**
+   * Percent away from the last price used as the limit on a Chase market order.
+   * A sell floor of 2% sat outside the exchange band; 1.5% stays inside it.
+   */
+  marketProtectionPercent: number
   paused: boolean
   instruments: string[]
   /** How 09:16 T+1 / later-day SL reads close, EMA, and day's H/L. */
@@ -27,6 +32,7 @@ export const CHASE_MASTER_DEFAULTS: ChaseEngineConfig = {
   emaPeriod: 40,
   bufferPercent: 0.2,
   entryLimitOffset: 5,
+  marketProtectionPercent: 1.5,
   paused: false,
   instruments: ["NIFTY"],
   openClassify: CHASE_OPEN_CLASSIFY.PDF_0916,
@@ -52,10 +58,36 @@ export function aggregateChaseConfig(books: ChaseBookConfig[]): ChaseEngineConfi
     emaPeriod: primary?.emaPeriod ?? CHASE_MASTER_DEFAULTS.emaPeriod,
     bufferPercent: primary?.bufferPercent ?? CHASE_MASTER_DEFAULTS.bufferPercent,
     entryLimitOffset: primary?.entryLimitOffset ?? CHASE_MASTER_DEFAULTS.entryLimitOffset,
+    marketProtectionPercent:
+      primary?.marketProtectionPercent ?? CHASE_MASTER_DEFAULTS.marketProtectionPercent,
     paused: enabled.length ? enabled.every(book => book.paused) : true,
     instruments: enabled.map(book => book.instrument),
     openClassify: primary?.openClassify ?? CHASE_MASTER_DEFAULTS.openClassify,
   }
+}
+
+export const CHASE_MARKET_PROTECTION_MIN = 0.25
+export const CHASE_MARKET_PROTECTION_MAX = 5
+
+/** Clamp a Chase market-protection percent. Missing values become 1.5. */
+export function normalizeChaseMarketProtection(value: unknown): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return CHASE_MASTER_DEFAULTS.marketProtectionPercent
+  const clamped = Math.min(CHASE_MARKET_PROTECTION_MAX, Math.max(CHASE_MARKET_PROTECTION_MIN, n))
+  return Math.round(clamped * 100) / 100
+}
+
+/**
+ * Limit price Kite sends for a market order with this protection percent.
+ * A sell limit is below the last price. A buy limit is above it.
+ */
+export function chaseMarketProtectionPrice(
+  ltp: number,
+  side: "BUY" | "SELL",
+  percent: number
+): number {
+  const fraction = normalizeChaseMarketProtection(percent) / 100
+  return side === "SELL" ? ltp * (1 - fraction) : ltp * (1 + fraction)
 }
 
 export function chaseTolerances(ema: number, bufferPercent: number) {

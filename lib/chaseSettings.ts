@@ -5,9 +5,14 @@ import {
   type ChaseBookConfig,
   type ChaseEngineConfig,
   defaultChaseBook,
+  normalizeChaseMarketProtection,
 } from "./chaseDefaults"
 import { normalizeChaseOpenClassify } from "./chaseOpenClassify"
-import { normalizeChaseInstruments, validateChaseSettings } from "./chaseValidation"
+import {
+  chaseIndexFromSymbol,
+  normalizeChaseInstruments,
+  validateChaseSettings,
+} from "./chaseValidation"
 import { db } from "./drizzle"
 import { chaseSettings } from "./schema"
 
@@ -23,6 +28,7 @@ function toBook(row: {
   emaPeriod: number
   bufferPercent: string | number
   entryLimitOffset: string | number
+  marketProtectionPercent?: string | number | null
   paused: boolean
   enabled: boolean
   openClassify?: unknown
@@ -33,6 +39,7 @@ function toBook(row: {
     emaPeriod: Number(row.emaPeriod) || CHASE_MASTER_DEFAULTS.emaPeriod,
     bufferPercent: Number(row.bufferPercent),
     entryLimitOffset: Number(row.entryLimitOffset),
+    marketProtectionPercent: normalizeChaseMarketProtection(row.marketProtectionPercent),
     paused: Boolean(row.paused),
     enabled: Boolean(row.enabled),
     instruments: row.enabled ? [row.instrument] : [],
@@ -73,6 +80,11 @@ export async function getChaseBook(instrument: string): Promise<ChaseBookConfig>
   return books.find(book => book.instrument === index) ?? defaultChaseBook(index, false)
 }
 
+export async function chaseMarketProtectionForSymbol(tradingsymbol: string): Promise<number> {
+  const book = await getChaseBook(chaseIndexFromSymbol(tradingsymbol))
+  return book.marketProtectionPercent
+}
+
 export async function getChaseSettings(): Promise<ChaseEngineConfig> {
   return aggregateChaseConfig(await listChaseBooks())
 }
@@ -86,6 +98,7 @@ async function upsertBook(next: ChaseBookConfig): Promise<void> {
       emaPeriod: next.emaPeriod,
       bufferPercent: String(next.bufferPercent),
       entryLimitOffset: String(next.entryLimitOffset),
+      marketProtectionPercent: String(next.marketProtectionPercent),
       paused: next.paused,
       enabled: next.enabled,
       openClassify: next.openClassify,
@@ -98,6 +111,7 @@ async function upsertBook(next: ChaseBookConfig): Promise<void> {
         emaPeriod: next.emaPeriod,
         bufferPercent: String(next.bufferPercent),
         entryLimitOffset: String(next.entryLimitOffset),
+        marketProtectionPercent: String(next.marketProtectionPercent),
         paused: next.paused,
         enabled: next.enabled,
         openClassify: next.openClassify,
@@ -119,6 +133,9 @@ function mergeBook(current: ChaseBookConfig, patch: Partial<ChaseBookConfig>): C
       patch.entryLimitOffset == null
         ? current.entryLimitOffset
         : Math.min(100, Math.max(0, Number(patch.entryLimitOffset))),
+    marketProtectionPercent: normalizeChaseMarketProtection(
+      patch.marketProtectionPercent ?? current.marketProtectionPercent
+    ),
     paused: patch.paused == null ? current.paused : Boolean(patch.paused),
     enabled: patch.enabled == null ? current.enabled : Boolean(patch.enabled),
     instruments: [current.instrument],
