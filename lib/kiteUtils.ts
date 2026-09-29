@@ -1604,7 +1604,12 @@ export async function placeSL(
       o.status === STATUS_TRIGGER_PENDING
   )
 
-  if (existingSL) {
+  if (existingSL && Number(existingSL.quantity) !== Number(quantity)) {
+    await kite.cancelOrder(kite.VARIETY_REGULAR, existingSL.order_id)
+    logger.info(
+      `[placeSL] cancelled SL ${existingSL.order_id} qty ${existingSL.quantity} for ${tradingsymbol} — open book is ${quantity}`
+    )
+  } else if (existingSL) {
     if (
       chaseStopNeedsAmend(
         { trigger_price: existingSL.trigger_price, price: existingSL.price },

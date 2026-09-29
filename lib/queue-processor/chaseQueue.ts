@@ -11,6 +11,7 @@ import {
   chaseHasWorkingEntryOrder,
   chaseHasWorkingProtectiveStop,
   chaseLotsFromConfig,
+  chaseRolloverOrderQty,
   chaseSideHasPosition,
   decideChaseInPositionSync,
   isChaseWorkingBrokerStatus,
@@ -602,6 +603,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       isAutomated && quantity > 0
         ? (await resolveChaseBookBreakdown(tradingsymbol, accessToken)).netQty
         : 0
+    const bookQty = chaseFlattenQty(netQty)
     const hasPosition = currentStatus === CHASE_STATUS.LONG ? netQty > 0 : netQty < 0
 
     if (currentStatus === CHASE_STATUS.LONG && previousTradingDay === createdAtDate) {
@@ -626,7 +628,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           instrumentToken,
         })
         if (isAutomated && quantity > 0) {
-          if (hasPosition) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+          if (hasPosition) await placeSL(tradingsymbol, "SELL", bookQty, accessToken, newStoploss)
           else
             logger.info(
               `[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`
@@ -655,7 +657,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           instrumentToken,
         })
         if (isAutomated && quantity > 0) {
-          if (hasPosition) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+          if (hasPosition) await placeSL(tradingsymbol, "SELL", bookQty, accessToken, newStoploss)
           else
             logger.info(
               `[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`
@@ -683,7 +685,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
                 tradingsymbol,
                 exchange: "NFO",
                 transaction_type: "SELL",
-                quantity,
+                quantity: bookQty,
                 order_type: "MARKET",
                 product: "NRML",
                 tag: "chase",
@@ -712,7 +714,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           instrumentToken,
         })
         if (isAutomated && quantity > 0) {
-          if (hasPosition) await placeSL(tradingsymbol, "SELL", quantity, accessToken, newStoploss)
+          if (hasPosition) await placeSL(tradingsymbol, "SELL", bookQty, accessToken, newStoploss)
           else
             logger.info(
               `[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`
@@ -738,7 +740,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           instrumentToken,
         })
         if (isAutomated && quantity > 0) {
-          if (hasPosition) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+          if (hasPosition) await placeSL(tradingsymbol, "BUY", bookQty, accessToken, newStoploss)
           else
             logger.info(
               `[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`
@@ -765,7 +767,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           instrumentToken,
         })
         if (isAutomated && quantity > 0) {
-          if (hasPosition) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+          if (hasPosition) await placeSL(tradingsymbol, "BUY", bookQty, accessToken, newStoploss)
           else
             logger.info(
               `[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`
@@ -789,7 +791,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           instrumentToken,
         })
         if (isAutomated && quantity > 0) {
-          if (hasPosition) await placeSL(tradingsymbol, "BUY", quantity, accessToken, newStoploss)
+          if (hasPosition) await placeSL(tradingsymbol, "BUY", bookQty, accessToken, newStoploss)
           else
             logger.info(
               `[processUpdateSL] no open position for ${tradingsymbol} — skipping SL order`
@@ -817,7 +819,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
                 tradingsymbol,
                 exchange: "NFO",
                 transaction_type: "BUY",
-                quantity,
+                quantity: bookQty,
                 order_type: "MARKET",
                 product: "NRML",
                 tag: "chase",
@@ -857,7 +859,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
             await placeSL(
               tradingsymbol,
               currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY",
-              quantity,
+              bookQty,
               accessToken,
               newStoploss
             )
@@ -932,31 +934,42 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           `[processUpdateSL] no open position for ${tradingsymbol} — skipping rollover orders`
         )
       } else {
-        const newLotSize: number = (nextInstrument as any)?.lot_size ?? lotSize
-        const newQuantity = lots * newLotSize
-        const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
-        const entrySide = currentStatus === CHASE_STATUS.LONG ? "BUY" : "SELL"
+        const openQty = chaseFlattenQty(rolloverNetQty)
+        const rolled = chaseRolloverOrderQty({
+          netQty: rolloverNetQty,
+          currentLotSize: lotSize,
+          nextLotSize: Number((nextInstrument as { lot_size?: number }).lot_size) || lotSize,
+        })
+        const closingShort = rolloverNetQty < 0
+        const exitSide = closingShort ? "BUY" : "SELL"
+        const entrySide = closingShort ? "SELL" : "BUY"
         const allOrders = (await kite.getOrders()) as Order[]
-        const existingSLOrder = allOrders.find(
+        const pendingExit = allOrders.find(
           o =>
             o.tradingsymbol === tradingsymbol &&
             o.transaction_type === exitSide &&
             o.status === STATUS_TRIGGER_PENDING
         )
-        if (existingSLOrder) {
-          await kite.modifyOrder("regular", existingSLOrder.order_id, {
+        if (pendingExit && Number(pendingExit.quantity) === openQty) {
+          await kite.modifyOrder("regular", pendingExit.order_id, {
             order_type: "MARKET",
             market_protection: chaseConfig.marketProtectionPercent,
           } as any)
           logger.info(
-            `[processUpdateSL] Converted SL order ${existingSLOrder.order_id} to MARKET for ${tradingsymbol} rollover`
+            `[processUpdateSL] Converted SL order ${pendingExit.order_id} to MARKET for ${tradingsymbol} rollover`
           )
         } else {
+          if (pendingExit) {
+            await kite.cancelOrder(kite.VARIETY_REGULAR, pendingExit.order_id)
+            logger.info(
+              `[processUpdateSL] cancelled rollover SL ${pendingExit.order_id} qty ${pendingExit.quantity} — open book is ${openQty}`
+            )
+          }
           await placeKiteOrder(accessToken, {
             tradingsymbol,
             exchange: "NFO",
             transaction_type: exitSide,
-            quantity: chaseFlattenQty(rolloverNetQty),
+            quantity: openQty,
             order_type: "MARKET",
             product: "NRML",
             tag: "chase",
@@ -967,12 +980,18 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           tradingsymbol: nextInstrument.tradingsymbol,
           exchange: "NFO",
           transaction_type: entrySide,
-          quantity: newQuantity,
+          quantity: rolled.openQty,
           order_type: "MARKET",
           product: "NRML",
           tag: "chase",
         } as any)
-        await placeSL(nextInstrument.tradingsymbol, exitSide, newQuantity, accessToken, newStoploss)
+        await placeSL(
+          nextInstrument.tradingsymbol,
+          exitSide,
+          rolled.openQty,
+          accessToken,
+          newStoploss
+        )
       }
     }
     return { signal: "ROLLOVER", stoploss: newStoploss }
@@ -1216,7 +1235,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
               tradingsymbol,
               exchange: "NFO",
               transaction_type: "SELL",
-              quantity,
+              quantity: chaseFlattenQty(entryNetQty),
               order_type: "SL",
               product: "NRML",
               tag: "chase",
@@ -1276,7 +1295,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
               tradingsymbol,
               exchange: "NFO",
               transaction_type: "BUY",
-              quantity,
+              quantity: chaseFlattenQty(entryNetQty),
               order_type: "SL",
               product: "NRML",
               tag: "chase",
