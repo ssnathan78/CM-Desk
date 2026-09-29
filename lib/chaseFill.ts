@@ -65,6 +65,24 @@ export function chaseFlattenQty(netQty: number): number {
 }
 
 /**
+ * Roll the contracts you actually hold. Configured lots are for the next fresh entry,
+ * not for resizing an open book on expiry day.
+ */
+export function chaseRolloverOrderQty(input: {
+  netQty: number
+  currentLotSize: number
+  nextLotSize: number
+}): { closeQty: number; openQty: number } {
+  const closeQty = chaseFlattenQty(input.netQty)
+  const currentLot = Math.trunc(Number(input.currentLotSize) || 0)
+  const nextLot = Math.trunc(Number(input.nextLotSize) || 0) || currentLot
+  if (closeQty <= 0 || currentLot <= 0 || nextLot <= 0 || closeQty % currentLot !== 0) {
+    return { closeQty, openQty: closeQty }
+  }
+  return { closeQty, openQty: (closeQty / currentLot) * nextLot }
+}
+
+/**
  * Minute SL-hit: a working stop that already covered the book must not look like a failed job,
  * and must not MARKET a second flatten. Same rule on paper (filled ledger SL) and live (Kite SL).
  */

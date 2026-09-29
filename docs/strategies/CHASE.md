@@ -169,6 +169,8 @@ Rule book: adjust at **09:16 and 13:15**, not on T-day. This app’s 13:15 path 
 Chase is a continuous futures book:
 
 - If already LONG/SHORT in the **front** month on expiry day, flatten that contract at **15:00 IST** and reopen the **next** month MARKET, SL = next contract’s EMA.
+- The quantity closed and reopened is the **open book** (absolute net quantity, scaled only if the next contract’s lot size differs). Changing Chase lots does not resize a position that is already open. The new lot count applies to the next fresh entry.
+- Morning stop replacement (09:16) and a stop placed after an entry fills also use the open quantity, not `lots × lot size`.
 - If still **flat** (AWAITING_SIGNAL) on expiry day, new signals evaluate and enter the **next** month immediately (`instruments[1]`). Do not open the dying front month only to roll it a few hours later.
 
 ---

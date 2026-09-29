@@ -4,6 +4,7 @@ import { chaseAllowsNewEntry, chaseManagesOpenPosition, chaseTolerances } from "
 import {
   type ChaseFillDecision,
   chaseBookFromSources,
+  chaseFlattenQty,
   chaseHasWorkingEntryOrder,
   chaseLotsFromConfig,
   chaseSideHasPosition,
@@ -683,11 +684,15 @@ export const generateSignal = async (
         logger.error("[generateSignal] error promoting filled pending entry:", error)
         return
       }
-      const lots = chaseLotsFromConfig(settings.lots)
-      const quantity = lots * (instrument.lotSize ?? 1)
-      if (quantity > 0 && stoploss) {
+      if (chaseFlattenQty(pendingQty) > 0 && stoploss) {
         const exitSide = pendingSide === "LONG" ? "SELL" : "BUY"
-        await placeSL(instrument.tradingsymbol, exitSide, quantity, accessToken, stoploss)
+        await placeSL(
+          instrument.tradingsymbol,
+          exitSide,
+          chaseFlattenQty(pendingQty),
+          accessToken,
+          stoploss
+        )
       }
       return
     }

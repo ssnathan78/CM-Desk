@@ -5,6 +5,7 @@ import {
   chaseFillAllowsStatusFlip,
   chaseFillFromDecision,
   chaseFlattenQty,
+  chaseRolloverOrderQty,
   chaseLotsFromConfig,
   chaseStatusHasPosition,
   decideChaseInPositionSync,
@@ -125,6 +126,22 @@ describe("chaseFill", () => {
     expect(chaseFlattenQty(0)).toBe(0)
     expect(chaseFlattenQty(-130)).toBe(130)
     expect(chaseFlattenQty(65)).toBe(65)
+  })
+
+  it("rolls the open book, not the configured lot count", () => {
+    expect(
+      chaseRolloverOrderQty({ netQty: -120, currentLotSize: 120, nextLotSize: 120 })
+    ).toEqual({ closeQty: 120, openQty: 120 })
+    expect(
+      chaseRolloverOrderQty({ netQty: -130, currentLotSize: 65, nextLotSize: 65 })
+    ).toEqual({ closeQty: 130, openQty: 130 })
+    expect(
+      chaseRolloverOrderQty({ netQty: 120, currentLotSize: 120, nextLotSize: 120 })
+    ).toEqual({ closeQty: 120, openQty: 120 })
+    expect(chaseRolloverOrderQty({ netQty: 0, currentLotSize: 120, nextLotSize: 120 })).toEqual({
+      closeQty: 0,
+      openQty: 0,
+    })
   })
 
   it.each([

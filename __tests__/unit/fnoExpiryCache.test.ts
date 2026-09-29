@@ -14,28 +14,28 @@ const niftyFut = {
   name: "NIFTY",
   instrument_type: "FUT",
   tradingsymbol: "NIFTY26SEPFUT",
-  expiry: "2026-09-29",
+  expiry: "2027-09-28",
   lot_size: 65,
 }
 const bankFut = {
   name: "BANKNIFTY",
   instrument_type: "FUT",
   tradingsymbol: "BANKNIFTY26SEPFUT",
-  expiry: "2026-09-29",
+  expiry: "2027-09-28",
   lot_size: 30,
 }
 const midFut = {
   name: "MIDCPNIFTY",
   instrument_type: "FUT",
   tradingsymbol: "MIDCPNIFTY26SEPFUT",
-  expiry: "2026-09-29",
+  expiry: "2027-09-28",
   lot_size: 120,
 }
 const niftyCe = {
   name: "NIFTY",
   instrument_type: "CE",
   tradingsymbol: "NIFTY26SEP23400CE",
-  expiry: "2026-09-24",
+  expiry: "2027-09-23",
   lot_size: 65,
 }
 
