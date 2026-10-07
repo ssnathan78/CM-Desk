@@ -94,7 +94,7 @@ AWAITING_SHORT ──entry SL-M @ day's low──►  SHORT
 
 Operator escape hatch: **Chase page → Reset signal** (one index) or **Desk → Risk → Reset Chase to fresh signal** (every Chase index). `POST /api/chase-settings` `action: reset-signal` with `instrument` resets one book; omitting `instrument` resets Nifty, BankNifty, FinNifty, and Midcap Nifty. That does not flatten an open book.
 
-Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit) instead of leaving the old trigger in place.
+Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit) instead of leaving the old trigger in place. If the protective stop has already filled (or Kite/ledger qty is still catching up), the minute job must **not** place a second MARKET flatten — that would reverse into a new position with no entry signal.
 
 EOD (~16:15 EMA job, `hour === 16`): pending AWAITING_LONG/SHORT reset to AWAITING_SIGNAL; no new signal from the 16:15 bar.
 

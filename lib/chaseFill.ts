@@ -97,11 +97,36 @@ export function planChaseSlBreachFlatten(input: {
   workingStopsFilledThisTick: number
   hasWorkingProtectiveStop: boolean
 }): ChaseSlBreachPlan {
+  // A filled protective stop already covered the book. Do not MARKET a second
+  // flatten just because Kite/ledger qty is still stale for a few seconds.
+  if (input.workingStopsFilledThisTick > 0) return "already_covered"
   if (chaseFlattenQty(input.netQty) > 0) {
     return input.hasWorkingProtectiveStop ? "convert_working_stop" : "place_flatten"
   }
-  if (input.workingStopsFilledThisTick > 0) return "already_covered"
   return "phantom_empty"
+}
+
+/** Filled protective stop size from today's Kite book (COMPLETE / partial fill). */
+export function chaseProtectiveStopFillQty(input: {
+  tradingsymbol: string
+  side: "BUY" | "SELL"
+  kiteOrders?: Array<{
+    tradingsymbol?: string | null
+    transaction_type?: string | null
+    status?: string | null
+    filled_quantity?: number | null
+    quantity?: number | null
+  }>
+}): number {
+  let filled = 0
+  for (const o of input.kiteOrders ?? []) {
+    if (o.tradingsymbol !== input.tradingsymbol || o.transaction_type !== input.side) continue
+    const status = (o.status || "").toUpperCase().trim()
+    if (status === "CANCELLED" || status === "REJECTED") continue
+    const qty = Number(o.filled_quantity || 0)
+    if (qty > 0) filled += qty
+  }
+  return filled
 }
 
 export function chaseExecutionModeSwitchBlocked(input: {

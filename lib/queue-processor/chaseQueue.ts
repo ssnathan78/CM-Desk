@@ -11,6 +11,7 @@ import {
   chaseHasWorkingEntryOrder,
   chaseHasWorkingProtectiveStop,
   chaseLotsFromConfig,
+  chaseProtectiveStopFillQty,
   chaseRolloverOrderQty,
   chaseSideHasPosition,
   decideChaseInPositionSync,
@@ -1067,14 +1068,16 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
     })
 
     const flattenChase = async (side: "BUY" | "SELL") => {
-      const book = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
       let kiteOrders: Array<{
         tradingsymbol?: string | null
         transaction_type?: string | null
         status?: string | null
         order_id?: string
+        filled_quantity?: number | null
+        quantity?: number | null
       }> = []
-      if (!book.paperBook) {
+      const paperBookHint = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+      if (!paperBookHint.paperBook) {
         try {
           kiteOrders = (await kite.getOrders()) as typeof kiteOrders
           await syncTerminalKiteOrders(kiteOrders)
@@ -1082,9 +1085,15 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           logger.warn("[processUpdateSL] live orderbook unavailable during SL hit", e)
         }
       }
+      const book = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+      const liveStopFills = chaseProtectiveStopFillQty({
+        tradingsymbol,
+        side,
+        kiteOrders,
+      })
       const plan = planChaseSlBreachFlatten({
         netQty: book.netQty,
-        workingStopsFilledThisTick: paperStopsFilled,
+        workingStopsFilledThisTick: paperStopsFilled + (liveStopFills > 0 ? 1 : 0),
         hasWorkingProtectiveStop: chaseHasWorkingProtectiveStop({
           paperBook: book.paperBook,
           tradingsymbol,
@@ -1093,7 +1102,9 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           kiteOrders,
         }),
       })
-      logger.info(`[processUpdateSL] SL hit plan=${plan} qty=${book.netQty} for ${tradingsymbol}`)
+      logger.info(
+        `[processUpdateSL] SL hit plan=${plan} qty=${book.netQty} liveStopFills=${liveStopFills} for ${tradingsymbol}`
+      )
       if (plan === "already_covered" || plan === "phantom_empty") return plan
       if (!isAutomated || chaseFlattenQty(book.netQty) <= 0) return plan
       if (plan === "convert_working_stop") {
@@ -1112,6 +1123,12 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
             `[processUpdateSL] Converted working SL ${existingSL.order_id} to MARKET for ${tradingsymbol}`
           )
           return plan
+        }
+        if (liveStopFills > 0) {
+          logger.info(
+            `[processUpdateSL] SL already filled for ${tradingsymbol} — not placing a second flatten`
+          )
+          return "already_covered"
         }
       }
       await placeKiteOrder(accessToken, {

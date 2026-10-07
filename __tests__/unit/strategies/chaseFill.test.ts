@@ -7,6 +7,7 @@ import {
   chaseFlattenQty,
   chaseRolloverOrderQty,
   chaseLotsFromConfig,
+  chaseProtectiveStopFillQty,
   chaseStatusHasPosition,
   decideChaseInPositionSync,
   planChaseSlBreachFlatten,
@@ -290,5 +291,33 @@ describe("chaseFill", () => {
         hasWorkingProtectiveStop: false,
       })
     ).toBe("phantom_empty")
+    expect(
+      planChaseSlBreachFlatten({
+        netQty: -130,
+        workingStopsFilledThisTick: 1,
+        hasWorkingProtectiveStop: false,
+      })
+    ).toBe("already_covered")
+    // 6 Oct Nifty: protective BUY 130 COMPLETE while ledger/Kite qty still showed short.
+    expect(
+      chaseProtectiveStopFillQty({
+        tradingsymbol: "NIFTY26OCTFUT",
+        side: "BUY",
+        kiteOrders: [
+          {
+            tradingsymbol: "NIFTY26OCTFUT",
+            transaction_type: "BUY",
+            status: "COMPLETE",
+            filled_quantity: 130,
+          },
+          {
+            tradingsymbol: "NIFTY26OCTFUT",
+            transaction_type: "BUY",
+            status: "CANCELLED",
+            filled_quantity: 0,
+          },
+        ],
+      })
+    ).toBe(130)
   })
 })
