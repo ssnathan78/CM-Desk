@@ -8,6 +8,7 @@ import {
   chaseRolloverOrderQty,
   chaseLotsFromConfig,
   chaseProtectiveStopFillQty,
+  chaseSideFromNetQty,
   chaseStatusHasPosition,
   decideChaseInPositionSync,
   planChaseSlBreachFlatten,
@@ -121,6 +122,19 @@ describe("chaseFill", () => {
       })
     ).toBe("other_book_open")
     expect(chaseFillFromDecision("other_book_open")).toBe("failed")
+    expect(
+      decideChaseEntryAction({
+        automated: true,
+        quantity: 130,
+        netQty: 130,
+        side: "SHORT",
+        hasOpenEntryOrder: false,
+      })
+    ).toBe("leftover_open")
+    expect(chaseFillFromDecision("leftover_open")).toBe("failed")
+    expect(chaseSideFromNetQty(130)).toBe("LONG")
+    expect(chaseSideFromNetQty(-240)).toBe("SHORT")
+    expect(chaseSideFromNetQty(0)).toBe(null)
   })
 
   it("never flattens with configured lots when the book is flat", () => {
@@ -298,7 +312,14 @@ describe("chaseFill", () => {
         hasWorkingProtectiveStop: false,
       })
     ).toBe("already_covered")
-    // 6 Oct Nifty: protective BUY 130 COMPLETE while ledger/Kite qty still showed short.
+    expect(
+      planChaseSlBreachFlatten({
+        netQty: -130,
+        workingStopsFilledThisTick: 0,
+        hasWorkingProtectiveStop: false,
+        filledCoverQty: 130,
+      })
+    ).toBe("already_covered")
     expect(
       chaseProtectiveStopFillQty({
         tradingsymbol: "NIFTY26OCTFUT",
@@ -309,6 +330,15 @@ describe("chaseFill", () => {
             transaction_type: "BUY",
             status: "COMPLETE",
             filled_quantity: 130,
+            order_type: "SL",
+            trigger_price: 22806,
+          },
+          {
+            tradingsymbol: "NIFTY26OCTFUT",
+            transaction_type: "BUY",
+            status: "COMPLETE",
+            filled_quantity: 130,
+            order_type: "LIMIT",
           },
           {
             tradingsymbol: "NIFTY26OCTFUT",

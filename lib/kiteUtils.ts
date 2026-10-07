@@ -1605,10 +1605,31 @@ export async function placeSL(
   )
 
   if (existingSL && Number(existingSL.quantity) !== Number(quantity)) {
-    await kite.cancelOrder(kite.VARIETY_REGULAR, existingSL.order_id)
-    logger.info(
-      `[placeSL] cancelled SL ${existingSL.order_id} qty ${existingSL.quantity} for ${tradingsymbol} — open book is ${quantity}`
-    )
+    try {
+      await kite.modifyOrder("regular", existingSL.order_id, {
+        quantity,
+        trigger_price: stoploss,
+        price,
+      } as any)
+      logger.info(
+        `[placeSL] resized SL ${existingSL.order_id} from ${existingSL.quantity} to ${quantity} for ${tradingsymbol}`
+      )
+      await amendWorkingStopPrices({
+        brokerOrderId: existingSL.order_id,
+        tradingsymbol,
+        side: transactionType,
+        purpose: "SL",
+        stopPrice: stoploss,
+        limitPrice: price,
+      })
+      return
+    } catch (e) {
+      logger.warn(`[placeSL] could not resize SL ${existingSL.order_id} — cancelling to replace`, e)
+      await kite.cancelOrder(kite.VARIETY_REGULAR, existingSL.order_id)
+      logger.info(
+        `[placeSL] cancelled SL ${existingSL.order_id} qty ${existingSL.quantity} for ${tradingsymbol} — open book is ${quantity}`
+      )
+    }
   } else if (existingSL) {
     if (
       chaseStopNeedsAmend(

@@ -94,7 +94,7 @@ AWAITING_SHORT ──entry SL-M @ day's low──►  SHORT
 
 Operator escape hatch: **Chase page → Reset signal** (one index) or **Desk → Risk → Reset Chase to fresh signal** (every Chase index). `POST /api/chase-settings` `action: reset-signal` with `instrument` resets one book; omitting `instrument` resets Nifty, BankNifty, FinNifty, and Midcap Nifty. That does not flatten an open book.
 
-Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit) instead of leaving the old trigger in place. If the protective stop has already filled (or Kite/ledger qty is still catching up), the minute job must **not** place a second MARKET flatten — that would reverse into a new position with no entry signal.
+Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit, and quantity when the open book changed) instead of leaving the old trigger in place. If the protective stop has already filled (or Kite/ledger qty is still catching up), the minute job must **not** place a second MARKET flatten — that would reverse into a new position with no entry signal. If `chase_status` is `AWAITING_SIGNAL` but the book still has qty, Chase **adopts** LONG/SHORT from that qty and will not fire the opposite entry. Trails and new stops use **open qty**, not configured lots.
 
 EOD (~16:15 EMA job, `hour === 16`): pending AWAITING_LONG/SHORT reset to AWAITING_SIGNAL; no new signal from the 16:15 bar.
 
@@ -230,7 +230,7 @@ Every minute, after paper matching, `planChaseSlBreachFlatten` (`lib/chaseFill.t
 
 | Plan | Meaning | Orders |
 |---|---|---|
-| `already_covered` | Working SL already filled (paper matcher or live fill). Book is flat or flattening. | **Do not** place a second MARKET. Persist EXIT + decision. |
+| `already_covered` | Paper stop filled this tick, book qty is 0, or live SL `filled_quantity` ≥ open qty (stale book after COMPLETE). | **Do not** place a second MARKET. Persist EXIT only once qty is gone. |
 | `convert_working_stop` | Live book still open; a working trigger exists. | Convert that order to MARKET. Do not also `placeOrder` flatten. |
 | `place_flatten` | Open book, no covering stop fill. | Place FLATTEN MARKET sized from **ledger qty**, never from configured lots. |
 | `phantom_empty` | `chase_status` is LONG/SHORT but book qty is 0. | No flatten. Reset to `AWAITING_SIGNAL`. Do not `JOB_FAILED` / `CHASE_SL_NO_POSITION`. |

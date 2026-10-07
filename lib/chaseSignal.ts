@@ -6,7 +6,7 @@ import {
   chaseBookFromSources,
   chaseFlattenQty,
   chaseHasWorkingEntryOrder,
-  chaseLotsFromConfig,
+  chaseSideFromNetQty,
   chaseSideHasPosition,
   chaseStatusHasPosition,
   splitChaseLedgerQty,
@@ -64,6 +64,8 @@ export function decideChaseEntryAction(input: {
 }): ChaseFillDecision {
   if (!input.automated || input.quantity <= 0) return "signal_only"
   if (input.otherBookOpen) return "other_book_open"
+  const openSide = chaseSideFromNetQty(input.netQty)
+  if (openSide && openSide !== input.side) return "leftover_open"
   const hasPosition = input.side === "LONG" ? input.netQty > 0 : input.netQty < 0
   if (hasPosition) return "already_filled"
   if (input.hasOpenEntryOrder) return "wait_open_order"
@@ -499,9 +501,12 @@ export const generateSignal = async (
       logger.error("[generateSignal] error updating chase_status:", error)
     } else {
       const exitSide = currentStatus === CHASE_STATUS.LONG ? "SELL" : "BUY"
-      const lots = chaseLotsFromConfig(settings.lots)
-      const quantity = lots * (instrument.lotSize ?? 1)
-      await placeSL(instrument.tradingsymbol, exitSide, quantity, accessToken, stoploss)
+      const trailQty = chaseFlattenQty(
+        (await resolveChaseBookBreakdown(instrument.tradingsymbol, accessToken)).netQty
+      )
+      if (trailQty > 0) {
+        await placeSL(instrument.tradingsymbol, exitSide, trailQty, accessToken, stoploss)
+      }
     }
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL && hour === 16) {
     logger.info("[generateSignal] 4:15 PM EOD run — EMA stored, skipping signal generation")
@@ -515,6 +520,30 @@ export const generateSignal = async (
       key: `chase:eod:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DD")}`,
     })
   } else if (currentStatus === CHASE_STATUS.AWAITING_SIGNAL) {
+    const leftoverSide = chaseSideFromNetQty(
+      (await resolveChaseBookBreakdown(tradingsymbol, accessToken)).netQty
+    )
+    if (leftoverSide) {
+      logger.warn(
+        `[generateSignal] AWAITING_SIGNAL but open ${leftoverSide} — not starting a new entry`
+      )
+      await persistChaseSignal({
+        outcome: "HOLD",
+        kind: "STATE",
+        instrument: nfoSymbol,
+        tradingsymbol: instrument.tradingsymbol,
+        summary: `Open ${leftoverSide} leftover while Chase is AWAITING_SIGNAL — not a new entry until flat or status is adopted`,
+        features: { status: currentStatus, leftoverSide },
+        key: `chase:leftover:${nfoSymbol}:${toIst(dayjs()).format("YYYY-MM-DDTHH")}`,
+      })
+      await updateChaseStatus({
+        instrument: nfoSymbol,
+        status: leftoverSide === "LONG" ? CHASE_STATUS.LONG : CHASE_STATUS.SHORT,
+        isSignalBreachingTolerance: false,
+        updatedAt: new Date(),
+      })
+      return
+    }
     const { bufferPercent } = settings
     const { longTolerance, shortTolerance } = chaseTolerances(instrument.ema, bufferPercent)
     logger.info(

@@ -13,6 +13,14 @@ export type ChaseFillDecision =
   | "place_entry"
   | "signal_only"
   | "other_book_open"
+  | "leftover_open"
+
+/** Sign of an already-open Chase book. Null means flat. */
+export function chaseSideFromNetQty(netQty: number): "LONG" | "SHORT" | null {
+  if (netQty > 0) return "LONG"
+  if (netQty < 0) return "SHORT"
+  return null
+}
 export type ChaseEntryFillResult = "filled" | "placed" | "wait" | "failed" | "signal_only"
 
 export type ChaseBookBreakdown = ActiveBookBreakdown
@@ -96,17 +104,32 @@ export function planChaseSlBreachFlatten(input: {
   netQty: number
   workingStopsFilledThisTick: number
   hasWorkingProtectiveStop: boolean
+  /** Live Kite filled qty on the cover side (SL / trigger orders only). */
+  filledCoverQty?: number
 }): ChaseSlBreachPlan {
-  // A filled protective stop already covered the book. Do not MARKET a second
-  // flatten just because Kite/ledger qty is still stale for a few seconds.
+  const open = chaseFlattenQty(input.netQty)
+  const filled = Math.max(0, Number(input.filledCoverQty) || 0)
+  // Paper matcher: a stop fill this tick already covered. Do not MARKET lots.
   if (input.workingStopsFilledThisTick > 0) return "already_covered"
-  if (chaseFlattenQty(input.netQty) > 0) {
-    return input.hasWorkingProtectiveStop ? "convert_working_stop" : "place_flatten"
-  }
-  return "phantom_empty"
+  if (open === 0) return filled > 0 ? "already_covered" : "phantom_empty"
+  // Stale book qty after a full cover (6 Oct Nifty: COMPLETE 130 while qty still −130).
+  if (filled >= open) return "already_covered"
+  if (input.hasWorkingProtectiveStop) return "convert_working_stop"
+  return "place_flatten"
 }
 
 /** Filled protective stop size from today's Kite book (COMPLETE / partial fill). */
+function isChaseProtectiveStopOrder(o: {
+  order_type?: string | null
+  trigger_price?: number | null
+  tag?: string | null
+}): boolean {
+  const type = (o.order_type || "").toUpperCase().trim()
+  if (type === "SL" || type === "SL-M" || type === "SLM") return true
+  if (Number(o.trigger_price) > 0) return true
+  return false
+}
+
 export function chaseProtectiveStopFillQty(input: {
   tradingsymbol: string
   side: "BUY" | "SELL"
@@ -116,6 +139,9 @@ export function chaseProtectiveStopFillQty(input: {
     status?: string | null
     filled_quantity?: number | null
     quantity?: number | null
+    order_type?: string | null
+    trigger_price?: number | null
+    tag?: string | null
   }>
 }): number {
   let filled = 0
@@ -123,6 +149,7 @@ export function chaseProtectiveStopFillQty(input: {
     if (o.tradingsymbol !== input.tradingsymbol || o.transaction_type !== input.side) continue
     const status = (o.status || "").toUpperCase().trim()
     if (status === "CANCELLED" || status === "REJECTED") continue
+    if (!isChaseProtectiveStopOrder(o)) continue
     const qty = Number(o.filled_quantity || 0)
     if (qty > 0) filled += qty
   }
@@ -176,7 +203,7 @@ export function chaseFillFromDecision(
   if (action === "already_filled") return "filled"
   if (action === "wait_open_order") return "wait"
   if (action === "signal_only") return "signal_only"
-  if (action === "other_book_open") return "failed"
+  if (action === "other_book_open" || action === "leftover_open") return "failed"
   return "place_entry"
 }
 
