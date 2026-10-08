@@ -28,6 +28,8 @@ Flatten / SL / EXIT roles **skip** desk halt, trading-disabled, strategy halt, d
 
 Live Kite still needs the triple gate: `MOCK_ORDERS=false` + Allow live orders + that strategy's Execution = Live.
 
+Chase page **Trade this index** / **Pause entries** are not Desk → Risk. Trade this index off skips hourly work for that index (minute SL still runs if the book is open). Pause blocks new Chase entries on that index only; open LONG/SHORT still trails. See [strategies/CHASE.md](./strategies/CHASE.md#trade-this-index-vs-pause-entries).
+
 ## Live vs paper
 
 | | |

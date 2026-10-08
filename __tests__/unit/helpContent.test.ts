@@ -62,6 +62,17 @@ describe("help content", () => {
     expect(desk).toMatch(/Paper vs Live/i)
   })
 
+  it("differentiates Chase Trade this index from Pause entries", () => {
+    const onOff =
+      HELP_PAGES.chase.sections.find(s => s.id === "trade-this-index")?.body.join(" ") ?? ""
+    expect(onOff).toMatch(/Trade this index/i)
+    expect(onOff).toMatch(/Pause entries/i)
+    expect(onOff).toMatch(/hourly EMA/i)
+    expect(onOff).toMatch(/minute job still trails|protective stop until flat/i)
+    expect(onOff).toMatch(/Kill all/i)
+    expect(onOff).toMatch(/Neither control flattens/i)
+  })
+
   it("keeps HelpTopic keys aligned with HELP_PAGES", () => {
     const keys = Object.keys(HELP_PAGES) as HelpTopic[]
     expect([...keys].sort()).toEqual([...HELP_TOPICS].sort())

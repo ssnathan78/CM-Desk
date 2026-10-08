@@ -15,6 +15,8 @@ Three books can disagree: `chase_status`, ledger, Kite. Reconcile is not continu
 - Protective stop already filled (or `already_covered`) → **no** second MARKET.
 - Amend working SL in place (`placeSL`); do not leave the old trigger.
 - Halt / trading-disabled: still flatten/SL. Strategy disabled: fully dark.
+- **Trade this index** (`enabled`): hourly EMA/signals only when on. Minute SL still runs if LONG/SHORT/AWAITING_*.
+- **Pause entries** (`paused`): no new punches; cancel pending entry; open book still trails. Disabled while the index is off.
 
 ## Don’t
 

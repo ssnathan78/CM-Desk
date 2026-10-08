@@ -25,7 +25,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         title: "Continuous — Chase",
         body: [
           "Chase is a futures process that keeps running across days. Nifty, BankNifty, FinNifty, and Midcap Nifty (MIDCPNIFTY) each have their own lots, EMA, pause, and status. It is not a weekday template.",
-          "Desk → Risk still treats Chase as one strategy: Paper vs Live, enabled, halt, max lots, and max open positions apply to all Chase books together. Pause and lots stay on the Chase page, per index.",
+          "On Chase, Trade this index is whether that book is in the hourly engine. Pause entries only blocks new punches on that index; an open LONG/SHORT still trails until flat. Desk → Risk still treats Chase as one strategy: Paper vs Live, enabled, halt, max lots, and max open positions apply to all Chase books together. Risk Strategy enabled off darkens every Chase flatten too — that is not the Chase-page switch.",
           "Kill intraday on the dashboard does not pause Chase. Kill all (incl. Chase) does. Square off all open gets you out of current books without a halt; Chase can take the next signal.",
         ],
       },
@@ -189,7 +189,16 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "instruments",
         title: "Indexes",
         body: [
-          "Enable each index on Chase. Each index has its own status, signals, EMA series, and futures contract. Turning an index off skips new hourly EMA/signal work on that book; an already-open LONG/SHORT is still managed until flat.",
+          "Each index has its own status, signals, EMA series, and futures contract.",
+        ],
+      },
+      {
+        id: "trade-this-index",
+        title: "Trade this index vs Pause entries",
+        body: [
+          "Trade this index (the switch) is whether this book is in the Chase engine. Off skips hourly EMA and new signals for that index. Chip shows Off. Pause is disabled until you turn it back on. If the book is already LONG, SHORT, or AWAITING_*, the minute job still trails, stops, and flattens — you are not left without a stop.",
+          "Pause entries (the button) is lighter. The book stays on, so EMA still updates. It blocks new entries only, cancels a pending AWAITING_LONG/SHORT trigger, and returns to AWAITING_SIGNAL. An open LONG/SHORT keeps its protective stop until flat; after that it will not re-enter until you Resume entries.",
+          "Neither control flattens, neither sets Desk halt, neither stops straddles. Kill all sets Pause on every Chase index. Kill intraday does not. Square off all Chase books flattens without pausing — the next hourly job can signal again. Desk → Risk Strategy enabled for Chase is a third switch: off rejects every Chase order including flatten.",
         ],
       },
       {
@@ -197,7 +206,6 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         title: "Lots",
         body: [
           "How many futures lots to trade on that index. Lots are independent (Nifty can be 1 while BankNifty is 2). The page shows lots × lot size × last hourly close so you can see rupee notional before an order. Desk → Risk max notional and Chase max lots still apply to the whole Chase strategy.",
-          "Pause is per index: after that book's LONG/SHORT is exited, do not enter again. Pending entry triggers are cancelled. Resume turns entries back on for that index only.",
           "Reset to fresh signal on Chase is per index. Desk → Risk “Reset Chase to fresh signal” resets every Chase index together. Neither flatten an open futures book — use Square off on Chase, Today, or Desk → Positions.",
         ],
       },

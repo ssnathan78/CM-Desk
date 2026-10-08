@@ -118,7 +118,9 @@ const ChasePlanPage = () => {
       </Typography>
       <Typography color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
         Futures trend-follow around a long EMA. Each index is its own Chase book — lots, buffer,
-        pause, and 09:16 classify are independent. This is not a weekday template.
+        Trade this index / Pause entries, and 09:16 classify are independent. This is not a weekday
+        template.{" "}
+        <Link href="/help/chase#trade-this-index">Trade this index vs Pause</Link>
       </Typography>
       <Button component={Link} href="/help/chase" size="small" sx={{ mb: 2 }}>
         Chase guide
@@ -161,7 +163,14 @@ const ChasePlanPage = () => {
                     }
                   />
                 }
-                label="Trade this index"
+                label={
+                  <span>
+                    Trade this index{" "}
+                    <Typography component="span" variant="body2" color="text.secondary">
+                      (hourly engine on/off; open book still gets the minute stop)
+                    </Typography>
+                  </span>
+                }
               />
               <TextField
                 label="Lots"
@@ -284,6 +293,7 @@ const ChasePlanPage = () => {
                 variant="outlined"
                 onClick={() => saveBook(book.instrument, { paused: !book.paused })}
                 disabled={!book.enabled}
+                title="Blocks new entries on this index only. Open LONG/SHORT still trails until flat. Does not flatten or halt."
               >
                 {book.paused ? "Resume entries" : "Pause entries"}
               </Button>

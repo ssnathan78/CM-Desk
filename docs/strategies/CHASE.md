@@ -25,11 +25,25 @@ It is **continuous**: each selected index has its own lots + engine config (not 
 | Product | `NRML` |
 | Sizing | `lots × futures lot_size` **per index** |
 | Pyramiding | None. One position (or pending entry) per index |
-| Pause | Per index. After LONG/SHORT is flat, do not enter. Pending SL-M entries are cancelled |
 
-Kill **intraday** does **not** pause Chase. Kill **all** does, and tries to flatten Chase futures.
+Kill **intraday** does **not** pause Chase. Kill **all** does (sets Pause on every index) and tries to flatten Chase futures.
 
-The hourly worker loops **enabled** books in one job: each enabled index updates its own futures EMA and then `generateSignal` for that index. BankNifty, FinNifty, and Midcap Nifty are **not** updated while their book is off, unless that book is already LONG/SHORT / AWAITING_* (the minute SL job still runs then). Signals on Desk are tagged per index.
+The hourly worker loops **enabled** books in one job: each enabled index updates its own futures EMA and then `generateSignal` for that index. Signals on Desk are tagged per index.
+
+### Trade this index vs Pause entries
+
+These are Chase-only, per index. Neither flattens, neither sets Desk halt, neither stops straddles/strangles.
+
+| Control | DB | Hourly EMA / new signals | New Chase punch | Open LONG/SHORT (and pending AWAITING_*) |
+|---|---|---|---|---|
+| **Trade this index** | `chase_settings.enabled` | **Skipped** while off | No | Minute SL / trail / flatten **still run** |
+| **Pause entries** | `chase_settings.paused` | Still runs (book stays on) | No; pending entry SL-M is cancelled | Stops and trails **keep running** until flat; then no re-entry until Resume |
+
+Pause/Resume is disabled while Trade this index is off. Chip: Off / Paused — no new entries / Live — new entries allowed.
+
+Typical use: Trade this index off = this index is not in the universe (BankNifty/FinNifty/Midcap default). Pause = keep managing the open future, do not add. **Square off all Chase books** on the same page flattens and resets to `AWAITING_SIGNAL` without pausing or halting — the next hourly job can enter again.
+
+Desk → Risk **Strategy enabled** for Chase is a different switch: it darkens **all** Chase indexes, including flatten/SL.
 
 ---
 
