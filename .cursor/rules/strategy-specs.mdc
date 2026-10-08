@@ -1,0 +1,15 @@
+---
+description: Never rewrite 9:20 leftover-wing or Chase overnight/rollover behavior when editing strategies.
+globs: lib/strategies/**,lib/chase*.ts,lib/queue-processor/chaseQueue.ts,lib/exit-strategies/**,docs/strategies/**
+alwaysApply: false
+---
+
+# Strategy specs are the floor
+
+Read `docs/strategies/` for the strategy you touch. A correct implementation of a losing rule is still a losing rule—do not invent “safer” exits.
+
+**ATM straddle / strangle (9:20-style):** delta-neutral short CE+PE, **per-leg** SL, leftover wing until auto square-off. One-way Nifty that stops one wing is **specified**. Do not flatten the other leg because the first SL hit (`*-920-one-way-holds-other-leg`).
+
+**Chase:** continuous NRML index **futures**, overnight OK, one book per index. Entry is SL-M at day’s extreme, not a market punch on the signal bar. Expiry day: flatten front at **15:00 IST**, reopen next month; new entries already use next month. `hasWeeklyExpiry` is Nifty only.
+
+Lot sizes (Jan 2026 NFO): Nifty 65, BankNifty 30, FinNifty 60, Midcap 120. Midcap strike step 25; cash quote `NIFTY MID SELECT`.

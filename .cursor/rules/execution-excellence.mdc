@@ -1,0 +1,15 @@
+---
+description: Flatten and stops must use open book qty; never leave phantom LONG/SHORT or mix paper and live.
+alwaysApply: true
+---
+
+# Execution excellence
+
+This desk loses real money if status, qty, and broker disagree.
+
+- Size **flatten / SL / rollover** from **open ledger (or Kite) qty**, never from configured lots. Lots-as-qty **opens** a new position on a flat book.
+- Entry **rejected** (`MAX_NOTIONAL`, `LIVE_BLOCKED`, halt, lots=0, …) must **not** leave Chase/strategy status LONG/SHORT with qty 0.
+- Halt / trading-disabled **must still allow** flatten and SL. Strategy **disabled** is fully dark (no flatten either).
+- Paper leftover must not punch Kite; live leftover blocks a new paper book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`).
+- LONG/SHORT requires a **fill**, not the candle alone.
+- After a protective stop **fills**, do not place a second MARKET flatten (that reverses into a new un-signaled position).

@@ -1,0 +1,12 @@
+---
+description: Verify Desk Positions, Risk, and Sessions behavior after UI or derived-P&L changes.
+globs: pages/desk.tsx,components/desk/**,pages/chase.tsx
+alwaysApply: false
+---
+
+# Desk UI
+
+- Positions Unrealized for qty 0 must render **0** even if the API still has stale MTM (`Number(qty)===0`).
+- Risk header Halt/Resume tooltips must stay aligned with `tradingEnabled` vs `deskHalted` (Resume turns trading back on).
+- Sessions win rate is a fraction; do not silently treat it as rupee `money()` if you change formatting — say 0% / 100% if you relabel.
+- After UI or P&L derivation changes, exercise Positions + the other tabs that read the same payload (portfolio chips). If no browser, say so and use API/tests.

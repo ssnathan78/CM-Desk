@@ -1,0 +1,15 @@
+---
+description: Paper and live books must not share quantity; go-live archives paper and resets Chase.
+globs: lib/trading/bookSplit.ts,lib/trading/goLive.ts,lib/trading/paperExecution.ts,lib/trading/clearPaperBook.ts,lib/chaseFill.ts
+alwaysApply: false
+---
+
+# Paper vs live
+
+Triple live gate: `MOCK_ORDERS=false` **and** `allowLiveOrders` **and** strategy `executionMode=LIVE`.
+
+- Provenance: `LIVE` / `RECONCILED` / `MIGRATED` vs `PAPER` / `MOCK`.
+- Switching Paper → Live with leftover paper: archive paper, reset Chase, size live from **lots**, not paper qty (`chase-paper-to-live-open`).
+- Live leftover still blocks paper (`chase-live-to-paper-open`).
+- Clear paper book does not send a Kite order. Clear phantom zeros a ledger row only.
+- Do not punch paper on top of a real Kite book.

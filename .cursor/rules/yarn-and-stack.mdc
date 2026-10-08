@@ -1,0 +1,13 @@
+---
+description: Yarn Berry 4, TypeScript, Biome, Pages Router, server.js entrypoint.
+alwaysApply: true
+---
+
+# Stack conventions
+
+- Package manager: **Yarn Berry 4.9.1** (`packageManager` in `package.json`). `yarn install --immutable` in CI/Docker. Never npm.
+- New code: **TypeScript**. Lint/format: **Biome** (`yarn lint` / `yarn format`), not ESLint.
+- Next.js **Pages Router** + API routes. UI: React 19, MUI 9.
+- Process entry: `server.js` (`yarn dev` / `yarn start`). Bull Board at `/queues`.
+- DB: Postgres + Drizzle (`lib/schema.ts`). Queues: BullMQ in-process with the web server (`lib/session.ts` side-imports workers).
+- Tests: `yarn unit-test` (hermetic), `yarn sim-test` (no Kite). Do not put live Kite tests under `__tests__/unit`.

@@ -1,0 +1,13 @@
+---
+description: Prefer laptop Docker build + docker load on the Droplet; never compose down -v.
+globs: docker-compose.yml,Dockerfile,docs/DEPLOYMENT.md,docs/PRODUCTION_RUNBOOK.md,docs/SSH.md
+alwaysApply: false
+---
+
+# Production deploy
+
+Preferred: **Option B** in `docs/DEPLOYMENT.md` — `docker compose build app` on the laptop, `docker save` / `scp` / `docker load`, then `docker compose up -d --no-deps app`. Do not `docker compose down -v`.
+
+SSH: `ssh -o BatchMode=yes cm-desk-prod -- …` only. Recreate app only; leave postgres/redis. Entrypoint runs `yarn migrate`—read new `drizzle/` files before shipping.
+
+CI does not deploy. After recreate, `curl` `/api/health`. Report `MOCK_ORDERS` as a value; never print `.env` or queue names.

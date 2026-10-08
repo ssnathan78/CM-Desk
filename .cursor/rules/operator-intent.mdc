@@ -1,0 +1,15 @@
+---
+description: This repo is a personal live Indian-markets desk, not a generic trading SaaS.
+alwaysApply: true
+---
+
+# Operator intent
+
+CM-Desk is a **personal** Zerodha Kite desk for Nifty / BankNifty / FinNifty / Midcap Nifty options and futures. CM-Desk is a retired name for this app — there is no separate product or repo.
+
+- Optimize for **correct books**, **specified strategy behavior**, and **operator trust**.
+- Do not “clean up” P&L by merging rupees and points, flattening leftover 9:20 wings, or treating Kite day M2M as the ledger.
+- `MOCK_ORDERS=true` unless the operator asked for live. Live also needs Desk → Risk Allow live orders + strategy Execution = Live.
+- Timezone **Asia/Kolkata**. Yarn Berry **4** (`yarn`, not npm). New files **TypeScript**. Lint **Biome**.
+- Workers boot with `server.js`, not `next start` alone.
+- Specs: `docs/strategies/`. Ledger: `docs/TRADING_DOMAIN_MODEL.md`. Risk: `lib/trading/riskEngine.ts` cannot be bypassed by strategy code.

@@ -1,0 +1,14 @@
+---
+description: Flat books have unrealized 0; Desk MTM is average-cost, not Kite overnight M2M.
+globs: lib/trading/**,pages/desk.tsx,pages/api/desk/**
+alwaysApply: false
+---
+
+# Ledger P&L
+
+- Signed qty: BUY `+`, SELL `−`. Average-cost. `OPEN` iff qty ≠ 0; `FLAT` iff 0.
+- **Unrealized** = live qty × (mark − average). Qty 0 (flatten, rollover, expired contract) is **always 0**. Do not keep last MTM on the row. Do not add leftover mark into realized (double-count if the close fill already booked).
+- **Realized** = fills via `applyFillToPosition` on that position row (lifetime), not Kite “today”.
+- Desk vs Kite: Desk marks remaining qty vs **entry average**. Kite NRML unrealised is often **today vs previous close**. Both can be right and still disagree.
+- Desk → Sessions **Net P&L** = sum of **closed round-trips** whose `exit_at` is that IST date. Open Chase MTM is not in that column. **Drawdown** is last snapshot peak − (cash + unrealized), not max session P&L.
+- Fees stay 0 until actually ingested. Use `presentLedgerPosition` / `signedQty` (pg may return qty as string `"0"`).

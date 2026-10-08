@@ -1,0 +1,17 @@
+---
+description: Strategy, risk, Chase, and ledger changes need named adversarial sim cases, not happy-path only.
+globs: lib/simulation/**,__tests__/simulation/**,__tests__/unit/trading/**,lib/trading/riskEngine.ts,lib/queue-processor/chaseQueue.ts,lib/strategies/**
+alwaysApply: false
+---
+
+# Adversarial tests required
+
+Before finishing orders / risk / ledger / Chase / straddle / strangle / a new strategy:
+
+1. List sequences that yield phantom status, mixed paper/live, flatten-wrong-size, or **open** while trying to exit.
+2. Encode them in `lib/simulation/catalog.ts` + `__tests__/simulation/`.
+3. Hermetic matrices in `__tests__/unit/`. Run `yarn unit-test` and `yarn sim-test`.
+
+Minimum: reject-without-fill; flatten empty book must not use lots; paper↔live; halt still flattens; 9:20 leftover wing held; no double flatten after SL fill.
+
+New strategy: add `RISK_STRATEGY_KEYS`, Desk → Risk, sim actor that calls production `evaluateOrder`.

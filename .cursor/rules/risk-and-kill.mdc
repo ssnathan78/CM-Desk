@@ -1,0 +1,18 @@
+---
+description: Distinguish Trading enabled, desk Halt, and strategy disabled; flatten/SL still work except when the strategy is off.
+globs: lib/trading/riskEngine.ts,lib/trading/riskSettings.ts,lib/trading/riskGate.ts,lib/killDesk.ts,components/desk/RiskControls.tsx,pages/desk.tsx,pages/api/desk/risk.ts
+alwaysApply: false
+---
+
+# Risk flags (entry vs flatten)
+
+All of these block **ENTRY** only except strategy **disabled**:
+
+| Control | Code | Flatten / SL |
+|---|---|---|
+| Trading enabled off | `TRADING_DISABLED` | allowed |
+| Halt new entries | `DESK_HALTED` + reason | allowed |
+| Per-strategy Not halted off | `STRATEGY_HALTED` | allowed |
+| Strategy enabled off | `STRATEGY_DISABLED` | **blocked** |
+
+Halt is the loud kill (`KILL_SWITCH` audit). Resume is explicit and **forces `tradingEnabled` true**. Checkbox is quiet config. `evaluateOrder` is the only pre-trade gate—strategy code must not bypass it.
