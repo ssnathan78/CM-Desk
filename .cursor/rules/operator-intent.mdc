@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Operator intent
 
-CM-Desk is a **personal** Zerodha Kite desk for Nifty / BankNifty / FinNifty / Midcap Nifty options and futures. CM-Desk is a retired name for this app — there is no separate product or repo.
+CM-Desk is a **personal** Zerodha Kite desk for Nifty / BankNifty / FinNifty / Midcap Nifty options and futures.
 
 - Optimize for **correct books**, **specified strategy behavior**, and **operator trust**.
 - Do not “clean up” P&L by merging rupees and points, flattening leftover 9:20 wings, or treating Kite day M2M as the ledger.

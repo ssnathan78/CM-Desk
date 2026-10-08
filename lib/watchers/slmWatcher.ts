@@ -37,9 +37,9 @@ import { withRemoteRetry } from "../utils"
  * [NB] IMPORTANT!
  * WATCH_MANUAL_CANCELLED_ORDERS is for testing this only!
  * DO NOT enable this env variable on your account!
- * e.g. in DOS, CM-Desk can itself cancel a pending order and create a new SLM order
+ * e.g. in DOS, this desk can itself cancel a pending order and create a new SLM order
  * if you were to enable this,
- * the position will get auto squared off as soon as CM-Desk cancels that pending order
+ * the position will get auto squared off as soon as this desk cancels that pending order
  */
 const WATCH_MANUAL_CANCELLED_ORDERS = process.env.WATCH_MANUAL_CANCELLED_ORDERS
   ? JSON.parse(process.env.WATCH_MANUAL_CANCELLED_ORDERS)
