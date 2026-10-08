@@ -3,6 +3,8 @@ import {
   emptyPosition,
   incrementalFillFromAverages,
   netRealized,
+  positionMarkSnapshot,
+  presentLedgerPosition,
   unrealizedPnl,
 } from "../../../lib/trading/accounting"
 import { moneyFromString, moneyToString } from "../../../lib/trading/money"
@@ -70,6 +72,40 @@ describe("position accounting", () => {
     )
     expect(moneyToString(stillClosed)).toBe("0.0000")
     expect(moneyToString(afterClose.next.realizedPnl)).toBe("0.0000")
+  })
+
+  it("flat and expired books have zero unrealized even if the last mark is still on the row", () => {
+    const open = apply("SELL", 130, "22593")
+    const whileOpen = positionMarkSnapshot({
+      quantity: open.next.quantity,
+      averagePrice: open.next.averagePrice,
+      markPrice: moneyFromString("22618.4"),
+    })
+    expect(moneyToString(whileOpen.unrealizedPnl)).toBe("-3302.0000")
+    const closed = apply("BUY", 130, "22618.4", open.next)
+    const afterExpiry = positionMarkSnapshot({
+      quantity: closed.next.quantity,
+      averagePrice: closed.next.averagePrice,
+      markPrice: moneyFromString("22618.4"),
+    })
+    expect(closed.next.quantity).toBe(0)
+    expect(moneyToString(closed.next.realizedPnl)).toBe("-3302.0000")
+    expect(moneyToString(afterExpiry.unrealizedPnl)).toBe("0.0000")
+    expect(moneyToString(afterExpiry.marketValue)).toBe("0.0000")
+  })
+
+  it("presents pg string qty 0 with leftover MTM as flat unrealized 0", () => {
+    const row = presentLedgerPosition({
+      quantity: "0",
+      status: "FLAT",
+      unrealizedPnl: "39360",
+      marketValue: "1800000",
+      markPrice: "13687.55",
+      averageEntryPrice: "0",
+    })
+    expect(row.unrealizedPnl).toBe("0")
+    expect(row.marketValue).toBe("0")
+    expect(row.status).toBe("FLAT")
   })
 
   it("net P&L subtracts fees", () => {

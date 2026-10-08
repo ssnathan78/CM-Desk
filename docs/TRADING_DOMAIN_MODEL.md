@@ -143,7 +143,11 @@ ACCEPTED, COMPLETE → FILLED, etc.).
 ### Position / trade state
 
 Signed quantity: BUY `+qty`, SELL `−qty`. Average-cost accounting (not FIFO
-lots). A position is `OPEN` when `quantity ≠ 0`, `FLAT` when `0`.
+lots). A position is `OPEN` when `quantity ≠ 0`, `FLAT` when `0`. Unrealized
+is live qty × (mark − average). Flat books (flatten, Chase rollover, expired
+contract) always show unrealized 0 — leftover MTM is not a second P&L pile.
+Realized is booked from fills only; expiry/close does not add the last mark
+on top of already-realized close P&L.
 
 A **trade** opens when a flat book goes non-zero and closes when it returns to
 zero. A reversal closes the current trade and opens a new one in the opposite

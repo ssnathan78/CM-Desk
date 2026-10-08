@@ -602,60 +602,66 @@ export default function DeskPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {positions.map((row: Record<string, unknown>) => (
-                  <TableRow key={String(row.id)}>
-                    <TableCell>{String(row.tradingsymbol)}</TableCell>
-                    <TableCell>{String(row.product || "—")}</TableCell>
-                    <TableCell>{String(row.strategy || "—")}</TableCell>
-                    <TableCell>{String(row.provenance || "—")}</TableCell>
-                    <TableCell align="right">{String(row.quantity)}</TableCell>
-                    <TableCell align="right">{money(row.averageEntryPrice as string)}</TableCell>
-                    <TableCell align="right">{money(row.markPrice as string)}</TableCell>
-                    <TableCell align="right">{money(row.unrealizedPnl as string)}</TableCell>
-                    <TableCell align="right">{money(row.realizedPnl as string)}</TableCell>
-                    <TableCell>{String(row.status)}</TableCell>
-                    <TableCell>
-                      {Number(row.quantity) !== 0 && row.status === "OPEN" ? (
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ justifyContent: "flex-end", flexWrap: "wrap" }}
-                        >
-                          <Button
-                            size="small"
-                            color="warning"
-                            variant="outlined"
-                            onClick={() =>
-                              setFlattenRow({
-                                id: String(row.id),
-                                symbol: String(row.tradingsymbol),
-                                qty: Number(row.quantity),
-                                book: String(row.provenance || "—"),
-                                strategy: String(row.strategy || ""),
-                              })
-                            }
+                {positions.map((row: Record<string, unknown>) => {
+                  const qty = Number(row.quantity)
+                  const flat = Number.isFinite(qty) && qty === 0
+                  return (
+                    <TableRow key={String(row.id)}>
+                      <TableCell>{String(row.tradingsymbol)}</TableCell>
+                      <TableCell>{String(row.product || "—")}</TableCell>
+                      <TableCell>{String(row.strategy || "—")}</TableCell>
+                      <TableCell>{String(row.provenance || "—")}</TableCell>
+                      <TableCell align="right">{String(row.quantity)}</TableCell>
+                      <TableCell align="right">{money(row.averageEntryPrice as string)}</TableCell>
+                      <TableCell align="right">{money(row.markPrice as string)}</TableCell>
+                      <TableCell align="right">
+                        {money(flat ? "0" : (row.unrealizedPnl as string))}
+                      </TableCell>
+                      <TableCell align="right">{money(row.realizedPnl as string)}</TableCell>
+                      <TableCell>{flat ? "FLAT" : String(row.status)}</TableCell>
+                      <TableCell>
+                        {Number(row.quantity) !== 0 && row.status === "OPEN" ? (
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ justifyContent: "flex-end", flexWrap: "wrap" }}
                           >
-                            Square off
-                          </Button>
-                          <Button
-                            size="small"
-                            color="warning"
-                            onClick={() =>
-                              setPhantomClear({
-                                id: String(row.id),
-                                symbol: String(row.tradingsymbol),
-                                qty: Number(row.quantity),
-                                book: String(row.provenance || "—"),
-                              })
-                            }
-                          >
-                            Clear phantom
-                          </Button>
-                        </Stack>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                            <Button
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              onClick={() =>
+                                setFlattenRow({
+                                  id: String(row.id),
+                                  symbol: String(row.tradingsymbol),
+                                  qty: Number(row.quantity),
+                                  book: String(row.provenance || "—"),
+                                  strategy: String(row.strategy || ""),
+                                })
+                              }
+                            >
+                              Square off
+                            </Button>
+                            <Button
+                              size="small"
+                              color="warning"
+                              onClick={() =>
+                                setPhantomClear({
+                                  id: String(row.id),
+                                  symbol: String(row.tradingsymbol),
+                                  qty: Number(row.quantity),
+                                  book: String(row.provenance || "—"),
+                                })
+                              }
+                            >
+                              Clear phantom
+                            </Button>
+                          </Stack>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </ScrollTable>

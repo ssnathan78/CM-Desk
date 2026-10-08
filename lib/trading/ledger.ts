@@ -20,6 +20,7 @@ import {
   incrementalFillFromAverages,
   inferPurpose,
   netRealized,
+  positionMarkSnapshot,
 } from "./accounting"
 import { fillFingerprint, mapKiteOrderStatus } from "./kiteMap"
 import { moneyFromUnknown, moneyMulQty, moneyToString } from "./money"
@@ -775,6 +776,12 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
       positionQty: Number(pos.quantity),
       fillProvenance: fill.provenance,
     })
+    const hasMark = pos.mark_price != null && String(pos.mark_price) !== ""
+    const marks = positionMarkSnapshot({
+      quantity: result.next.quantity,
+      averagePrice: result.next.averagePrice,
+      markPrice: hasMark ? moneyFromUnknown(pos.mark_price) : null,
+    })
     await client.query(
       `UPDATE positions SET
          quantity = $2,
@@ -788,7 +795,9 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
          updated_at = now(),
          status = $10,
          strategy = COALESCE(strategy, $11),
-         provenance = $12
+         provenance = $12,
+         unrealized_pnl = $13,
+         market_value = $14
        WHERE id = $1`,
       [
         pos.id,
@@ -803,6 +812,8 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
         nextStatus,
         fill.strategy,
         nextProvenance,
+        moneyToString(marks.unrealizedPnl),
+        moneyToString(marks.marketValue),
       ]
     )
 

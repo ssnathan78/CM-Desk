@@ -92,6 +92,8 @@ describeDb("trading ledger lifecycle", () => {
     )
     expect(Number(rows[0].quantity)).toBe(0)
     expect(Number(rows[0].realized_pnl)).toBe(1400)
+    expect(Number(rows[0].unrealized_pnl ?? 0)).toBe(0)
+    expect(Number(rows[0].market_value ?? 0)).toBe(0)
     expect(rows[0].status).toBe("FLAT")
     const trades = await pool.query(
       `SELECT status, net_pnl, exit_reason FROM trades WHERE tradingsymbol = $1 ORDER BY entry_at`,

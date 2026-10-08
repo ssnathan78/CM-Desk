@@ -1,4 +1,13 @@
-import { type Money, moneyAdd, moneyDivQty, moneyMulQty, moneySub, moneyZero } from "./money"
+import {
+  type Money,
+  moneyAdd,
+  moneyDivQty,
+  moneyFromUnknown,
+  moneyMulQty,
+  moneySub,
+  moneyToString,
+  moneyZero,
+} from "./money"
 import type { PositionEventKind, Side } from "./types"
 import { directionFromQty, sideSign } from "./types"
 
@@ -181,6 +190,69 @@ export function unrealizedPnl(quantity: number, averagePrice: Money, markPrice: 
     return moneyMulQty(moneySub(markPrice, averagePrice), quantity)
   }
   return moneyMulQty(moneySub(averagePrice, markPrice), Math.abs(quantity))
+}
+
+export function signedQty(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** Live MTM. Qty 0 (flatten, expiry, recon flat) is always 0 — never keep the last open mark. */
+export function positionMarkSnapshot(args: {
+  quantity: number
+  averagePrice: Money
+  markPrice: Money | null
+}): { unrealizedPnl: Money; marketValue: Money } {
+  if (signedQty(args.quantity) === 0) {
+    return { unrealizedPnl: moneyZero(), marketValue: moneyZero() }
+  }
+  if (args.markPrice == null) {
+    return { unrealizedPnl: moneyZero(), marketValue: moneyZero() }
+  }
+  return {
+    unrealizedPnl: unrealizedPnl(args.quantity, args.averagePrice, args.markPrice),
+    marketValue: marketValue(args.quantity, args.markPrice),
+  }
+}
+
+export function presentLedgerPosition<
+  T extends {
+    quantity: unknown
+    status?: string | null
+    markPrice?: string | null
+    averageEntryPrice?: string | null
+    unrealizedPnl?: string | null
+    marketValue?: string | null
+  },
+>(row: T): T & { status: string; unrealizedPnl: string; marketValue: string } {
+  const quantity = signedQty(row.quantity)
+  if (quantity === 0) {
+    return {
+      ...row,
+      status: "FLAT",
+      unrealizedPnl: "0",
+      marketValue: "0",
+    }
+  }
+  if (row.markPrice == null || row.markPrice === "") {
+    return {
+      ...row,
+      status: row.status || "OPEN",
+      unrealizedPnl: row.unrealizedPnl ?? "0",
+      marketValue: row.marketValue ?? "0",
+    }
+  }
+  const live = positionMarkSnapshot({
+    quantity,
+    averagePrice: moneyFromUnknown(row.averageEntryPrice),
+    markPrice: moneyFromUnknown(row.markPrice),
+  })
+  return {
+    ...row,
+    status: row.status || "OPEN",
+    unrealizedPnl: moneyToString(live.unrealizedPnl),
+    marketValue: moneyToString(live.marketValue),
+  }
 }
 
 export function costBasis(quantity: number, averagePrice: Money): Money {

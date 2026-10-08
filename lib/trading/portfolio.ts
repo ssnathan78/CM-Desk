@@ -11,7 +11,13 @@ import {
   trades,
   tradingDecisions,
 } from "../schema"
-import { marketValue, unrealizedPnl } from "./accounting"
+import {
+  marketValue,
+  positionMarkSnapshot,
+  presentLedgerPosition,
+  signedQty,
+  unrealizedPnl,
+} from "./accounting"
 import { type Money, moneyAdd, moneyFromUnknown, moneyToString, moneyZero } from "./money"
 import { DEFAULT_ACCOUNT_ID, provenanceInBook, type TradeBookFilter } from "./types"
 
@@ -337,7 +343,28 @@ export async function listOrders(limitOrQuery: number | TradeListQuery = 100) {
 
 export async function listPositions(book: TradeBookFilter = "ALL") {
   const bookClause = positionBookClause(book)
-  return db.select().from(positions).where(bookClause).orderBy(desc(positions.updatedAt))
+  const rows = await db
+    .select()
+    .from(positions)
+    .where(bookClause)
+    .orderBy(desc(positions.updatedAt))
+  const dirtyFlat = rows.filter(
+    row =>
+      signedQty(row.quantity) === 0 &&
+      (moneyFromUnknown(row.unrealizedPnl) !== 0n || moneyFromUnknown(row.marketValue) !== 0n)
+  )
+  if (dirtyFlat.length) {
+    await db
+      .update(positions)
+      .set({ unrealizedPnl: "0", marketValue: "0" })
+      .where(
+        inArray(
+          positions.id,
+          dirtyFlat.map(row => row.id)
+        )
+      )
+  }
+  return rows.map(presentLedgerPosition)
 }
 
 export async function listTrades(query: number | TradeListQuery = 100) {
@@ -424,22 +451,36 @@ export async function listDailySessions(limit = 30) {
 }
 
 export async function markPositions(marks: Map<string, string>) {
-  const open = await db.select().from(positions).where(eq(positions.status, "OPEN"))
-  for (const pos of open) {
-    const mark = marks.get(`${pos.exchange}:${pos.tradingsymbol}`)
-    if (mark == null) continue
-    const u = unrealizedPnl(
-      pos.quantity,
-      moneyFromUnknown(pos.averageEntryPrice),
-      moneyFromUnknown(mark)
-    )
-    const mv = marketValue(pos.quantity, moneyFromUnknown(mark))
+  const rows = await db.select().from(positions)
+  for (const pos of rows) {
+    const quote = marks.get(`${pos.exchange}:${pos.tradingsymbol}`)
+    const mark = quote ?? pos.markPrice
+    const live = positionMarkSnapshot({
+      quantity: pos.quantity,
+      averagePrice: moneyFromUnknown(pos.averageEntryPrice),
+      markPrice: mark == null || mark === "" ? null : moneyFromUnknown(mark),
+    })
+    if (signedQty(pos.quantity) === 0) {
+      if (moneyFromUnknown(pos.unrealizedPnl) === 0n && moneyFromUnknown(pos.marketValue) === 0n) {
+        continue
+      }
+      await db
+        .update(positions)
+        .set({
+          unrealizedPnl: "0",
+          marketValue: "0",
+          updatedAt: new Date(),
+        })
+        .where(eq(positions.id, pos.id))
+      continue
+    }
+    if (quote == null) continue
     await db
       .update(positions)
       .set({
-        markPrice: mark,
-        unrealizedPnl: moneyToString(u),
-        marketValue: moneyToString(mv),
+        markPrice: quote,
+        unrealizedPnl: moneyToString(live.unrealizedPnl),
+        marketValue: moneyToString(live.marketValue),
         updatedAt: new Date(),
       })
       .where(eq(positions.id, pos.id))
