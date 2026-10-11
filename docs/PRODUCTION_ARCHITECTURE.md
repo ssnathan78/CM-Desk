@@ -24,7 +24,7 @@ Droplet
             └── Zerodha Kite Connect
 ```
 
-The repo does **not** contain a Droplet IP, domain, nginx/Caddy config, or cloud-firewall export. Those live on the server and in DigitalOcean.
+The repo does **not** contain the Droplet IP, nginx site files, or a cloud-firewall export. Those live on the server and in DigitalOcean. The hostname procedure is [PUBLIC_HOSTNAME.md](./PUBLIC_HOSTNAME.md).
 
 ## As observed (read-only audit 2026-09-05)
 
@@ -34,11 +34,11 @@ This Droplet is **Docker + nginx**, not the systemd `/opt` path.
 Internet
    ↓
 :80 nginx → 301 HTTPS
-:443 nginx (self-signed cert, server_name = Droplet IPv4)
+:443 nginx (Let’s Encrypt for cmdesk.senneris.in; self-signed cert kept for the IPv4 vhost)
    ↓
 127.0.0.1:3000  and  0.0.0.0:3000 (Compose publish)
    ↓
-cm-desk-app   (image cm-desk-app, NODE_ENV=production, MOCK_ORDERS=true)
+cm-desk-app   (image cm-desk-app, NODE_ENV=production, MOCK_ORDERS=false)
    ├── cm-desk-postgres      postgres:16-alpine   (5432 not on host)
    └── cm-desk-redis   redis:7-alpine       (6379 not on host)
 ```
@@ -49,7 +49,7 @@ cm-desk-app   (image cm-desk-app, NODE_ENV=production, MOCK_ORDERS=true)
 | App tree | `/srv/cmdesk` |
 | Running git | `bd4f472` (2026-08-13) |
 | Workers | In the app container (same process as documented) |
-| Domain | None — HTTPS on the IPv4 address |
+| Domain | `cmdesk.senneris.in` (Let’s Encrypt). IPv4 vhost still has the self-signed cert |
 
 Details and findings: [PRODUCTION_HEALTH.md](./PRODUCTION_HEALTH.md).
 

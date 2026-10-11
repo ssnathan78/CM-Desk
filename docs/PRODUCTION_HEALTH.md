@@ -2,6 +2,8 @@
 
 Last audit: **2026-09-05** (read-only SSH as `cmdesk@cm-desk-prod`). No services were restarted. No `.env` values were printed.
 
+**2026-10-11:** `cmdesk.senneris.in` serves Let’s Encrypt (expires **2027-01-09**, certbot renews). The IP vhost and `/etc/nginx/ssl/nginx-selfsigned.*` were left in place. `NEXT_PUBLIC_APP_URL=https://cmdesk.senneris.in`. `SESSION_COOKIE_SECURE=true`. `MOCK_ORDERS=false` (unchanged by this switch). Only `cm-desk-app` was recreated. Steps either way: [PUBLIC_HOSTNAME.md](./PUBLIC_HOSTNAME.md).
+
 How to repeat:
 
 ```powershell
@@ -68,7 +70,7 @@ Not used on this box: Caddy, `/opt/cm-desk`, systemd unit `cm-desk`.
 ## Known problems / gaps
 
 1. **Port 3000 was reachable from the internet** (Docker bypassed UFW). **Fixed 2026-09-05:** Compose `app` ports set to `127.0.0.1:3000:3000`; `cm-desk-app` recreated. nginx HTTPS still 200. Leave `app-dev` profile mapping unchanged.
-2. **Self-signed cert on a raw IP.** Browser warnings; no Let’s Encrypt hostname yet.
+2. **Self-signed cert on the raw IP** remains for rollback. The hostname `cmdesk.senneris.in` has a Let’s Encrypt certificate as of **2026-10-11**. Use the hostname.
 3. **Deploy SHA `bd4f472` (13 Aug)** vs current development on the laptop. Ledger/risk/simulation work is **not** what’s running.
 4. **1 GB RAM + swap in use.** Fine for idle; watch during market open.
 5. **Compose on the server embeds DB credentials in YAML** (not only `.env`). Do not commit that file; consider moving the password to env and rotating if the compose file is broadly readable.

@@ -222,6 +222,8 @@ Bind Redis to the Docker network or **127.0.0.1**. Set `requirepass` if more tha
 
 Point DNS A record at the Droplet. Use Caddy or nginx to proxy to `127.0.0.1:3000`. Session cookies are **Secure** in production so they only travel on HTTPS.
 
+This desk's hostname, Let's Encrypt setup, and the way back to the IPv4 address: [PUBLIC_HOSTNAME.md](./PUBLIC_HOSTNAME.md).
+
 ## Backups
 
 Scripts:

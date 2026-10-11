@@ -18,7 +18,7 @@ ssh -o BatchMode=yes cm-desk-prod -- uname -a
 
 If that host is missing, stop. Do not invent `HostName` or `User`.
 
-**This Droplet (2026-09):** Docker at `/srv/cmdesk` (`cm-desk-app` / `cm-desk-postgres` / `cm-desk-redis`). nginx on 80/443. App port **3000 is localhost-only**. There is no systemd `cm-desk.service`.
+**This Droplet (2026-09):** Docker at `/srv/cmdesk` (`cm-desk-app` / `cm-desk-postgres` / `cm-desk-redis`). nginx on 80/443. App port **3000 is localhost-only**. There is no systemd `cm-desk.service`. Hostname switch: [PUBLIC_HOSTNAME.md](./PUBLIC_HOSTNAME.md).
 
 ---
 
