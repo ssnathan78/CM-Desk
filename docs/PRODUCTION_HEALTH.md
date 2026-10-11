@@ -2,7 +2,7 @@
 
 Last audit: **2026-09-05** (read-only SSH as `cmdesk@cm-desk-prod`). No services were restarted. No `.env` values were printed.
 
-**2026-10-11:** `cmdesk.senneris.in` serves Let’s Encrypt (expires **2027-01-09**, certbot renews). The IP vhost and `/etc/nginx/ssl/nginx-selfsigned.*` were left in place. `NEXT_PUBLIC_APP_URL=https://cmdesk.senneris.in`. `SESSION_COOKIE_SECURE=true`. `MOCK_ORDERS=false` (unchanged by this switch). Only `cm-desk-app` was recreated. Steps either way: [PUBLIC_HOSTNAME.md](./PUBLIC_HOSTNAME.md).
+**2026-10-11:** `cmdesk.senneris.in` serves Let’s Encrypt (expires **2027-01-09**, certbot renews). The old IPv4 nginx site and its self-signed certificate were removed. `NEXT_PUBLIC_APP_URL=https://cmdesk.senneris.in`. `SESSION_COOKIE_SECURE=true`. `MOCK_ORDERS=false` (unchanged by this switch). Only `cm-desk-app` was recreated. Steps: [PUBLIC_HOSTNAME.md](./PUBLIC_HOSTNAME.md).
 
 How to repeat:
 
@@ -36,7 +36,7 @@ After a **Windows** reboot (not the Droplet), `Start-Service ssh-agent` if neede
 | Redis | `cm-desk-redis` **redis:7-alpine**, healthy, `PONG`; **6379 not published** on the host |
 | BullMQ | **6** `bull:*:meta` keys (names not printed) |
 | Proxy | **nginx** 1.24.0, enabled, HTTP→HTTPS, proxy to `127.0.0.1:3000` |
-| TLS | **Self-signed**, CN = Droplet IPv4, valid **2026-09-04 → 2027-09-04** |
+| TLS | Let’s Encrypt for `cmdesk.senneris.in`, expires **2027-01-09** (as of 2026-10-11). The IPv4 self-signed certificate was removed. |
 | Public listen | Host: **22, 80, 443** on `0.0.0.0`. App **3000 bound to 127.0.0.1 only** (changed 2026-09-05). |
 | UFW policy | **active**, default deny incoming. Allows only **22** and **80,443** (Nginx Full), IPv4+IPv6. |
 | Reachable from this laptop | After bind: **3000 should be closed**; **443 still open**. **5432 and 6379 closed**. |
@@ -57,7 +57,7 @@ After a **Windows** reboot (not the Droplet), `Start-Service ssh-agent` if neede
 ```
 Internet
   → :80 nginx 301 HTTPS
-  → :443 nginx (self-signed) proxy_pass 127.0.0.1:3000
+  → :443 nginx (Let’s Encrypt for cmdesk.senneris.in) proxy_pass 127.0.0.1:3000
   → also :3000 published on all interfaces (Compose)
   → cm-desk-app (Node in Docker, workers in-process)
        → cm-desk-postgres (Postgres 16, Docker network only)
@@ -70,7 +70,7 @@ Not used on this box: Caddy, `/opt/cm-desk`, systemd unit `cm-desk`.
 ## Known problems / gaps
 
 1. **Port 3000 was reachable from the internet** (Docker bypassed UFW). **Fixed 2026-09-05:** Compose `app` ports set to `127.0.0.1:3000:3000`; `cm-desk-app` recreated. nginx HTTPS still 200. Leave `app-dev` profile mapping unchanged.
-2. **Self-signed cert on the raw IP** remains for rollback. The hostname `cmdesk.senneris.in` has a Let’s Encrypt certificate as of **2026-10-11**. Use the hostname.
+2. **IPv4 nginx site removed 2026-10-11.** Use `https://cmdesk.senneris.in`. The hostname certificate is Let’s Encrypt.
 3. **Deploy SHA `bd4f472` (13 Aug)** vs current development on the laptop. Ledger/risk/simulation work is **not** what’s running.
 4. **1 GB RAM + swap in use.** Fine for idle; watch during market open.
 5. **Compose on the server embeds DB credentials in YAML** (not only `.env`). Do not commit that file; consider moving the password to env and rotating if the compose file is broadly readable.
@@ -81,7 +81,7 @@ Not used on this box: Caddy, `/opt/cm-desk`, systemd unit `cm-desk`.
 
 ## Monitoring gaps (unchanged recommendation)
 
-Uptime on `/api/health`, DigitalOcean disk/RAM, TLS expiry (self-signed already dated), watch `MOCK_ORDERS`, and journal/docker logs for TokenException / risk / unexpected orders. No extra SaaS required.
+Uptime on `/api/health`, DigitalOcean disk/RAM, Let’s Encrypt expiry (2027-01-09, certbot renews), watch `MOCK_ORDERS`, and journal/docker logs for TokenException / risk / unexpected orders. No extra SaaS required.
 
 ## What I did **not** do
 

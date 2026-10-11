@@ -1,7 +1,6 @@
 #!/bin/bash
 # Issue or reuse a Let's Encrypt certificate for cmdesk.senneris.in.
-# Leaves the IPv4 nginx site and the self-signed files in /etc/nginx/ssl/
-# in place. See docs/PUBLIC_HOSTNAME.md.
+# See docs/PUBLIC_HOSTNAME.md.
 set -euo pipefail
 
 if [[ "$(id -u)" -ne 0 ]]; then
@@ -13,29 +12,6 @@ DOMAIN="cmdesk.senneris.in"
 WEBROOT="/var/www/html"
 AVAIL="/etc/nginx/sites-available/cmdesk"
 ENABLED="/etc/nginx/sites-enabled/cmdesk"
-
-IP_SITE=""
-for site in /etc/nginx/sites-available/*; do
-  base="$(basename "${site}")"
-  case "${base}" in
-    cmdesk|default|ip-vhost.bak-*) continue ;;
-  esac
-  if grep -q "nginx-selfsigned" "${site}"; then
-    if [[ -n "${IP_SITE}" ]]; then
-      echo "more than one IPv4 site uses the self-signed certificate" >&2
-      exit 1
-    fi
-    IP_SITE="${site}"
-  fi
-done
-if [[ -z "${IP_SITE}" ]]; then
-  echo "IPv4 site is missing; refusing to continue" >&2
-  exit 1
-fi
-if [[ ! -f /etc/nginx/ssl/nginx-selfsigned.crt || ! -f /etc/nginx/ssl/nginx-selfsigned.key ]]; then
-  echo "self-signed certificate files are missing; refusing to continue" >&2
-  exit 1
-fi
 
 install -d -m 755 "${WEBROOT}/.well-known/acme-challenge"
 

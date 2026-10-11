@@ -1,19 +1,19 @@
 # Public hostname
 
-How to serve this desk at `https://cmdesk.senneris.in`, and how to go back to the Droplet IPv4. The IPv4 address stays in nginx and in laptop `~/.ssh/config`. Do not commit it.
+How to serve this desk at `https://cmdesk.senneris.in`. The Droplet IPv4 stays in laptop `~/.ssh/config` only. Do not commit it.
 
 Done on **2026-10-11**. Certificate expires **2027-01-09**. Certbot renews it and reloads nginx. `MOCK_ORDERS` is not part of this switch.
 
-Both names can be served at once. The app and Kite follow `NEXT_PUBLIC_APP_URL` and the kite.trade redirect, not whichever nginx site still exists.
+The public nginx site is `cmdesk.senneris.in` only. The old IPv4 site and its self-signed certificate were removed the same day. Opening the desk by IP does not work until a new nginx server block is written. The app and Kite follow `NEXT_PUBLIC_APP_URL` and the kite.trade redirect.
 
-| Piece | Domain | IPv4 |
-|---|---|---|
-| nginx | `sites-available/cmdesk`, Let's Encrypt | IPv4 nginx site, self-signed files in `/etc/nginx/ssl/` |
-| App URL | `https://cmdesk.senneris.in` | `https://` plus the Droplet IPv4 |
-| Kite redirect | `https://cmdesk.senneris.in/api/redirect_url_kite` | `https://<Droplet IPv4>/api/redirect_url_kite` |
-| Cookie | Secure. Log in again after a switch. The other host's cookie is not sent. | Same |
+| Piece | Domain |
+|---|---|
+| nginx | `sites-available/cmdesk`, Let's Encrypt |
+| App URL | `https://cmdesk.senneris.in` |
+| Kite redirect | `https://cmdesk.senneris.in/api/redirect_url_kite` |
+| Cookie | Secure. Log in again after a host change. |
 
-`SESSION_COOKIE_SECURE` stays `true` for both, because both are HTTPS.
+`SESSION_COOKIE_SECURE` stays `true`, because the public URL is HTTPS.
 
 ## Who can run sudo
 
@@ -39,7 +39,7 @@ Recreating the app restarts workers and runs the entrypoint migrations already o
 
 1. DNS A record: `cmdesk.senneris.in` → Droplet IPv4. Check from the server with `getent hosts cmdesk.senneris.in`.
 2. On kite.trade, set the production app redirect to `https://cmdesk.senneris.in/api/redirect_url_kite`. One app has one redirect. Local Docker (`http://127.0.0.1:3000/api/redirect_url_kite`) needs that URL changed back temporarily, or a second paid Kite app.
-3. Install the certificate and the domain nginx site. The IPv4 site and the self-signed certificate files stay in place. The script does not copy them.
+3. Install the certificate and the domain nginx site.
 
 ```powershell
 ssh -t -o User=senthil cm-desk-prod -- sudo bash /home/cmdesk/setup-cmdesk-tls.sh
@@ -57,18 +57,6 @@ ssh -o BatchMode=yes cm-desk-prod -- "python3 /home/cmdesk/set-public-url.py htt
 
 ## Domain back to the IP address
 
-1. On kite.trade, set the redirect back to `https://<Droplet IPv4>/api/redirect_url_kite`.
-2. Point the app at the IP and recreate only the app container. Replace the placeholder with the Droplet address. Do not paste that command into git.
+The IPv4 nginx site is gone. Changing Kite and `NEXT_PUBLIC_APP_URL` is not enough: nginx has to grow a new server block for that address, with a certificate browsers will accept or a new self-signed certificate you create at the time. `disable-domain-site.sh` refuses to turn off `cmdesk` while it is the only enabled site.
 
-```powershell
-ssh -o BatchMode=yes cm-desk-prod -- "python3 /home/cmdesk/set-public-url.py https://DROPLET_IPV4 && cd /srv/cmdesk && docker compose up -d --no-deps app && docker exec cm-desk-app printenv NEXT_PUBLIC_APP_URL MOCK_ORDERS SESSION_COOKIE_SECURE"
-```
-
-3. Open `https://<Droplet IPv4>` and accept the self-signed warning, then log in again.
-4. Optional. Stop answering the hostname. The certificate and `sites-available/cmdesk` stay on disk.
-
-```powershell
-ssh -t -o User=senthil cm-desk-prod -- sudo bash /home/cmdesk/disable-domain-site.sh
-```
-
-To serve the hostname again, repeat the domain steps. `setup-cmdesk-tls.sh` keeps the existing certificate until it is due for renewal (`--keep-until-expiring`).
+To serve the hostname again after that, repeat the domain steps. `setup-cmdesk-tls.sh` keeps the existing certificate until it is due for renewal (`--keep-until-expiring`).

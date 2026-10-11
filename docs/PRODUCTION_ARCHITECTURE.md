@@ -34,7 +34,7 @@ This Droplet is **Docker + nginx**, not the systemd `/opt` path.
 Internet
    ↓
 :80 nginx → 301 HTTPS
-:443 nginx (Let’s Encrypt for cmdesk.senneris.in; self-signed cert kept for the IPv4 vhost)
+:443 nginx (Let’s Encrypt for cmdesk.senneris.in)
    ↓
 127.0.0.1:3000  and  0.0.0.0:3000 (Compose publish)
    ↓
@@ -49,7 +49,7 @@ cm-desk-app   (image cm-desk-app, NODE_ENV=production, MOCK_ORDERS=false)
 | App tree | `/srv/cmdesk` |
 | Running git | `bd4f472` (2026-08-13) |
 | Workers | In the app container (same process as documented) |
-| Domain | `cmdesk.senneris.in` (Let’s Encrypt). IPv4 vhost still has the self-signed cert |
+| Domain | `cmdesk.senneris.in` (Let’s Encrypt). No IPv4 nginx site |
 
 Details and findings: [PRODUCTION_HEALTH.md](./PRODUCTION_HEALTH.md).
 
