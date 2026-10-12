@@ -12,6 +12,7 @@ import {
 } from "@mui/material"
 import NextLink from "next/link"
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
+import type { HistoryPreset } from "../../lib/trading/historyRange"
 import ScrollTable from "../lib/ScrollTable"
 import FeedToolbar from "./FeedToolbar"
 
@@ -36,15 +37,23 @@ export default function AlertsPanel({
   alerts,
   errorCount,
   warnCount,
-  period,
-  onPeriod,
+  preset,
+  from,
+  to,
+  onPreset,
+  onFrom,
+  onTo,
   onClear,
 }: {
   alerts: OperatorAlert[]
   errorCount: number
   warnCount: number
-  period: FeedPeriod
-  onPeriod: (period: FeedPeriod) => void
+  preset: HistoryPreset
+  from: string
+  to: string
+  onPreset: (preset: HistoryPreset) => void
+  onFrom: (value: string) => void
+  onTo: (value: string) => void
   onClear: (period: FeedPeriod) => void
 }) {
   return (
@@ -53,7 +62,15 @@ export default function AlertsPanel({
         Failures that never became a Kite or ledger order (market closed, risk block, stale job,
         Chase data miss) plus broker rejects. Orders tab stays the blotter.
       </Typography>
-      <FeedToolbar period={period} onPeriod={onPeriod} onClear={onClear} />
+      <FeedToolbar
+        preset={preset}
+        from={from}
+        to={to}
+        onPreset={onPreset}
+        onFrom={onFrom}
+        onTo={onTo}
+        onClear={onClear}
+      />
       {errorCount + warnCount > 0 ? (
         <Alert severity={errorCount ? "error" : "warning"} sx={{ mx: 2, mt: 1.5 }}>
           {errorCount} error{errorCount === 1 ? "" : "s"}

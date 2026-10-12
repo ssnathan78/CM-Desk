@@ -16,5 +16,6 @@ test.describe("Desk Signals and Alerts", () => {
     await expect(page.getByRole("tab", { name: /alerts/i })).toBeVisible({ timeout: 20_000 })
     await expect(page.getByRole("button", { name: /clear today/i })).toBeVisible()
     await expect(page.getByRole("button", { name: /clear all/i })).toBeVisible()
+    await expect(page.getByRole("combobox", { name: "Period" })).toHaveText(/Today/)
   })
 })

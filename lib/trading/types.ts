@@ -82,6 +82,25 @@ export type Provenance = "LIVE" | "MIGRATED" | "RECONCILED" | "MOCK" | "PAPER"
 
 export type TradeBookFilter = "ALL" | "PAPER" | "LIVE"
 
+/** Positions tab. Live is the desk's own live book. With-recon adds broker-reconciled and migrated rows. */
+export type PositionView = "LIVE" | "WITH_RECON" | "PAPER"
+
+export function parsePositionView(value: unknown): PositionView | null {
+  if (value === "LIVE" || value === "WITH_RECON" || value === "PAPER") return value
+  return null
+}
+
+export function positionMatchesView(
+  provenance: string | null | undefined,
+  view: PositionView
+): boolean {
+  if (view === "PAPER") return provenance === "PAPER" || provenance === "MOCK"
+  if (view === "WITH_RECON") {
+    return provenance === "LIVE" || provenance === "RECONCILED" || provenance === "MIGRATED"
+  }
+  return provenance === "LIVE"
+}
+
 export function parseTradeBook(value: unknown): TradeBookFilter {
   return value === "PAPER" || value === "LIVE" ? value : "ALL"
 }

@@ -30,6 +30,7 @@ import {
   resolveChaseBookBreakdown,
   resolveChasePrevEma,
 } from "../chaseSignal"
+import { chaseBookMarketAccess } from "../chaseUniverse"
 import { nowDayjs } from "../clock"
 import { CHASE_STATUS, STATUS_TRIGGER_PENDING } from "../constants"
 import {
@@ -314,7 +315,9 @@ async function processCalculateEMA(job: Job) {
   }
 
   const now = nowDayjs()
-  const books = (await listChaseBooks()).filter(book => book.enabled)
+  const books = (await listChaseBooks()).filter(
+    book => chaseBookMarketAccess({ enabled: book.enabled }).hourlyCandles
+  )
   const allResults: any[] = []
 
   for (const book of books) {
@@ -428,12 +431,9 @@ async function processUpdateSL(job: Job) {
   const books = await listChaseBooks()
   for (const book of books) {
     const statusRow = await getChaseStatus(book.instrument)
-    const open =
-      statusRow?.status === CHASE_STATUS.LONG ||
-      statusRow?.status === CHASE_STATUS.SHORT ||
-      statusRow?.status === CHASE_STATUS.AWAITING_LONG ||
-      statusRow?.status === CHASE_STATUS.AWAITING_SHORT
-    if (!book.enabled && !open) continue
+    if (!chaseBookMarketAccess({ enabled: book.enabled, status: statusRow?.status }).minuteJob) {
+      continue
+    }
     await processUpdateSLForInstrument(job, book.instrument)
   }
 }

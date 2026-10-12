@@ -121,15 +121,24 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListItemButton>
         <ListItemButton
           component={Link}
-          href="/help"
-          selected={selected(asPath, "/help")}
+          href={alertCount ? "/desk?tab=alerts" : "/desk"}
+          selected={selected(asPath, "/desk")}
           onClick={close}
           sx={{ ...itemSx, pl: 1.5 }}
         >
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <MenuBookOutlinedIcon fontSize="small" />
+            <Badge color="error" badgeContent={alertCount} max={9}>
+              <AccountBalanceWalletOutlinedIcon fontSize="small" />
+            </Badge>
           </ListItemIcon>
-          <ListItemText primary="Guide" secondary="What the fields mean" />
+          <ListItemText
+            primary="Desk"
+            secondary={
+              alertCount
+                ? `${alertCount} alert${alertCount === 1 ? "" : "s"}`
+                : "Orders, signals, alerts"
+            }
+          />
         </ListItemButton>
 
         <ListSubheader
@@ -189,27 +198,6 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           Ops
         </ListSubheader>
         <ListItemButton
-          component={Link}
-          href={alertCount ? "/desk?tab=alerts" : "/desk"}
-          selected={selected(asPath, "/desk")}
-          onClick={close}
-          sx={{ ...itemSx, pl: 1.5 }}
-        >
-          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <Badge color="error" badgeContent={alertCount} max={9}>
-              <AccountBalanceWalletOutlinedIcon fontSize="small" />
-            </Badge>
-          </ListItemIcon>
-          <ListItemText
-            primary="Desk"
-            secondary={
-              alertCount
-                ? `${alertCount} alert${alertCount === 1 ? "" : "s"}`
-                : "Orders, signals, alerts"
-            }
-          />
-        </ListItemButton>
-        <ListItemButton
           component="a"
           href="/queues"
           target="_blank"
@@ -223,32 +211,51 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListItemButton>
       </List>
       <Divider sx={{ my: 1 }} />
-      {user?.isLoggedIn ? (
-        <Box sx={{ px: 0.5 }}>
-          <ListItemButton component={Link} href="/profile" sx={{ borderRadius: 2 }} onClick={close}>
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <AccountCircleOutlinedIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Profile" secondary={user.user_shortname || user.user_id} />
-          </ListItemButton>
-          <ListItemButton
-            sx={{ borderRadius: 2 }}
-            onClick={async () => {
-              await mutateUser(fetchJson("/api/logout", { method: "POST" }))
-              router.push("/")
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <LogoutOutlinedIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Log out" />
-          </ListItemButton>
-        </Box>
-      ) : (
-        <ListItemButton component={Link} href="/" sx={{ borderRadius: 2 }}>
-          <ListItemText primary="Log in" />
+      <Box sx={{ px: 0.5 }}>
+        <ListItemButton
+          component={Link}
+          href="/help"
+          selected={selected(asPath, "/help")}
+          onClick={close}
+          sx={{ borderRadius: 2 }}
+        >
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <MenuBookOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Guide" secondary="What the fields mean" />
         </ListItemButton>
-      )}
+        {user?.isLoggedIn ? (
+          <>
+            <ListItemButton
+              component={Link}
+              href="/profile"
+              sx={{ borderRadius: 2 }}
+              onClick={close}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <AccountCircleOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="Profile" secondary={user.user_shortname || user.user_id} />
+            </ListItemButton>
+            <ListItemButton
+              sx={{ borderRadius: 2 }}
+              onClick={async () => {
+                await mutateUser(fetchJson("/api/logout", { method: "POST" }))
+                router.push("/")
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <LogoutOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="Log out" />
+            </ListItemButton>
+          </>
+        ) : (
+          <ListItemButton component={Link} href="/" sx={{ borderRadius: 2 }}>
+            <ListItemText primary="Log in" />
+          </ListItemButton>
+        )}
+      </Box>
     </Box>
   )
 

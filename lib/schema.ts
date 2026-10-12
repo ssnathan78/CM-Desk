@@ -170,8 +170,16 @@ export const strategyDefaults = pgTable("strategy_defaults", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
 
-export const chaseSettings = pgTable("chase_settings", {
+export const chaseUniverse = pgTable("chase_universe", {
   instrument: text("instrument").primaryKey(),
+  exchange: text("exchange").notNull().default("NFO"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const chaseSettings = pgTable("chase_settings", {
+  instrument: text("instrument")
+    .primaryKey()
+    .references(() => chaseUniverse.instrument),
   lots: integer("lots").notNull().default(1),
   emaPeriod: integer("ema_period").notNull().default(40),
   bufferPercent: numeric("buffer_percent").notNull().default("0.2"),

@@ -86,9 +86,10 @@ export async function resetAllChaseSignalState(input: {
   | { ok: true; results: ChaseResetResult[] }
   | { ok: false; error: string; results: ChaseResetResult[] }
 > {
-  const { CHASE_INDEX_ORDER } = await import("./chaseDefaults")
+  const { listChaseBooks } = await import("./chaseSettings")
   const results: ChaseResetResult[] = []
-  for (const instrument of CHASE_INDEX_ORDER) {
+  for (const book of await listChaseBooks()) {
+    const instrument = book.instrument
     results.push(
       await resetChaseSignalState({
         instrument,

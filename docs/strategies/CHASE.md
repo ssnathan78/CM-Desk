@@ -30,18 +30,20 @@ Kill **intraday** does **not** pause Chase. Kill **all** does (sets Pause on eve
 
 The hourly worker loops **enabled** books in one job: each enabled index updates its own futures EMA and then `generateSignal` for that index. Signals on Desk are tagged per index.
 
-### Trade this index vs Pause entries
+### Trade this book vs Pause entries
 
 These are Chase-only, per index. Neither flattens, neither sets Desk halt, neither stops straddles/strangles.
 
 | Control | DB | Hourly EMA / new signals | New Chase punch | Open LONG/SHORT (and pending AWAITING_*) |
 |---|---|---|---|---|
-| **Trade this index** | `chase_settings.enabled` | **Skipped** while off | No | Minute SL / trail / flatten **still run** |
+| **Trade this book** | `chase_settings.enabled` | **Skipped** while off | No | Minute SL / trail / flatten **still run** when the book is open or pending |
 | **Pause entries** | `chase_settings.paused` | Still runs (book stays on) | No; pending entry SL-M is cancelled | Stops and trails **keep running** until flat; then no re-entry until Resume |
 
-Pause/Resume is disabled while Trade this index is off. Chip: Off / Paused — no new entries / Live — new entries allowed.
+Pause/Resume is disabled while Trade this book is off. Chip: Off / Paused — no new entries / Live — new entries allowed.
 
-Typical use: Trade this index off = this index is not in the universe (BankNifty/FinNifty/Midcap default). Pause = keep managing the open future, do not add. **Square off all Chase books** on the same page flattens and resets to `AWAITING_SIGNAL` without pausing or halting — the next hourly job can enter again.
+Typical use: Trade this book off = this underlying is not in the hourly engine (BankNifty, FinNifty, and Midcap default). Pause = keep managing the open future, do not add. **Square off all Chase books** on the same page flattens and resets to `AWAITING_SIGNAL` without pausing or halting — the next hourly job can enter again.
+
+Search on the Chase page adds another NFO underlying (an index or a stock such as RELIANCE). The saved key is the Kite name, not the futures tradingsymbol. The job resolves the front month, and on that contract’s expiry day the next month, from the cached NFO dump. A new book starts off. Remove is refused while the book is open or waiting on an entry. Off and flat does not request candles or write signals. The minute job still runs for an open or pending book.
 
 Desk → Risk **Strategy enabled** for Chase is a different switch: it darkens **all** Chase indexes, including flatten/SL.
 

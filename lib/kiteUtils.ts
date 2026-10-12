@@ -530,6 +530,7 @@ export async function asyncGetIndexInstruments(exchange = "NFO"): Promise<Instru
   if (exchange === "NFO") {
     return instruments.filter(
       item =>
+        item.instrument_type === "FUT" ||
         item.name === "NIFTY" ||
         item.name === "BANKNIFTY" ||
         item.name === "FINNIFTY" ||

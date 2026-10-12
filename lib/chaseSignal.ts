@@ -210,7 +210,14 @@ async function placeEntryTriggerOrder(
   triggerPrice: number,
   accessToken: string
 ): Promise<void> {
-  const settings = await getChaseBook(chaseIndexFromSymbol(instrument.tradingsymbol))
+  const underlying = chaseIndexFromSymbol(instrument.tradingsymbol)
+  if (!underlying) {
+    logger.info(
+      `[generateSignal] ${instrument.tradingsymbol} is not a futures symbol — skipping entry`
+    )
+    return
+  }
+  const settings = await getChaseBook(underlying)
   if (!settings.enabled || !chaseAllowsNewEntry(settings.paused)) {
     logger.info("[generateSignal] Chase is paused or disabled — skipping new entry order")
     return

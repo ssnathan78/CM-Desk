@@ -13,6 +13,7 @@ import {
   Typography,
 } from "@mui/material"
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
+import type { HistoryPreset } from "../../lib/trading/historyRange"
 import type { SignalFilters, StrategySignal } from "../../lib/trading/signals"
 import ScrollTable from "../lib/ScrollTable"
 import FeedToolbar from "./FeedToolbar"
@@ -33,12 +34,16 @@ function outcomeColor(outcome: string) {
 export default function SignalsPanel({
   signals,
   filters,
-  period,
+  preset,
+  from,
+  to,
   strategy,
   instrument,
   planRef,
   jobId,
-  onPeriod,
+  onPreset,
+  onFrom,
+  onTo,
   onStrategy,
   onInstrument,
   onPlanRef,
@@ -47,12 +52,16 @@ export default function SignalsPanel({
 }: {
   signals: StrategySignal[]
   filters: SignalFilters
-  period: FeedPeriod
+  preset: HistoryPreset
+  from: string
+  to: string
   strategy: string
   instrument: string
   planRef: string
   jobId: string
-  onPeriod: (period: FeedPeriod) => void
+  onPreset: (preset: HistoryPreset) => void
+  onFrom: (value: string) => void
+  onTo: (value: string) => void
   onStrategy: (value: string) => void
   onInstrument: (value: string) => void
   onPlanRef: (value: string) => void
@@ -67,8 +76,12 @@ export default function SignalsPanel({
         straddle or strangle trade. Chase does not create a job, so that list stays “All jobs”.
       </Typography>
       <FeedToolbar
-        period={period}
-        onPeriod={onPeriod}
+        preset={preset}
+        from={from}
+        to={to}
+        onPreset={onPreset}
+        onFrom={onFrom}
+        onTo={onTo}
         onClear={onClear}
         extra={
           <>

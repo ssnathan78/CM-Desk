@@ -10,10 +10,12 @@ export default withSession(async (req, res) => {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" })
   try {
     const book = parseTradeBook(req.query.book)
+    const from = typeof req.query.from === "string" ? req.query.from : undefined
+    const to = typeof req.query.to === "string" ? req.query.to : undefined
     const [audit, decisions, recon] = await Promise.all([
-      listAudit(150),
-      listDecisions({ limit: 100, book }),
-      listRecon(50),
+      listAudit({ limit: 150, from, to }),
+      listDecisions({ limit: 100, book, from, to }),
+      listRecon({ limit: 50, from, to }),
     ])
     return res.json({ audit, decisions, recon })
   } catch (e) {

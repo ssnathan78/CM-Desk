@@ -9,10 +9,14 @@ export default withSession(async (req, res) => {
   if (!user) return res.status(401).end()
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" })
   try {
+    const from = typeof req.query.from === "string" ? req.query.from : undefined
+    const to = typeof req.query.to === "string" ? req.query.to : undefined
     return res.json({
       orders: await listOrders({
         limit: 200,
         book: parseTradeBook(req.query.book),
+        from,
+        to,
       }),
     })
   } catch (e) {

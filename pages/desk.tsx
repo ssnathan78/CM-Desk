@@ -16,7 +16,6 @@ import {
   TableHead,
   TableRow,
   Tabs,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material"
@@ -26,14 +25,17 @@ import { useState } from "react"
 import useSWR from "swr"
 import AlertsPanel from "../components/desk/AlertsPanel"
 import ContractsPanel from "../components/desk/ContractsPanel"
+import HistoryPeriod from "../components/desk/HistoryPeriod"
 import RiskControls from "../components/desk/RiskControls"
 import SignalsPanel from "../components/desk/SignalsPanel"
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import ScrollTable from "../components/lib/ScrollTable"
 import fetchJson from "../lib/fetchJson"
-import type { FeedClearMode, FeedPeriod } from "../lib/trading/feedWindow"
+import type { FeedClearMode } from "../lib/trading/feedWindow"
+import { type HistoryPreset, historyRange } from "../lib/trading/historyRange"
 import { DEFAULT_RISK_SETTINGS } from "../lib/trading/riskEngine"
+import type { PositionView } from "../lib/trading/types"
 import useUser from "../lib/useUser"
 
 function money(value: string | number | null | undefined) {
@@ -57,27 +59,6 @@ function orderPriceLabel(row: Record<string, unknown>) {
 const filterFieldSx = {
   minWidth: { xs: "100%", sm: 160 },
   width: { xs: "100%", sm: "auto" },
-}
-
-function istYmd(d = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d)
-}
-
-function rangeForPreset(preset: string): { from?: string; to?: string } {
-  const today = istYmd()
-  const [y, m] = today.split("-").map(Number)
-  const pad = (n: number) => String(n).padStart(2, "0")
-  if (preset === "month") {
-    return { from: `${y}-${pad(m)}-01`, to: `${today}T23:59:59+05:30` }
-  }
-  if (preset === "quarter") {
-    const qStart = Math.floor((m - 1) / 3) * 3 + 1
-    return { from: `${y}-${pad(qStart)}-01`, to: `${today}T23:59:59+05:30` }
-  }
-  if (preset === "year") {
-    return { from: `${y}-01-01`, to: `${today}T23:59:59+05:30` }
-  }
-  return {}
 }
 
 function when(value: string | Date | null | undefined) {
@@ -131,12 +112,10 @@ export default function DeskPage() {
   } | null>(null)
   const [riskBusy, setRiskBusy] = useState(false)
   const [tradeBook, setTradeBook] = useState<"ALL" | "PAPER" | "LIVE">("ALL")
-  const [tradePreset, setTradePreset] = useState<"all" | "month" | "quarter" | "year" | "custom">(
-    "all"
-  )
-  const [tradeFrom, setTradeFrom] = useState("")
-  const [tradeTo, setTradeTo] = useState("")
-  const [feedPeriod, setFeedPeriod] = useState<FeedPeriod>("all")
+  const [positionView, setPositionView] = useState<PositionView>("LIVE")
+  const [historyPreset, setHistoryPreset] = useState<HistoryPreset>("today")
+  const [historyFrom, setHistoryFrom] = useState("")
+  const [historyTo, setHistoryTo] = useState("")
   const [signalStrategy, setSignalStrategy] = useState("")
   const [signalInstrument, setSignalInstrument] = useState("")
   const [signalPlan, setSignalPlan] = useState("")
@@ -147,36 +126,30 @@ export default function DeskPage() {
     mode: FeedClearMode
   } | null>(null)
 
-  const bookQs = tradeBook === "ALL" ? "" : `?book=${tradeBook}`
+  const historyWindow = historyRange(historyPreset, { from: historyFrom, to: historyTo })
+  const historyQuery = new URLSearchParams()
+  if (tradeBook !== "ALL") historyQuery.set("book", tradeBook)
+  if (historyWindow.from) historyQuery.set("from", historyWindow.from)
+  if (historyWindow.to) historyQuery.set("to", historyWindow.to)
+  if (historyPreset === "all") historyQuery.set("unbounded", "1")
+  const historyQs = historyQuery.toString()
   const { data: portfolioData, mutate: mutatePortfolio } = useSWR(
-    user?.isLoggedIn ? `/api/desk/portfolio${bookQs}` : null
+    user?.isLoggedIn ? `/api/desk/portfolio${historyQs ? `?${historyQs}` : ""}` : null
   )
   const { data: positionData, mutate: mutatePositions } = useSWR(
-    user?.isLoggedIn ? `/api/desk/positions${bookQs}` : null
+    user?.isLoggedIn ? `/api/desk/positions?view=${positionView}` : null
   )
   const { data: orderData, mutate: mutateOrders } = useSWR(
-    user?.isLoggedIn ? `/api/desk/orders${bookQs}` : null
+    user?.isLoggedIn ? `/api/desk/orders${historyQs ? `?${historyQs}` : ""}` : null
   )
-  const tradeRange =
-    tradePreset === "custom"
-      ? {
-          from: tradeFrom ? `${tradeFrom}T00:00:00+05:30` : undefined,
-          to: tradeTo ? `${tradeTo}T23:59:59+05:30` : undefined,
-        }
-      : rangeForPreset(tradePreset)
-  const tradeQuery = new URLSearchParams()
-  if (tradeBook !== "ALL") tradeQuery.set("book", tradeBook)
-  if (tradeRange.from) tradeQuery.set("from", tradeRange.from)
-  if (tradeRange.to) tradeQuery.set("to", tradeRange.to)
-  const tradeQs = tradeQuery.toString()
   const { data: tradeData, mutate: mutateTrades } = useSWR(
-    user?.isLoggedIn ? `/api/desk/trades${tradeQs ? `?${tradeQs}` : ""}` : null
+    user?.isLoggedIn ? `/api/desk/trades${historyQs ? `?${historyQs}` : ""}` : null
   )
   const { data: activityData, mutate: mutateActivity } = useSWR(
-    user?.isLoggedIn ? `/api/desk/activity${bookQs}` : null
+    user?.isLoggedIn ? `/api/desk/activity${historyQs ? `?${historyQs}` : ""}` : null
   )
-  const alertQs = new URLSearchParams({ period: feedPeriod })
-  const signalQs = new URLSearchParams({ period: feedPeriod })
+  const alertQs = new URLSearchParams(historyQuery)
+  const signalQs = new URLSearchParams(historyQuery)
   if (signalStrategy) signalQs.set("strategy", signalStrategy)
   if (signalInstrument) signalQs.set("instrument", signalInstrument)
   if (signalPlan) signalQs.set("planRef", signalPlan)
@@ -519,18 +492,33 @@ export default function DeskPage() {
 
       {tab === "positions" || tab === "orders" || tab === "trades" || tab === "decisions" ? (
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.5 }}>
-          <FormControl size="small" sx={filterFieldSx}>
-            <InputLabel>Book</InputLabel>
-            <Select
-              label="Book"
-              value={tradeBook}
-              onChange={e => setTradeBook(e.target.value as typeof tradeBook)}
-            >
-              <MenuItem value="ALL">All books</MenuItem>
-              <MenuItem value="PAPER">Paper / mock</MenuItem>
-              <MenuItem value="LIVE">Live / recon</MenuItem>
-            </Select>
-          </FormControl>
+          {tab === "positions" ? (
+            <FormControl size="small" sx={filterFieldSx}>
+              <InputLabel>Show</InputLabel>
+              <Select
+                label="Show"
+                value={positionView}
+                onChange={e => setPositionView(e.target.value as PositionView)}
+              >
+                <MenuItem value="LIVE">Live only</MenuItem>
+                <MenuItem value="WITH_RECON">All (Live + reconciled)</MenuItem>
+                <MenuItem value="PAPER">Paper / mock</MenuItem>
+              </Select>
+            </FormControl>
+          ) : (
+            <FormControl size="small" sx={filterFieldSx}>
+              <InputLabel>Book</InputLabel>
+              <Select
+                label="Book"
+                value={tradeBook}
+                onChange={e => setTradeBook(e.target.value as typeof tradeBook)}
+              >
+                <MenuItem value="ALL">All books</MenuItem>
+                <MenuItem value="PAPER">Paper / mock</MenuItem>
+                <MenuItem value="LIVE">Live / recon</MenuItem>
+              </Select>
+            </FormControl>
+          )}
           <Button
             size="small"
             color="warning"
@@ -539,45 +527,15 @@ export default function DeskPage() {
           >
             Clear paper book
           </Button>
-          {tab === "trades" ? (
-            <>
-              <FormControl size="small" sx={filterFieldSx}>
-                <InputLabel>Period</InputLabel>
-                <Select
-                  label="Period"
-                  value={tradePreset}
-                  onChange={e => setTradePreset(e.target.value as typeof tradePreset)}
-                >
-                  <MenuItem value="all">All time</MenuItem>
-                  <MenuItem value="month">This month</MenuItem>
-                  <MenuItem value="quarter">This quarter</MenuItem>
-                  <MenuItem value="year">This year</MenuItem>
-                  <MenuItem value="custom">Custom</MenuItem>
-                </Select>
-              </FormControl>
-              {tradePreset === "custom" ? (
-                <>
-                  <TextField
-                    size="small"
-                    type="date"
-                    label="From"
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    value={tradeFrom}
-                    onChange={e => setTradeFrom(e.target.value)}
-                    sx={filterFieldSx}
-                  />
-                  <TextField
-                    size="small"
-                    type="date"
-                    label="To"
-                    slotProps={{ inputLabel: { shrink: true } }}
-                    value={tradeTo}
-                    onChange={e => setTradeTo(e.target.value)}
-                    sx={filterFieldSx}
-                  />
-                </>
-              ) : null}
-            </>
+          {tab !== "positions" ? (
+            <HistoryPeriod
+              preset={historyPreset}
+              from={historyFrom}
+              to={historyTo}
+              onPreset={setHistoryPreset}
+              onFrom={setHistoryFrom}
+              onTo={setHistoryTo}
+            />
           ) : null}
         </Stack>
       ) : null}
@@ -784,8 +742,12 @@ export default function DeskPage() {
           alerts={alerts}
           errorCount={alertErrors}
           warnCount={alertWarns}
-          period={feedPeriod}
-          onPeriod={setFeedPeriod}
+          preset={historyPreset}
+          from={historyFrom}
+          to={historyTo}
+          onPreset={setHistoryPreset}
+          onFrom={setHistoryFrom}
+          onTo={setHistoryTo}
           onClear={mode => setClearOpen({ feed: "alerts", mode })}
         />
       ) : null}
@@ -794,12 +756,16 @@ export default function DeskPage() {
         <SignalsPanel
           signals={signals}
           filters={signalFilters}
-          period={feedPeriod}
+          preset={historyPreset}
+          from={historyFrom}
+          to={historyTo}
           strategy={signalStrategy}
           instrument={signalInstrument}
           planRef={signalPlan}
           jobId={signalJob}
-          onPeriod={setFeedPeriod}
+          onPreset={setHistoryPreset}
+          onFrom={setHistoryFrom}
+          onTo={setHistoryTo}
           onStrategy={setSignalStrategy}
           onInstrument={setSignalInstrument}
           onPlanRef={setSignalPlan}
@@ -843,6 +809,16 @@ export default function DeskPage() {
 
       {tab === "activity" ? (
         <Stack spacing={2}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <HistoryPeriod
+              preset={historyPreset}
+              from={historyFrom}
+              to={historyTo}
+              onPreset={setHistoryPreset}
+              onFrom={setHistoryFrom}
+              onTo={setHistoryTo}
+            />
+          </Stack>
           <Paper sx={{ overflow: "hidden" }}>
             <Typography variant="subtitle2" sx={{ p: 1.5 }}>
               Audit
@@ -905,36 +881,48 @@ export default function DeskPage() {
       ) : null}
 
       {tab === "sessions" ? (
-        <Paper sx={{ overflow: "hidden" }}>
-          <ScrollTable minWidth={560}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date (IST)</TableCell>
-                  <TableCell align="right">Net P&L</TableCell>
-                  <TableCell align="right">Fees</TableCell>
-                  <TableCell align="right">Trades</TableCell>
-                  <TableCell align="right">Wins</TableCell>
-                  <TableCell align="right">Win rate</TableCell>
-                  <TableCell align="right">Drawdown</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sessions.map((row: Record<string, unknown>) => (
-                  <TableRow key={String(row.sessionDate)}>
-                    <TableCell>{String(row.sessionDate)}</TableCell>
-                    <TableCell align="right">{money(row.netPnl as string)}</TableCell>
-                    <TableCell align="right">{money(row.fees as string)}</TableCell>
-                    <TableCell align="right">{String(row.tradeCount)}</TableCell>
-                    <TableCell align="right">{String(row.winCount)}</TableCell>
-                    <TableCell align="right">{money(row.winRate as string)}</TableCell>
-                    <TableCell align="right">{money(row.maxDrawdown as string)}</TableCell>
+        <Stack spacing={1.5}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <HistoryPeriod
+              preset={historyPreset}
+              from={historyFrom}
+              to={historyTo}
+              onPreset={setHistoryPreset}
+              onFrom={setHistoryFrom}
+              onTo={setHistoryTo}
+            />
+          </Stack>
+          <Paper sx={{ overflow: "hidden" }}>
+            <ScrollTable minWidth={560}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date (IST)</TableCell>
+                    <TableCell align="right">Net P&L</TableCell>
+                    <TableCell align="right">Fees</TableCell>
+                    <TableCell align="right">Trades</TableCell>
+                    <TableCell align="right">Wins</TableCell>
+                    <TableCell align="right">Win rate</TableCell>
+                    <TableCell align="right">Drawdown</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ScrollTable>
-        </Paper>
+                </TableHead>
+                <TableBody>
+                  {sessions.map((row: Record<string, unknown>) => (
+                    <TableRow key={String(row.sessionDate)}>
+                      <TableCell>{String(row.sessionDate)}</TableCell>
+                      <TableCell align="right">{money(row.netPnl as string)}</TableCell>
+                      <TableCell align="right">{money(row.fees as string)}</TableCell>
+                      <TableCell align="right">{String(row.tradeCount)}</TableCell>
+                      <TableCell align="right">{String(row.winCount)}</TableCell>
+                      <TableCell align="right">{money(row.winRate as string)}</TableCell>
+                      <TableCell align="right">{money(row.maxDrawdown as string)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollTable>
+          </Paper>
+        </Stack>
       ) : null}
 
       {tab === "contracts" ? <ContractsPanel data={instrumentData} /> : null}

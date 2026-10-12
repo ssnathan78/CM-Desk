@@ -1,4 +1,15 @@
-import { and, desc, eq, gte, inArray, isNotNull, lte, or, type SQL } from "drizzle-orm"
+import {
+  type AnyColumn,
+  and,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  lte,
+  or,
+  type SQL,
+} from "drizzle-orm"
 
 import { db, pool } from "../drizzle"
 import {
@@ -19,7 +30,13 @@ import {
   unrealizedPnl,
 } from "./accounting"
 import { type Money, moneyAdd, moneyFromUnknown, moneyToString, moneyZero } from "./money"
-import { DEFAULT_ACCOUNT_ID, provenanceInBook, type TradeBookFilter } from "./types"
+import {
+  DEFAULT_ACCOUNT_ID,
+  type PositionView,
+  positionMatchesView,
+  provenanceInBook,
+  type TradeBookFilter,
+} from "./types"
 
 export function istSessionDate(at = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -333,16 +350,61 @@ function decisionBookClause(book?: TradeBookFilter): SQL | undefined {
   return undefined
 }
 
+function windowClause(
+  column: AnyColumn,
+  from?: Date,
+  to?: Date,
+  skipNull = false
+): SQL | undefined {
+  if (!from && !to) return undefined
+  const parts: SQL[] = []
+  if (skipNull) parts.push(isNotNull(column))
+  if (from) parts.push(gte(column, from))
+  if (to) parts.push(lte(column, to))
+  return and(...parts) as SQL
+}
+
+function queryDates(opts: TradeListQuery): { from?: Date; to?: Date } {
+  const from = opts.from ? new Date(opts.from) : undefined
+  const to = opts.to ? new Date(opts.to) : undefined
+  return {
+    from: from && !Number.isNaN(from.getTime()) ? from : undefined,
+    to: to && !Number.isNaN(to.getTime()) ? to : undefined,
+  }
+}
+
 export async function listOrders(limitOrQuery: number | TradeListQuery = 100) {
   const opts: TradeListQuery =
     typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery
   const limit = opts.limit ?? 200
+  const clauses: SQL[] = []
   const bookClause = orderBookClause(opts.book)
-  return db.select().from(orders).where(bookClause).orderBy(desc(orders.updatedAt)).limit(limit)
+  if (bookClause) clauses.push(bookClause)
+  const { from, to } = queryDates(opts)
+  const touched =
+    from || to
+      ? or(
+          windowClause(orders.createdAt, from, to),
+          windowClause(orders.filledAt, from, to, true),
+          windowClause(orders.cancelledAt, from, to, true)
+        )
+      : undefined
+  if (touched) clauses.push(touched)
+  const where = clauses.length ? and(...clauses) : undefined
+  return db.select().from(orders).where(where).orderBy(desc(orders.updatedAt)).limit(limit)
 }
 
-export async function listPositions(book: TradeBookFilter = "ALL") {
-  const bookClause = positionBookClause(book)
+function positionViewClause(view: PositionView): SQL | undefined {
+  const matched = (["LIVE", "RECONCILED", "MIGRATED", "PAPER", "MOCK"] as const).filter(
+    provenance => positionMatchesView(provenance, view)
+  )
+  if (matched.length === 0) return undefined
+  if (matched.length === 1) return eq(positions.provenance, matched[0])
+  return or(...matched.map(provenance => eq(positions.provenance, provenance)))
+}
+
+export async function listPositions(book: TradeBookFilter = "ALL", view?: PositionView | null) {
+  const bookClause = view ? positionViewClause(view) : positionBookClause(book)
   const rows = await db
     .select()
     .from(positions)
@@ -397,19 +459,31 @@ export async function listTrades(query: number | TradeListQuery = 100) {
 export async function listDecisions(query: number | TradeListQuery = 100) {
   const opts: TradeListQuery = typeof query === "number" ? { limit: query } : query
   const limit = opts.limit ?? 100
+  const clauses: SQL[] = []
   const bookClause = decisionBookClause(opts.book)
+  if (bookClause) clauses.push(bookClause)
+  const { from, to } = queryDates(opts)
+  const when = windowClause(tradingDecisions.occurredAt, from, to)
+  if (when) clauses.push(when)
+  const where = clauses.length ? and(...clauses) : undefined
   return db
     .select()
     .from(tradingDecisions)
-    .where(bookClause)
+    .where(where)
     .orderBy(desc(tradingDecisions.occurredAt))
     .limit(limit)
 }
 
-export async function listAudit(limit = 150) {
+export async function listAudit(limitOrQuery: number | TradeListQuery = 150) {
+  const opts: TradeListQuery =
+    typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery
+  const limit = opts.limit ?? 150
+  const { from, to } = queryDates(opts)
+  const where = windowClause(auditEvents.occurredAt, from, to)
   const rows = await db
     .select()
     .from(auditEvents)
+    .where(where)
     .orderBy(desc(auditEvents.occurredAt))
     .limit(limit)
   const orderIds = rows.map(row => row.orderId).filter((id): id is string => Boolean(id))
@@ -438,16 +512,37 @@ export async function listAudit(limit = 150) {
   })
 }
 
-export async function listRecon(limit = 50) {
+export async function listRecon(limitOrQuery: number | TradeListQuery = 50) {
+  const opts: TradeListQuery =
+    typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery
+  const limit = opts.limit ?? 50
+  const { from, to } = queryDates(opts)
+  const where = windowClause(reconciliationEvents.occurredAt, from, to)
   return db
     .select()
     .from(reconciliationEvents)
+    .where(where)
     .orderBy(desc(reconciliationEvents.occurredAt))
     .limit(limit)
 }
 
-export async function listDailySessions(limit = 30) {
-  return db.select().from(dailySessions).orderBy(desc(dailySessions.sessionDate)).limit(limit)
+export async function listDailySessions(limitOrQuery: number | TradeListQuery = 30) {
+  const opts: TradeListQuery =
+    typeof limitOrQuery === "number" ? { limit: limitOrQuery } : limitOrQuery
+  const limit = opts.limit ?? 30
+  const clauses: SQL[] = []
+  const { from, to } = queryDates(opts)
+  const fromDay = from ? istSessionDate(from) : undefined
+  const toDay = to ? istSessionDate(to) : undefined
+  if (fromDay) clauses.push(gte(dailySessions.sessionDate, fromDay))
+  if (toDay) clauses.push(lte(dailySessions.sessionDate, toDay))
+  const where = clauses.length ? and(...clauses) : undefined
+  return db
+    .select()
+    .from(dailySessions)
+    .where(where)
+    .orderBy(desc(dailySessions.sessionDate))
+    .limit(limit)
 }
 
 export async function markPositions(marks: Map<string, string>) {

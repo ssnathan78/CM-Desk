@@ -54,6 +54,12 @@ describe("help content", () => {
     expect(risk?.body.join(" ")).not.toMatch(/Combined premium exit: flatten/i)
   })
 
+  it("opens desk history tabs on today", () => {
+    const desk = HELP_PAGES.desk.sections.find(s => s.id === "ledger")?.body.join(" ") ?? ""
+    expect(desk).toMatch(/open on today/i)
+    expect(desk).toMatch(/Positions opens on Live only/i)
+  })
+
   it("explains Chase per-index books vs shared Desk Risk", () => {
     const chase = HELP_PAGES.chase.sections.find(s => s.id === "lots")?.body.join(" ") ?? ""
     const desk = HELP_PAGES.desk.sections.find(s => s.id === "continuous")?.body.join(" ") ?? ""
@@ -65,7 +71,7 @@ describe("help content", () => {
   it("differentiates Chase Trade this index from Pause entries", () => {
     const onOff =
       HELP_PAGES.chase.sections.find(s => s.id === "trade-this-index")?.body.join(" ") ?? ""
-    expect(onOff).toMatch(/Trade this index/i)
+    expect(onOff).toMatch(/Trade this book/i)
     expect(onOff).toMatch(/Pause entries/i)
     expect(onOff).toMatch(/hourly EMA/i)
     expect(onOff).toMatch(/minute job still trails|protective stop until flat/i)

@@ -129,11 +129,14 @@ export async function clearPhantomPosition(input: {
       try {
         const { resetChaseSignalState } = await import("../chaseReset")
         const { chaseIndexFromSymbol } = await import("../chaseValidation")
-        await resetChaseSignalState({
-          instrument: chaseIndexFromSymbol(row.tradingsymbol || "NIFTY"),
-          accessToken: input.accessToken,
-          force: true,
-        })
+        const underlying = chaseIndexFromSymbol(row.tradingsymbol || "")
+        if (underlying) {
+          await resetChaseSignalState({
+            instrument: underlying,
+            accessToken: input.accessToken,
+            force: true,
+          })
+        }
       } catch (e) {
         logger.warn("[clearPhantomPosition] Chase signal reset skipped", e)
       }

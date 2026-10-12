@@ -2,6 +2,13 @@ import { sendApiError } from "../../../lib/apiErrors"
 import logger from "../../../lib/logger"
 import withSession from "../../../lib/session"
 import { parseFeedClearMode, parseFeedPeriod } from "../../../lib/trading/feedWindow"
+
+function queryInstant(value: unknown): Date | undefined {
+  if (typeof value !== "string" || !value) return undefined
+  const at = new Date(value)
+  return Number.isNaN(at.getTime()) ? undefined : at
+}
+
 import { deleteSignalsForPeriod, listStrategySignals } from "../../../lib/trading/signals"
 
 export default withSession(async (req, res) => {
@@ -10,6 +17,8 @@ export default withSession(async (req, res) => {
   try {
     if (req.method === "GET") {
       const period = parseFeedPeriod(req.query.period)
+      const from = queryInstant(req.query.from)
+      const to = queryInstant(req.query.to)
       const strategy = typeof req.query.strategy === "string" ? req.query.strategy : null
       const instrument = typeof req.query.instrument === "string" ? req.query.instrument : null
       const planRef = typeof req.query.planRef === "string" ? req.query.planRef : null
@@ -18,6 +27,8 @@ export default withSession(async (req, res) => {
       return res.json(
         await listStrategySignals({
           period,
+          from,
+          to,
           strategy: strategy || null,
           instrument: instrument || null,
           planRef: planRef || null,

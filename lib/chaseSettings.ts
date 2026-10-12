@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm"
+
 import {
   aggregateChaseConfig,
   CHASE_INDEX_ORDER,
@@ -8,13 +10,14 @@ import {
   normalizeChaseMarketProtection,
 } from "./chaseDefaults"
 import { normalizeChaseOpenClassify } from "./chaseOpenClassify"
+import { chaseRemoveBlockReason, normalizeChaseUnderlying } from "./chaseUniverse"
 import {
   chaseIndexFromSymbol,
   normalizeChaseInstruments,
   validateChaseSettings,
 } from "./chaseValidation"
 import { db } from "./drizzle"
-import { chaseSettings } from "./schema"
+import { chaseSettings, chaseUniverse } from "./schema"
 
 export { CHASE_MASTER_DEFAULTS } from "./chaseDefaults"
 export type { ChaseBookConfig, ChaseEngineConfig }
@@ -47,12 +50,14 @@ function toBook(row: {
   }
 }
 
-function completeBooks(rows: ChaseBookConfig[]): ChaseBookConfig[] {
-  const byInstrument = new Map(rows.map(row => [row.instrument, row]))
-  return CHASE_INDEX_ORDER.map(
-    instrument =>
-      byInstrument.get(instrument) ?? defaultChaseBook(instrument, instrument === "NIFTY")
-  )
+function orderBooks(rows: ChaseBookConfig[]): ChaseBookConfig[] {
+  const rank = new Map<string, number>(CHASE_INDEX_ORDER.map((name, index) => [name, index]))
+  return [...rows].sort((a, b) => {
+    const aRank = rank.get(a.instrument) ?? 100
+    const bRank = rank.get(b.instrument) ?? 100
+    if (aRank !== bRank) return aRank - bRank
+    return a.instrument.localeCompare(b.instrument)
+  })
 }
 
 function setCache(books: ChaseBookConfig[]) {
@@ -65,7 +70,7 @@ export async function listChaseBooks(): Promise<ChaseBookConfig[]> {
     return cache.books
   }
   const rows = await db.select().from(chaseSettings)
-  const books = completeBooks(rows.map(toBook))
+  const books = orderBooks(rows.map(toBook))
   setCache(books)
   return books
 }
@@ -81,8 +86,10 @@ export async function getChaseBook(instrument: string): Promise<ChaseBookConfig>
 }
 
 export async function chaseMarketProtectionForSymbol(tradingsymbol: string): Promise<number> {
-  const book = await getChaseBook(chaseIndexFromSymbol(tradingsymbol))
-  return book.marketProtectionPercent
+  const underlying = chaseIndexFromSymbol(tradingsymbol)
+  if (!underlying) return CHASE_MASTER_DEFAULTS.marketProtectionPercent
+  const book = (await listChaseBooks()).find(row => row.instrument === underlying)
+  return book?.marketProtectionPercent ?? CHASE_MASTER_DEFAULTS.marketProtectionPercent
 }
 
 export async function getChaseSettings(): Promise<ChaseEngineConfig> {
@@ -179,12 +186,21 @@ export async function saveChaseSettings(
 
   const books = await listChaseBooks()
   if (patch.instrument) {
-    await saveChaseBook(patch.instrument, patch)
+    const name = normalizeChaseUnderlying(patch.instrument)
+    if (!name || !books.some(book => book.instrument === name)) {
+      throw new Error("Add this underlying on the Chase page before saving it")
+    }
+    await saveChaseBook(name, patch)
     return getChaseSettings()
   }
 
   if (patch.instruments) {
     const enabled = new Set(normalizeChaseInstruments(patch.instruments))
+    const known = new Set(books.map(book => book.instrument))
+    const missing = [...enabled].filter(name => !known.has(name))
+    if (missing.length) {
+      throw new Error(`Add ${missing.join(", ")} on the Chase page before turning it on`)
+    }
     for (const book of books) {
       const turningOn = enabled.has(book.instrument)
       await saveChaseBook(book.instrument, {
@@ -203,14 +219,43 @@ export async function saveChaseSettings(
 }
 
 export async function resetChaseBooks(): Promise<ChaseEngineConfig> {
-  for (const instrument of CHASE_INDEX_ORDER) {
-    await saveChaseBook(instrument, {
+  for (const book of await listChaseBooks()) {
+    await saveChaseBook(book.instrument, {
       ...CHASE_MASTER_DEFAULTS,
-      enabled: instrument === "NIFTY",
-      paused: instrument !== "NIFTY",
+      enabled: book.instrument === "NIFTY",
+      paused: book.instrument !== "NIFTY",
     })
   }
   return getChaseSettings()
+}
+
+export async function addChaseUnderlying(instrument: string): Promise<ChaseBookConfig> {
+  const name = normalizeChaseUnderlying(instrument)
+  if (!name) throw new Error("Chase underlying names must be Kite NFO symbols")
+  const existing = (await listChaseBooks()).find(book => book.instrument === name)
+  if (existing) return existing
+  await db.insert(chaseUniverse).values({ instrument: name, exchange: "NFO" }).onConflictDoNothing()
+  const book = defaultChaseBook(name, false)
+  await upsertBook(book)
+  cache = null
+  return book
+}
+
+export async function removeChaseUnderlying(
+  instrument: string,
+  status: string | null,
+  netQty: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const name = normalizeChaseUnderlying(instrument)
+  if (!name) return { ok: false, error: "Chase underlying names must be Kite NFO symbols" }
+  const blocked = chaseRemoveBlockReason(status, netQty)
+  if (blocked) return { ok: false, error: blocked }
+  const existing = (await listChaseBooks()).find(book => book.instrument === name)
+  if (!existing) return { ok: false, error: `${name} is not a Chase book` }
+  await db.delete(chaseSettings).where(eq(chaseSettings.instrument, name))
+  await db.delete(chaseUniverse).where(eq(chaseUniverse.instrument, name))
+  cache = null
+  return { ok: true }
 }
 
 export async function pauseAllChaseBooks(): Promise<void> {

@@ -1,16 +1,26 @@
-import { Button, FormControl, InputLabel, MenuItem, Select, Stack } from "@mui/material"
+import { Button, Stack } from "@mui/material"
 import type { ReactNode } from "react"
 
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
+import type { HistoryPreset } from "../../lib/trading/historyRange"
+import HistoryPeriod from "./HistoryPeriod"
 
 export default function FeedToolbar({
-  period,
-  onPeriod,
+  preset,
+  from,
+  to,
+  onPreset,
+  onFrom,
+  onTo,
   onClear,
   extra,
 }: {
-  period: FeedPeriod
-  onPeriod: (period: FeedPeriod) => void
+  preset: HistoryPreset
+  from: string
+  to: string
+  onPreset: (preset: HistoryPreset) => void
+  onFrom: (value: string) => void
+  onTo: (value: string) => void
   onClear: (period: FeedPeriod) => void
   extra?: ReactNode
 }) {
@@ -20,17 +30,14 @@ export default function FeedToolbar({
       spacing={1}
       sx={{ px: 2, pt: 1.5, mb: 1.5, flexWrap: "wrap", alignItems: { md: "center" } }}
     >
-      <FormControl
-        size="small"
-        sx={{ minWidth: { xs: "100%", md: 140 }, width: { xs: "100%", md: "auto" } }}
-      >
-        <InputLabel>When</InputLabel>
-        <Select label="When" value={period} onChange={e => onPeriod(e.target.value as FeedPeriod)}>
-          <MenuItem value="all">All</MenuItem>
-          <MenuItem value="today">Today (IST)</MenuItem>
-          <MenuItem value="before_today">Before today</MenuItem>
-        </Select>
-      </FormControl>
+      <HistoryPeriod
+        preset={preset}
+        from={from}
+        to={to}
+        onPreset={onPreset}
+        onFrom={onFrom}
+        onTo={onTo}
+      />
       {extra}
       <Button size="small" variant="outlined" onClick={() => onClear("today")}>
         Clear today

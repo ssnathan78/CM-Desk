@@ -1,4 +1,10 @@
-import { ledgerProvenance, parseTradeBook, provenanceInBook } from "../../../lib/trading/types"
+import {
+  ledgerProvenance,
+  parsePositionView,
+  parseTradeBook,
+  positionMatchesView,
+  provenanceInBook,
+} from "../../../lib/trading/types"
 
 describe("parseTradeBook", () => {
   it("accepts PAPER and LIVE and defaults the rest to ALL", () => {
@@ -23,6 +29,25 @@ describe("provenanceInBook", () => {
     expect(provenanceInBook("MIGRATED", "LIVE")).toBe(true)
     expect(provenanceInBook("PAPER", "LIVE")).toBe(false)
     expect(provenanceInBook("MOCK", "LIVE")).toBe(false)
+  })
+})
+
+describe("positionMatchesView", () => {
+  it("defaults the positions list to the live book", () => {
+    expect(parsePositionView("LIVE")).toBe("LIVE")
+    expect(parsePositionView("nope")).toBeNull()
+    expect(positionMatchesView("LIVE", "LIVE")).toBe(true)
+    expect(positionMatchesView("RECONCILED", "LIVE")).toBe(false)
+    expect(positionMatchesView("MIGRATED", "LIVE")).toBe(false)
+    expect(positionMatchesView("PAPER", "LIVE")).toBe(false)
+  })
+
+  it("adds reconciled and migrated rows without paper", () => {
+    expect(positionMatchesView("LIVE", "WITH_RECON")).toBe(true)
+    expect(positionMatchesView("RECONCILED", "WITH_RECON")).toBe(true)
+    expect(positionMatchesView("MIGRATED", "WITH_RECON")).toBe(true)
+    expect(positionMatchesView("PAPER", "WITH_RECON")).toBe(false)
+    expect(positionMatchesView("MOCK", "PAPER")).toBe(true)
   })
 })
 

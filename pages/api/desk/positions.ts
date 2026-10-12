@@ -4,7 +4,7 @@ import withSession from "../../../lib/session"
 import { clearPaperBook } from "../../../lib/trading/clearPaperBook"
 import { clearPhantomPosition } from "../../../lib/trading/clearPhantomBook"
 import { listPositions } from "../../../lib/trading/portfolio"
-import { parseTradeBook } from "../../../lib/trading/types"
+import { parsePositionView, parseTradeBook } from "../../../lib/trading/types"
 
 export default withSession(async (req, res) => {
   const user = req.session.user
@@ -12,7 +12,10 @@ export default withSession(async (req, res) => {
   try {
     if (req.method === "GET") {
       return res.json({
-        positions: await listPositions(parseTradeBook(req.query.book)),
+        positions: await listPositions(
+          parseTradeBook(req.query.book),
+          parsePositionView(req.query.view)
+        ),
       })
     }
     if (req.method === "POST") {

@@ -25,7 +25,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         title: "Continuous — Chase",
         body: [
           "Chase is a futures process that keeps running across days. Nifty, BankNifty, FinNifty, and Midcap Nifty (MIDCPNIFTY) each have their own lots, EMA, pause, and status. It is not a weekday template.",
-          "On Chase, Trade this index is whether that book is in the hourly engine. Pause entries only blocks new punches on that index; an open LONG/SHORT still trails until flat. Desk → Risk still treats Chase as one strategy: Paper vs Live, enabled, halt, max lots, and max open positions apply to all Chase books together. Risk Strategy enabled off darkens every Chase flatten too — that is not the Chase-page switch.",
+          "On Chase, Trade this book is whether that underlying is in the hourly engine. Pause entries only blocks new punches on that book; an open LONG/SHORT still trails until flat. A book that is off and flat does not load candles or write signals. Desk → Risk still treats Chase as one strategy: Paper vs Live, enabled, halt, max lots, and max open positions apply to all Chase books together. Risk Strategy enabled off darkens every Chase flatten too — that is not the Chase-page switch.",
           "Kill intraday on the dashboard does not pause Chase. Kill all (incl. Chase) does. Square off all open gets you out of current books without a halt; Chase can take the next signal.",
         ],
       },
@@ -36,8 +36,9 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
           "Dashboard Today is still the live punch board. Desk is the application ledger: decisions, order lifecycle, fills, positions, completed round-trips, and audit events.",
           "Desk → Orders is only the blotter: instructions that reached placeOrder (paper, mock, live, or reconciled). A Sunday or after-hours live “Schedule now” never creates an order. That reject is on Desk → Alerts. Mock punches still need at least one index ticked; otherwise nothing is sent.",
           "Desk → Contracts shows the Kite NFO futures and option expiries the strategies will use today (front/next month FUT for Chase, current/next/monthly option dates for straddles and strangles). The contract list is fetched from Kite and cached until 07:00 IST — it is not a Postgres table. Chase stores only the selected indexes and, once in a trade, the tradingsymbol on chase_status.",
-          "Desk → Alerts is the operator log for silent fails: schedule rejects, queue/job failures, stale square-off discards, risk blocks, broker rejects, Chase data miss, and unresolved recon. The sidebar badge is the unread error count. Filter All / Today / Before today. Clear hides those rows without deleting the ledger.",
-          "Desk → Signals is the persisted evaluation log: Chase hourly EMA vs close (including waiting for signal), straddle skew samples, strangle strike picks. Filter by strategy, weekday plan, or a single job. Clear today / before today / all deletes those signal rows.",
+          "Desk → Orders, Trades, Alerts, Signals, Decisions, Activity, and Sessions open on today (IST). The same Period menu on each of those tabs also offers this month, this quarter, this year, all time, and a custom range. Sessions is one row per day, so Today is that session. Positions opens on Live only and is not date-filtered, so an overnight book stays visible. All (Live + reconciled) adds broker-reconciled and migrated rows. Paper / mock is separate.",
+          "Desk → Alerts is the operator log for silent fails: schedule rejects, queue/job failures, stale square-off discards, risk blocks, broker rejects, Chase data miss, and unresolved recon. The count on the tab follows the Period menu. Clear today, Clear before today, and Clear all hide those rows without deleting the ledger.",
+          "Desk → Signals is the persisted evaluation log: Chase hourly EMA vs close (including waiting for signal), straddle skew samples, strangle strike picks. It opens on today and uses the same Period menu. Filter by strategy, weekday plan, or a single job. Clear today / before today / all deletes those signal rows.",
           "Kite remains the broker's execution reality. Reconcile with broker compares the ledger to Kite and records mismatches instead of silently rewriting history. Square off on a position row (or on Today / Chase) sends a flatten for the open book. Clear phantom zeros a leftover ledger book after proving Kite is flat (or immediately for paper). It does not send an order and does not let you type a new qty.",
           "A signal is not an order. An order is not a fill. A fill is not a position. A position is not a completed trade. Desk keeps those records separate so a restart can reconstruct what happened.",
           "Desk → Risk is the only place trading limits live. Strategies do not share P&L for those limits. See Risk flags below for Allow live orders vs Trading enabled, and Strategy enabled vs Not halted. The Risk page also lists Chase and today's weekday-plan size next to max notional so a 2-lot Nifty future is not a surprise at punch.",
@@ -183,20 +184,21 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
   chase: {
     title: "Chase",
     summary:
-      "Index futures trend-follow around a long EMA. Pick Nifty, BankNifty, FinNifty, and/or Midcap Nifty (MIDCPNIFTY). Positions can stay open across sessions.",
+      "Futures trend-follow around a long EMA. Add an NFO underlying (index or stock) from the Chase page. Positions can stay open across sessions.",
     sections: [
       {
         id: "instruments",
-        title: "Indexes",
+        title: "Underlyings",
         body: [
-          "Each index has its own status, signals, EMA series, and futures contract.",
+          "Each underlying has its own status, signals, EMA series, and futures contract. Search adds a Kite NFO name such as RELIANCE or INFY. The front-month future is chosen when the job runs. A new book is saved with Trade this book off.",
+          "Off and flat means no hourly candles and no signals. The minute job still runs when that book is LONG, SHORT, or waiting on an entry. The NFO instrument list is one cached download, not a Kite call per symbol.",
         ],
       },
       {
         id: "trade-this-index",
-        title: "Trade this index vs Pause entries",
+        title: "Trade this book vs Pause entries",
         body: [
-          "Trade this index (the switch) is whether this book is in the Chase engine. Off skips hourly EMA and new signals for that index. Chip shows Off. Pause is disabled until you turn it back on. If the book is already LONG, SHORT, or AWAITING_*, the minute job still trails, stops, and flattens — you are not left without a stop.",
+          "Trade this book (the switch) is whether this underlying is in the Chase engine. Off skips hourly EMA and new signals for that book. Pause is disabled until you turn it back on. If the book is already LONG, SHORT, or AWAITING_*, the minute job still trails, stops, and flattens — you are not left without a stop.",
           "Pause entries (the button) is lighter. The book stays on, so EMA still updates. It blocks new entries only, cancels a pending AWAITING_LONG/SHORT trigger, and returns to AWAITING_SIGNAL. An open LONG/SHORT keeps its protective stop until flat; after that it will not re-enter until you Resume entries.",
           "Neither control flattens, neither sets Desk halt, neither stops straddles. Kill all sets Pause on every Chase index. Kill intraday does not. Square off all Chase books flattens without pausing — the next hourly job can signal again. Desk → Risk Strategy enabled for Chase is a third switch: off rejects every Chase order including flatten.",
         ],

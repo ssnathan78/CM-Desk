@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, or, type SQL } from "drizzle-orm"
+import { and, desc, eq, gte, inArray, lt, lte, or, type SQL } from "drizzle-orm"
 
 import { JOB_EXECUTION_STATUS } from "../constants"
 import { db } from "../drizzle"
@@ -241,32 +241,50 @@ export function alertFromFailedOrder(row: {
   }
 }
 
-function withPeriod<T>(from: Date | undefined, to: Date | undefined, column: T) {
+function withPeriod<T>(
+  from: Date | undefined,
+  to: Date | undefined,
+  column: T,
+  inclusiveEnd = false
+) {
   const parts: SQL[] = []
   if (from) parts.push(gte(column as never, from))
-  if (to) parts.push(lt(column as never, to))
+  if (to) parts.push((inclusiveEnd ? lte : lt)(column as never, to))
   return parts
+}
+
+function alertWindow(period: FeedPeriod, window?: { from?: Date; to?: Date; unbounded?: boolean }) {
+  if (window?.unbounded) return { since: undefined, until: undefined, inclusiveEnd: false }
+  if (window?.from || window?.to) {
+    return { since: window.from, until: window.to, inclusiveEnd: true }
+  }
+  const bounds = periodBounds(period)
+  return {
+    since:
+      bounds.from ??
+      (period === "all" ? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) : undefined),
+    until: bounds.to,
+    inclusiveEnd: false,
+  }
 }
 
 export async function listOperatorAlerts(
   limit = 80,
-  period: FeedPeriod = "all"
+  period: FeedPeriod = "all",
+  window?: { from?: Date; to?: Date; unbounded?: boolean }
 ): Promise<{
   alerts: OperatorAlert[]
   errorCount: number
   warnCount: number
 }> {
-  const bounds = periodBounds(period)
-  const since =
-    bounds.from ?? (period === "all" ? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) : undefined)
-  const until = bounds.to
+  const { since, until, inclusiveEnd } = alertWindow(period, window)
   const [auditRows, jobRows, orderRows, reconRows, clears] = await Promise.all([
     db
       .select()
       .from(auditEvents)
       .where(
         and(
-          ...withPeriod(since, until, auditEvents.occurredAt),
+          ...withPeriod(since, until, auditEvents.occurredAt, inclusiveEnd),
           or(
             inArray(auditEvents.severity, ["ERROR", "WARN"]),
             inArray(auditEvents.eventType, [...ALERT_EVENT_TYPES])
@@ -287,7 +305,7 @@ export async function listOperatorAlerts(
       .from(jobExecutions)
       .where(
         and(
-          ...withPeriod(since, until, jobExecutions.createdAt),
+          ...withPeriod(since, until, jobExecutions.createdAt, inclusiveEnd),
           inArray(jobExecutions.status, [JOB_EXECUTION_STATUS.REJECT, JOB_EXECUTION_STATUS.FAILED])
         )
       )
@@ -306,7 +324,7 @@ export async function listOperatorAlerts(
       .from(orders)
       .where(
         and(
-          ...withPeriod(since, until, orders.createdAt),
+          ...withPeriod(since, until, orders.createdAt, inclusiveEnd),
           inArray(orders.status, ["REJECTED", "FAILED", "EXPIRED"])
         )
       )
@@ -317,7 +335,7 @@ export async function listOperatorAlerts(
       .from(reconciliationEvents)
       .where(
         and(
-          ...withPeriod(since, until, reconciliationEvents.occurredAt),
+          ...withPeriod(since, until, reconciliationEvents.occurredAt, inclusiveEnd),
           eq(reconciliationEvents.resolved, false)
         )
       )

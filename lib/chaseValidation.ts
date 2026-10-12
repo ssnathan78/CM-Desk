@@ -1,21 +1,10 @@
 import type { ChaseEngineConfig } from "./chaseDefaults"
 import { isChaseOpenClassify } from "./chaseOpenClassify"
-import { INSTRUMENTS } from "./constants"
+import { chaseUnderlyingFromSymbol, normalizeChaseUnderlying } from "./chaseUniverse"
 
-const CHASE_INDEXES = new Set<string>([
-  INSTRUMENTS.NIFTY,
-  INSTRUMENTS.BANKNIFTY,
-  INSTRUMENTS.FINNIFTY,
-  INSTRUMENTS.MIDCPNIFTY,
-])
-
-export function chaseIndexFromSymbol(symbol: string): string {
-  const upper = String(symbol || "").toUpperCase()
-  if (upper.startsWith("BANKNIFTY")) return "BANKNIFTY"
-  if (upper.startsWith("FINNIFTY")) return "FINNIFTY"
-  if (upper.startsWith("MIDCPNIFTY")) return "MIDCPNIFTY"
-  if (upper.startsWith("NIFTY")) return "NIFTY"
-  return "NIFTY"
+/** Underlying on a futures symbol. Null when the symbol is not a futures contract. */
+export function chaseIndexFromSymbol(symbol: string): string | null {
+  return chaseUnderlyingFromSymbol(symbol)
 }
 
 export type ChaseValidationResult =
@@ -23,9 +12,13 @@ export type ChaseValidationResult =
   | { ok: false; error: string }
 
 export function normalizeChaseInstruments(raw: unknown): string[] {
-  const list = Array.isArray(raw) ? raw.map(String) : []
-  const unique = [...new Set(list.filter(item => CHASE_INDEXES.has(item)))]
-  return unique.length ? unique : ["NIFTY"]
+  const list = Array.isArray(raw) ? raw : []
+  const unique: string[] = []
+  for (const item of list) {
+    const name = normalizeChaseUnderlying(item)
+    if (name && !unique.includes(name)) unique.push(name)
+  }
+  return unique
 }
 
 export function validateChaseSettings(
@@ -45,22 +38,17 @@ export function validateChaseSettings(
     }
   }
   if (patch.instruments != null && !(patch as { instrument?: string }).instrument) {
-    if (!Array.isArray(patch.instruments) || patch.instruments.length === 0) {
-      return { ok: false, error: "Select at least one index for Chase" }
+    const names = normalizeChaseInstruments(patch.instruments)
+    if (!Array.isArray(patch.instruments) || names.length === 0) {
+      return { ok: false, error: "Select at least one Chase underlying" }
     }
-    if (patch.instruments.some(item => !CHASE_INDEXES.has(String(item)))) {
-      return {
-        ok: false,
-        error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY",
-      }
+    if (names.length !== patch.instruments.length) {
+      return { ok: false, error: "Chase underlying names must be Kite NFO symbols" }
     }
   }
   const instrument = (patch as { instrument?: string }).instrument
-  if (instrument != null && !CHASE_INDEXES.has(String(instrument).toUpperCase())) {
-    return {
-      ok: false,
-      error: "Chase instruments must be NIFTY, BANKNIFTY, FINNIFTY, or MIDCPNIFTY",
-    }
+  if (instrument != null && !normalizeChaseUnderlying(instrument)) {
+    return { ok: false, error: "Chase underlying names must be Kite NFO symbols" }
   }
   if (patch.emaPeriod != null) {
     const n = Number(patch.emaPeriod)

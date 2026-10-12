@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, lt, type SQL } from "drizzle-orm"
+import { and, desc, eq, gte, isNotNull, lt, lte, type SQL } from "drizzle-orm"
 
 import { now } from "../clock"
 import { db } from "../drizzle"
@@ -168,6 +168,8 @@ export async function deleteSignalsForPeriod(period: FeedPeriod) {
 
 export async function listStrategySignals(query: {
   period?: FeedPeriod
+  from?: Date | null
+  to?: Date | null
   strategy?: string | null
   instrument?: string | null
   planRef?: string | null
@@ -176,10 +178,19 @@ export async function listStrategySignals(query: {
   limit?: number
 }): Promise<{ signals: StrategySignal[]; filters: SignalFilters }> {
   const period = query.period ?? "all"
-  const { from, to } = periodBounds(period)
+  const explicit = Boolean(query.from || query.to)
+  const bounds = explicit
+    ? { from: query.from ?? undefined, to: query.to ?? undefined }
+    : periodBounds(period)
   const clauses: SQL[] = []
-  if (from) clauses.push(gte(strategySignals.occurredAt, from))
-  if (to) clauses.push(lt(strategySignals.occurredAt, to))
+  if (bounds.from) clauses.push(gte(strategySignals.occurredAt, bounds.from))
+  if (bounds.to) {
+    clauses.push(
+      explicit
+        ? lte(strategySignals.occurredAt, bounds.to)
+        : lt(strategySignals.occurredAt, bounds.to)
+    )
+  }
   if (query.strategy) clauses.push(eq(strategySignals.strategy, query.strategy))
   if (query.instrument) clauses.push(eq(strategySignals.instrument, query.instrument))
   if (query.planRef) clauses.push(eq(strategySignals.planRef, query.planRef))
