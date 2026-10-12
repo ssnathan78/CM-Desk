@@ -2,8 +2,6 @@ import {
   Alert,
   Button,
   Chip,
-  Drawer,
-  FormControlLabel,
   MenuItem,
   Paper,
   Stack,
@@ -22,6 +20,7 @@ import { useEffect, useState } from "react"
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
+import ScrollTable from "../components/lib/ScrollTable"
 import {
   CHASE_INDEX_ORDER,
   CHASE_OPEN_CLASSIFY,
@@ -42,7 +41,6 @@ const ChasePlanPage = () => {
   const [status, setStatus] = useState("")
   const [resetInstrument, setResetInstrument] = useState<string | null>(null)
   const [flattenOpen, setFlattenOpen] = useState(false)
-  const [selected, setSelected] = useState<string | null>(null)
   const [removeTarget, setRemoveTarget] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [matches, setMatches] = useState<string[]>([])
@@ -52,6 +50,12 @@ const ChasePlanPage = () => {
       setBooks(data.books)
     }
   }, [data])
+
+  const patchBook = (instrument: string, patch: Partial<ChaseBookConfig>) => {
+    setBooks(current =>
+      current.map(row => (row.instrument === instrument ? { ...row, ...patch } : row))
+    )
+  }
 
   const saveBook = async (instrument: string, patch: Partial<ChaseBookConfig> = {}) => {
     const current = books.find(book => book.instrument === instrument)
@@ -133,7 +137,6 @@ const ChasePlanPage = () => {
       })
       if (saved.books?.length) setBooks(saved.books)
       setMatches(current => current.filter(name => name !== instrument))
-      setSelected(instrument)
       setStatus(`${instrument} added. Trade this book is off until you turn it on.`)
       await mutate()
     } catch (e) {
@@ -151,7 +154,6 @@ const ChasePlanPage = () => {
         body: JSON.stringify({ action: "remove-underlying", instrument }),
       })
       if (saved.books) setBooks(saved.books)
-      if (selected === instrument) setSelected(null)
       setStatus(`${instrument} removed.`)
       await mutate()
     } catch (e) {
@@ -173,7 +175,7 @@ const ChasePlanPage = () => {
   }
 
   return (
-    <Layout title="Chase plan" maxWidth="md">
+    <Layout title="Chase plan" maxWidth="xl">
       <Typography variant="h5" component="h1">
         Chase
       </Typography>
@@ -215,234 +217,186 @@ const ChasePlanPage = () => {
         </Stack>
       ) : null}
 
-      <Paper sx={{ overflow: "hidden", mb: 2 }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Underlying</TableCell>
-              <TableCell>Trade</TableCell>
-              <TableCell>Entries</TableCell>
-              <TableCell align="right">Lots</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {books.map(book => (
-              <TableRow
-                key={book.instrument}
-                hover
-                selected={selected === book.instrument}
-                onClick={() => setSelected(book.instrument)}
-                sx={{ cursor: "pointer" }}
-              >
-                <TableCell>{book.instrument}</TableCell>
-                <TableCell>{book.enabled ? "On" : "Off"}</TableCell>
-                <TableCell>{!book.enabled ? "—" : book.paused ? "Paused" : "Allowed"}</TableCell>
-                <TableCell align="right">{book.lots}</TableCell>
+      <Paper sx={{ mb: 2 }}>
+        <ScrollTable minWidth={1180}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Underlying</TableCell>
+                <TableCell>Trade</TableCell>
+                <TableCell align="right">Lots</TableCell>
+                <TableCell align="right">EMA</TableCell>
+                <TableCell align="right">Buffer %</TableCell>
+                <TableCell
+                  align="right"
+                  title="Limit distance from the last price on a Chase market order."
+                >
+                  Protect %
+                </TableCell>
+                <TableCell align="right">Entry offset</TableCell>
+                <TableCell title="PDF uses the 09:16 candle close. Legacy steps the EMA on a 60-minute bar.">
+                  09:16
+                </TableCell>
+                <TableCell />
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Paper>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        A book that is off and flat does not load candles or write signals. The minute job still
-        trails a book that is already open. Search uses the cached NFO futures list.
-      </Typography>
-
-      <Drawer
-        anchor="right"
-        open={books.some(book => book.instrument === selected)}
-        onClose={() => setSelected(null)}
-      >
-        {books
-          .filter(book => book.instrument === selected)
-          .map(book => (
-            <Paper key={book.instrument} sx={{ p: 2.5, width: { xs: "100vw", sm: 440 } }}>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ mb: 2, alignItems: "center", flexWrap: "wrap" }}
-              >
-                <Typography variant="h6">{book.instrument}</Typography>
-                <Chip
-                  size="small"
-                  color={!book.enabled ? "default" : book.paused ? "warning" : "success"}
-                  label={
-                    !book.enabled
-                      ? "Off"
-                      : book.paused
-                        ? "Paused — no new entries"
-                        : "Live — new entries allowed"
-                  }
-                />
-              </Stack>
-              <Stack spacing={2}>
-                <FormControlLabel
-                  control={
+            </TableHead>
+            <TableBody>
+              {books.map(book => (
+                <TableRow key={book.instrument}>
+                  <TableCell>
+                    <Stack spacing={0.5}>
+                      <Typography variant="body2">{book.instrument}</Typography>
+                      <Chip
+                        size="small"
+                        color={!book.enabled ? "default" : book.paused ? "warning" : "success"}
+                        label={
+                          !book.enabled
+                            ? "Off"
+                            : book.paused
+                              ? "Paused — no new entries"
+                              : "Entries allowed"
+                        }
+                      />
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
                     <Switch
                       checked={book.enabled}
-                      onChange={e =>
-                        setBooks(current =>
-                          current.map(row =>
-                            row.instrument === book.instrument
-                              ? { ...row, enabled: e.target.checked }
-                              : row
-                          )
-                        )
-                      }
+                      onChange={e => patchBook(book.instrument, { enabled: e.target.checked })}
+                      slotProps={{ input: { "aria-label": `Trade ${book.instrument}` } }}
                     />
-                  }
-                  label={
-                    <span>
-                      Trade this book{" "}
-                      <Typography component="span" variant="body2" color="text.secondary">
-                        (hourly candles and signals; an open book still gets the minute stop)
-                      </Typography>
-                    </span>
-                  }
-                />
-                <TextField
-                  label="Lots"
-                  type="number"
-                  size="small"
-                  fullWidth
-                  value={book.lots}
-                  onChange={e =>
-                    setBooks(current =>
-                      current.map(row =>
-                        row.instrument === book.instrument
-                          ? { ...row, lots: Number(e.target.value) }
-                          : row
-                      )
-                    )
-                  }
-                />
-                <ChaseNotionalPreview
-                  lots={book.lots}
-                  instruments={[book.instrument]}
-                  maxNotionalInr={data.notional?.maxNotionalInr ?? 0}
-                  priceByIndex={Object.fromEntries(
-                    (data.notional?.rows ?? []).map(row => [row.instrument, row.price])
-                  )}
-                />
-                <TextField
-                  label="EMA period"
-                  type="number"
-                  size="small"
-                  fullWidth
-                  value={book.emaPeriod}
-                  onChange={e =>
-                    setBooks(current =>
-                      current.map(row =>
-                        row.instrument === book.instrument
-                          ? { ...row, emaPeriod: Number(e.target.value) }
-                          : row
-                      )
-                    )
-                  }
-                />
-                <TextField
-                  label="Buffer %"
-                  type="number"
-                  size="small"
-                  fullWidth
-                  value={book.bufferPercent}
-                  onChange={e =>
-                    setBooks(current =>
-                      current.map(row =>
-                        row.instrument === book.instrument
-                          ? { ...row, bufferPercent: Number(e.target.value) }
-                          : row
-                      )
-                    )
-                  }
-                />
-                <TextField
-                  label="Market protection %"
-                  type="number"
-                  size="small"
-                  fullWidth
-                  value={book.marketProtectionPercent}
-                  slotProps={{ htmlInput: { step: 0.05, min: 0.25, max: 5 } }}
-                  onChange={e =>
-                    setBooks(current =>
-                      current.map(row =>
-                        row.instrument === book.instrument
-                          ? { ...row, marketProtectionPercent: Number(e.target.value) }
-                          : row
-                      )
-                    )
-                  }
-                  helperText="Chase market orders become a limit this percent away from the last price. 1.5% stays inside the exchange band."
-                />
-                <TextField
-                  label="Entry limit offset"
-                  type="number"
-                  size="small"
-                  fullWidth
-                  value={book.entryLimitOffset}
-                  onChange={e =>
-                    setBooks(current =>
-                      current.map(row =>
-                        row.instrument === book.instrument
-                          ? { ...row, entryLimitOffset: Number(e.target.value) }
-                          : row
-                      )
-                    )
-                  }
-                />
-                <TextField
-                  select
-                  label="09:16 morning classify"
-                  size="small"
-                  fullWidth
-                  value={book.openClassify}
-                  onChange={e =>
-                    setBooks(current =>
-                      current.map(row =>
-                        row.instrument === book.instrument
-                          ? { ...row, openClassify: normalizeChaseOpenClassify(e.target.value) }
-                          : row
-                      )
-                    )
-                  }
-                  helperText="PDF uses the 09:16 candle close vs overnight hourly EMA. Legacy steps 40-EMA on a 60-minute bar."
-                >
-                  <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>
-                    PDF — 09:16 candle (default)
-                  </MenuItem>
-                  <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy — 60-minute bar</MenuItem>
-                </TextField>
-              </Stack>
-              <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-                <Button variant="contained" onClick={() => saveBook(book.instrument)}>
-                  Save {book.instrument}
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() => saveBook(book.instrument, { paused: !book.paused })}
-                  disabled={!book.enabled}
-                  title="Blocks new entries on this book only. An open position still trails until flat. Does not flatten or halt."
-                >
-                  {book.paused ? "Resume entries" : "Pause entries"}
-                </Button>
-                <Button
-                  color="warning"
-                  variant="outlined"
-                  onClick={() => setResetInstrument(book.instrument)}
-                >
-                  Reset signal
-                </Button>
-                <Button
-                  color="warning"
-                  variant="text"
-                  onClick={() => setRemoveTarget(book.instrument)}
-                >
-                  Remove
-                </Button>
-              </Stack>
-            </Paper>
-          ))}
-      </Drawer>
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      type="number"
+                      size="small"
+                      value={book.lots}
+                      onChange={e => patchBook(book.instrument, { lots: Number(e.target.value) })}
+                      sx={{ width: 72 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      type="number"
+                      size="small"
+                      value={book.emaPeriod}
+                      onChange={e =>
+                        patchBook(book.instrument, { emaPeriod: Number(e.target.value) })
+                      }
+                      sx={{ width: 72 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      type="number"
+                      size="small"
+                      value={book.bufferPercent}
+                      onChange={e =>
+                        patchBook(book.instrument, { bufferPercent: Number(e.target.value) })
+                      }
+                      sx={{ width: 80 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      type="number"
+                      size="small"
+                      value={book.marketProtectionPercent}
+                      slotProps={{ htmlInput: { step: 0.05, min: 0.25, max: 5 } }}
+                      onChange={e =>
+                        patchBook(book.instrument, {
+                          marketProtectionPercent: Number(e.target.value),
+                        })
+                      }
+                      sx={{ width: 80 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      type="number"
+                      size="small"
+                      value={book.entryLimitOffset}
+                      onChange={e =>
+                        patchBook(book.instrument, { entryLimitOffset: Number(e.target.value) })
+                      }
+                      sx={{ width: 80 }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <TextField
+                      select
+                      size="small"
+                      value={book.openClassify}
+                      onChange={e =>
+                        patchBook(book.instrument, {
+                          openClassify: normalizeChaseOpenClassify(e.target.value),
+                        })
+                      }
+                      sx={{ width: 150 }}
+                    >
+                      <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF 09:16</MenuItem>
+                      <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy 60m</MenuItem>
+                    </TextField>
+                  </TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => saveBook(book.instrument)}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={!book.enabled}
+                        title="Blocks new entries on this book only. An open position still trails until flat."
+                        onClick={() => saveBook(book.instrument, { paused: !book.paused })}
+                      >
+                        {book.paused ? "Resume" : "Pause"}
+                      </Button>
+                      <Button
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        onClick={() => setResetInstrument(book.instrument)}
+                      >
+                        Reset
+                      </Button>
+                      <Button
+                        size="small"
+                        color="warning"
+                        variant="text"
+                        onClick={() => setRemoveTarget(book.instrument)}
+                      >
+                        Remove
+                      </Button>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </ScrollTable>
+      </Paper>
+      {books
+        .filter(book => book.enabled)
+        .map(book => (
+          <ChaseNotionalPreview
+            key={book.instrument}
+            lots={book.lots}
+            instruments={[book.instrument]}
+            maxNotionalInr={data.notional?.maxNotionalInr ?? 0}
+            priceByIndex={Object.fromEntries(
+              (data.notional?.rows ?? []).map(row => [row.instrument, row.price])
+            )}
+          />
+        ))}
+      <Typography variant="body2" color="text.secondary" sx={{ my: 2 }}>
+        Edit a cell, then Save that row. A book that is off and flat does not load candles or write
+        signals. The minute job still trails a book that is already open.
+      </Typography>
 
       <Button
         color="warning"
