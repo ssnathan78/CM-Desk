@@ -112,7 +112,8 @@ export function planChaseSlBreachFlatten(input: {
   // Paper matcher: a stop fill this tick already covered. Do not MARKET lots.
   if (input.workingStopsFilledThisTick > 0) return "already_covered"
   if (open === 0) return filled > 0 ? "already_covered" : "phantom_empty"
-  // Stale book qty after a full cover (6 Oct Nifty: COMPLETE 130 while qty still −130).
+  // 6 Oct 2026 Nifty: SL COMPLETE 130 while the position feed still showed −130.
+  // Do not drop this when status waits for a flat quantity. A filled stop is already the cover.
   if (filled >= open) return "already_covered"
   if (input.hasWorkingProtectiveStop) return "convert_working_stop"
   return "place_flatten"

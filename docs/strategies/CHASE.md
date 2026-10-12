@@ -251,6 +251,16 @@ Every minute, after paper matching, `planChaseSlBreachFlatten` (`lib/chaseFill.t
 
 Never open size from Chase lots while trying to exit. Halt / trading-disabled must still allow flatten/SL except when the strategy is fully disabled. A cover is stored as `EXIT` (`FLATTEN` is not a column value). If the desk cannot save the order, it is not sent.
 
+Chase status stays LONG/SHORT until the watched quantity is flat. That wait does **not** replace the filled-stop guard below. A COMPLETE protective stop whose filled quantity already covers the open book is `already_covered` even when the position feed still shows the old size. Do not remove that check in order to “wait for flat.”
+
+### 6 Oct 2026 Nifty — filled stop, then a second buy
+
+Nifty was short 130 `NIFTY26OCTFUT`. The protective buy-stop (trigger 22806, placed at the 09:16 trail) filled at **12:38:55 IST** at 22808 and the short was flat. At **12:39:00** the minute job still treated the book as short and sent another buy of 130 at 22808.10. That opened a new long. The long was sold on 7 Oct at 22616 (**−₹24,973**). Midcap the same day was a single cover: buy 240 at 12:17:22, short closed, no second order.
+
+`filledCoverQty` counts Kite stop / trigger fills on the cover side. When that filled size is at least the open quantity, the plan is `already_covered` and no market cover is sent. The 12 Oct status rule only delays the move to `AWAITING_SIGNAL` until quantity is 0. It still refuses a second order when this stop fill is already on the Kite book.
+
+A filled **market** cover is not a stop fill, and once it is COMPLETE it is no longer a working order. If the position feed is still showing the old quantity on the next minute, that path can still send another cover. That is a separate hole from 6 Oct.
+
 ---
 
 ## 11. Three books: Chase status, ledger, Kite
