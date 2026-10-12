@@ -15,6 +15,7 @@ import { useRouter } from "next/router"
 import React, { useEffect, useState } from "react"
 import Layout from "../components/Layout"
 import TradeDetails from "../components/lib/tradeDetails"
+import { useSnackbar } from "../components/lib/useSnackbar"
 import ATMStraddleTradeForm from "../components/trades/atmStraddle/TradeSetupForm"
 import ATMStrangleTradeForm from "../components/trades/atmStrangle/TradeSetupForm"
 import { getSchedulingStateProps } from "../lib/browserUtils"
@@ -73,6 +74,7 @@ const emptyDayState = (): DailyPlansConfig => ({
 
 const Plan = () => {
   useUser({ redirectTo: "/" })
+  const { showMessage, SnackbarAlert } = useSnackbar()
   const router = useRouter()
 
   const [dayState, setDayState] = useState<DailyPlansConfig>(emptyDayState)
@@ -234,7 +236,7 @@ const Plan = () => {
           .map(cleanupForRemoteSync)
 
         if (config.length === 0) {
-          window.alert("Pick an index before saving.")
+          showMessage("Pick an index before saving.", "info")
           return
         }
 
@@ -258,7 +260,7 @@ const Plan = () => {
       })
       handleClose()
     } catch (err: any) {
-      window.alert(err?.response?.data?.error || err.message || "Could not save template")
+      showMessage(err?.response?.data?.error || err.message || "Could not save template", "error")
     }
   }
 
@@ -303,12 +305,17 @@ const Plan = () => {
     strategyKey: string
   }) => {
     const stratConfig = dayState[dayOfWeek].strategies[strategyKey]
-    await axios.delete("/api/plan", {
-      data: {
-        dayOfWeek: dayOfWeek.toUpperCase(),
-        config: stratConfig,
-      },
-    })
+    try {
+      await axios.delete("/api/plan", {
+        data: {
+          dayOfWeek: dayOfWeek.toUpperCase(),
+          config: stratConfig,
+        },
+      })
+    } catch (err: any) {
+      showMessage(err?.response?.data?.error || err.message || "Could not delete template", "error")
+      return
+    }
 
     if (editing?.strategyKey === strategyKey) {
       handleClose()
@@ -329,6 +336,7 @@ const Plan = () => {
           ),
       },
     })
+    showMessage("Template deleted.", "success")
   }
 
   const reloadPlans = async () => {
@@ -402,10 +410,14 @@ const Plan = () => {
   }
 
   const handleSaveAsDefaults = async (strategy: STRATEGIES) => {
-    const raw = stratState[strategy]
-    const config = strategy === STRATEGIES.CHASE ? raw : cleanupForRemoteSync(raw)
-    await axios.put("/api/strategy-defaults", { strategy, config })
-    window.alert("Saved as master defaults for this strategy.")
+    try {
+      const raw = stratState[strategy]
+      const config = strategy === STRATEGIES.CHASE ? raw : cleanupForRemoteSync(raw)
+      await axios.put("/api/strategy-defaults", { strategy, config })
+      showMessage("Saved as master defaults for this strategy.", "success")
+    } catch (err: any) {
+      showMessage(err?.response?.data?.error || err.message || "Could not save defaults", "error")
+    }
   }
 
   const handleResetSaved = async (
@@ -415,7 +427,14 @@ const Plan = () => {
   ) => {
     if (!window.confirm("Replace this weekday template with the master defaults?")) return
     const existing = dayState[dayOfWeek].strategies[strategyKey]
-    const { data } = await axios.get("/api/strategy-defaults", { params: { strategy } })
+    let data: { config: Record<string, unknown> }
+    try {
+      const response = await axios.get("/api/strategy-defaults", { params: { strategy } })
+      data = response.data
+    } catch (err: any) {
+      showMessage(err?.response?.data?.error || err.message || "Could not reset template", "error")
+      return
+    }
     const config = cleanupForRemoteSync({
       ...getDefaultState(strategy),
       ...data.config,
@@ -429,13 +448,18 @@ const Plan = () => {
       expiryType: EXPIRY_TYPE.CURRENT,
       productType: strategy === STRATEGIES.CHASE ? PRODUCT_TYPE.NRML : PRODUCT_TYPE.MIS,
     } as AvailablePlansConfig)
-    await axios.put("/api/plan", {
-      id: existing.id,
-      dayOfWeek: dayOfWeek.toUpperCase(),
-      config,
-    })
-    await reloadPlans()
-    handleClose()
+    try {
+      await axios.put("/api/plan", {
+        id: existing.id,
+        dayOfWeek: dayOfWeek.toUpperCase(),
+        config,
+      })
+      await reloadPlans()
+      handleClose()
+      showMessage("Template reset to the master defaults.", "success")
+    } catch (err: any) {
+      showMessage(err?.response?.data?.error || err.message || "Could not reset template", "error")
+    }
   }
 
   const handleCopyToOtherDays = async (
@@ -445,12 +469,17 @@ const Plan = () => {
   ) => {
     if (!window.confirm("Overwrite the other weekdays with this saved template?")) return
     const existing = dayState[dayOfWeek].strategies[strategyKey]
-    await axios.post("/api/plan/copy", {
-      dayOfWeek: dayOfWeek.toUpperCase(),
-      strategy,
-      id: existing.id,
-    })
-    await reloadPlans()
+    try {
+      await axios.post("/api/plan/copy", {
+        dayOfWeek: dayOfWeek.toUpperCase(),
+        strategy,
+        id: existing.id,
+      })
+      await reloadPlans()
+      showMessage("Copied to the other weekdays.", "success")
+    } catch (err: any) {
+      showMessage(err?.response?.data?.error || err.message || "Could not copy template", "error")
+    }
   }
 
   const renderChaseForm = (dayOfWeek: DailyPlansDayKey) => (
@@ -655,6 +684,7 @@ const Plan = () => {
 
   return (
     <Layout title="Trade plan" maxWidth="xl">
+      {SnackbarAlert}
       <Typography variant="h5" component="h1">
         Weekday templates
       </Typography>

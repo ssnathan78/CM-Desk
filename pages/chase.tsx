@@ -1,5 +1,4 @@
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -19,9 +18,11 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 
 import Layout from "../components/Layout"
+import { useActionNotice, useRowNotices } from "../components/lib/ActionNotice"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
 import ScrollTable from "../components/lib/ScrollTable"
+import { useSnackbar } from "../components/lib/useSnackbar"
 import {
   CHASE_INDEX_ORDER,
   CHASE_OPEN_CLASSIFY,
@@ -78,7 +79,9 @@ const ChasePlanPage = () => {
   const [books, setBooks] = useState<ChaseBookConfig[]>(
     CHASE_INDEX_ORDER.map(instrument => defaultChaseBook(instrument, instrument === "NIFTY"))
   )
-  const [status, setStatus] = useState("")
+  const { rows: rowNotice, showRow } = useRowNotices()
+  const { showNotice: showSearchNotice, NoticeBanner: searchNotice } = useActionNotice()
+  const { showMessage, SnackbarAlert } = useSnackbar()
   const [resetInstrument, setResetInstrument] = useState<string | null>(null)
   const [flattenOpen, setFlattenOpen] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<string | null>(null)
@@ -107,11 +110,16 @@ const ChasePlanPage = () => {
         body: JSON.stringify({ config: next }),
       })
       if (saved.books?.length) setBooks(saved.books)
-      setStatus(`Saved ${instrument}.`)
+      const verb = patch.paused === true ? "Paused" : patch.paused === false ? "Resumed" : "Saved"
+      showRow(instrument, `${verb} ${instrument}.`, "success")
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      setStatus((err.data as { error?: string })?.error || err.message || "Could not save.")
+      showRow(
+        instrument,
+        (err.data as { error?: string })?.error || err.message || "Could not save.",
+        "error"
+      )
     }
   }
 
@@ -123,12 +131,13 @@ const ChasePlanPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ strategy: "CHASE" }),
       })
-      setStatus("Chase squared off. The next hourly job can take a fresh signal.")
+      showMessage("Chase squared off. The next hourly job can take a fresh signal.", "success")
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      setStatus(
-        (err.data as { error?: string })?.error || err.message || "Could not square off Chase."
+      showMessage(
+        (err.data as { error?: string })?.error || err.message || "Could not square off Chase.",
+        "error"
       )
     }
   }
@@ -141,14 +150,18 @@ const ChasePlanPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reset-signal", instrument }),
       })
-      setStatus(
-        `${instrument} reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal.`
+      showRow(
+        instrument,
+        `${instrument} reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal.`,
+        "success"
       )
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      setStatus(
-        (err.data as { error?: string })?.error || err.message || "Could not reset Chase status."
+      showRow(
+        instrument,
+        (err.data as { error?: string })?.error || err.message || "Could not reset Chase status.",
+        "error"
       )
     }
   }
@@ -159,11 +172,12 @@ const ChasePlanPage = () => {
         `/api/chase-underlyings?q=${encodeURIComponent(query)}`
       )
       setMatches(found.names ?? [])
-      setStatus(found.names?.length ? "" : "No matching unexpired NFO future.")
+      if (!found.names?.length) showSearchNotice("No matching unexpired NFO future.", "info")
     } catch (e) {
       const err = e as FetchJsonError
-      setStatus(
-        (err.data as { error?: string })?.error || err.message || "Could not search futures."
+      showSearchNotice(
+        (err.data as { error?: string })?.error || err.message || "Could not search futures.",
+        "error"
       )
     }
   }
@@ -177,11 +191,14 @@ const ChasePlanPage = () => {
       })
       if (saved.books?.length) setBooks(saved.books)
       setMatches(current => current.filter(name => name !== instrument))
-      setStatus(`${instrument} added. Trade this book is off until you turn it on.`)
+      showRow(instrument, "Added. Trade this book is off until you turn it on.", "success")
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      setStatus((err.data as { error?: string })?.error || err.message || "Could not add.")
+      showSearchNotice(
+        (err.data as { error?: string })?.error || err.message || "Could not add.",
+        "error"
+      )
     }
   }
 
@@ -194,11 +211,15 @@ const ChasePlanPage = () => {
         body: JSON.stringify({ action: "remove-underlying", instrument }),
       })
       if (saved.books) setBooks(saved.books)
-      setStatus(`${instrument} removed.`)
+      showMessage(`${instrument} removed.`, "success")
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      setStatus((err.data as { error?: string })?.error || err.message || "Could not remove.")
+      showRow(
+        instrument,
+        (err.data as { error?: string })?.error || err.message || "Could not remove.",
+        "error"
+      )
     }
   }
 
@@ -216,6 +237,7 @@ const ChasePlanPage = () => {
 
   return (
     <Layout title="Chase plan" maxWidth="xl">
+      {SnackbarAlert}
       <Typography variant="h5" component="h1">
         Chase
       </Typography>
@@ -242,6 +264,7 @@ const ChasePlanPage = () => {
           Search futures
         </Button>
       </Stack>
+      {searchNotice}
       {matches.length ? (
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
           {matches.map(name => (
@@ -297,6 +320,18 @@ const ChasePlanPage = () => {
                               : "Entries allowed"
                         }
                       />
+                      {rowNotice[book.instrument] ? (
+                        <Typography
+                          variant="caption"
+                          color={
+                            rowNotice[book.instrument].severity === "error"
+                              ? "error"
+                              : "success.main"
+                          }
+                        >
+                          {rowNotice[book.instrument].text}
+                        </Typography>
+                      ) : null}
                     </Stack>
                   </TableCell>
                   <TableCell>
@@ -473,16 +508,6 @@ const ChasePlanPage = () => {
       >
         Square off all Chase books
       </Button>
-
-      {status ? (
-        <Alert
-          severity={
-            status.startsWith("Could") || status.includes("open book") ? "error" : "success"
-          }
-        >
-          {status}
-        </Alert>
-      ) : null}
 
       <ConfirmDialog
         open={flattenOpen}

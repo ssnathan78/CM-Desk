@@ -1,5 +1,5 @@
 import { Alert, Snackbar } from "@mui/material"
-import React, { useCallback, useState } from "react"
+import { useCallback, useState } from "react"
 
 export function useSnackbar() {
   const [message, setMessage] = useState<string | null>(null)
@@ -12,10 +12,15 @@ export function useSnackbar() {
 
   const SnackbarAlert = (
     <Snackbar
+      key={message ? `${severity}:${message}` : "closed"}
       open={Boolean(message)}
-      autoHideDuration={5000}
-      onClose={() => setMessage(null)}
-      anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      autoHideDuration={severity === "error" ? null : 4000}
+      onClose={(_event, reason) => {
+        if (severity === "error" && reason !== "escapeKeyDown") return
+        setMessage(null)
+      }}
+      anchorOrigin={{ vertical: "top", horizontal: "right" }}
+      sx={{ mt: 7 }}
     >
       <Alert severity={severity} onClose={() => setMessage(null)} sx={{ width: "100%" }}>
         {message}

@@ -15,11 +15,11 @@ import {
 } from "@mui/material"
 import Link from "next/link"
 import { useEffect, useState } from "react"
-
 import fetchJson from "../../lib/fetchJson"
 import { formatInr } from "../../lib/trading/notional"
 import { RISK_STRATEGY_KEYS, type RiskSettings } from "../../lib/trading/riskEngine"
 import type { DeskSetupNotional } from "../../lib/trading/setupNotional"
+import { useActionNotice } from "../lib/ActionNotice"
 
 const LABELS: Record<(typeof RISK_STRATEGY_KEYS)[number], string> = {
   ATM_STRADDLE: "ATM Straddle",
@@ -57,7 +57,16 @@ export default function RiskControls({
   onSaved: () => void
 }) {
   const [settings, setSettings] = useState<RiskSettings>(initial)
-  const [status, setStatus] = useState<string | null>(null)
+  const {
+    showNotice: showSaveNotice,
+    clearNotice: clearSaveNotice,
+    NoticeBanner: saveNotice,
+  } = useActionNotice()
+  const {
+    showNotice: showResetNotice,
+    clearNotice: clearResetNotice,
+    NoticeBanner: resetNotice,
+  } = useActionNotice()
   const [saving, setSaving] = useState(false)
   const [resettingChase, setResettingChase] = useState(false)
 
@@ -67,17 +76,17 @@ export default function RiskControls({
 
   const save = async () => {
     setSaving(true)
-    setStatus(null)
+    clearSaveNotice()
     try {
       await fetchJson("/api/desk/risk", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings }),
       })
-      setStatus("Saved.")
+      showSaveNotice("Saved.", "success")
       onSaved()
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : "Could not save")
+      showSaveNotice(e instanceof Error ? e.message : "Could not save", "error")
     } finally {
       setSaving(false)
     }
@@ -389,17 +398,23 @@ export default function RiskControls({
                       return
                     }
                     setResettingChase(true)
-                    setStatus(null)
+                    clearResetNotice()
                     try {
                       await fetchJson("/api/chase-settings", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ action: "reset-signal" }),
                       })
-                      setStatus("Chase signals reset to AWAITING_SIGNAL on all indexes.")
+                      showResetNotice(
+                        "Chase signals reset to AWAITING_SIGNAL on all indexes.",
+                        "success"
+                      )
                       onSaved()
                     } catch (e) {
-                      setStatus(e instanceof Error ? e.message : "Could not reset Chase")
+                      showResetNotice(
+                        e instanceof Error ? e.message : "Could not reset Chase",
+                        "error"
+                      )
                     } finally {
                       setResettingChase(false)
                     }
@@ -407,18 +422,19 @@ export default function RiskControls({
                 >
                   {resettingChase ? "Resetting…" : "Reset Chase to fresh signal"}
                 </Button>
+                {resetNotice}
               </Box>
             ) : null}
           </Paper>
         )
       })}
 
+      {saveNotice}
       <Box>
         <Button variant="contained" disabled={saving} onClick={save}>
           {saving ? "Saving…" : "Save risk limits"}
         </Button>
       </Box>
-      {status ? <Alert severity={status === "Saved." ? "success" : "error"}>{status}</Alert> : null}
     </Stack>
   )
 }
