@@ -134,6 +134,13 @@
       "when": 1756980000018,
       "tag": "0017_chase_market_protection",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1756980000019,
+      "tag": "0018_chase_universe",
+      "breakpoints": true
     }
   ]
 }
