@@ -3,6 +3,7 @@ import dayjs from "dayjs"
 import {
   chaseFuturesSelection,
   futuresChain,
+  futuresLotSizes,
   monthlyOptionExpiry,
   optionExpiryDates,
   type InstrumentSlice,
@@ -100,5 +101,33 @@ describe("option expiries", () => {
     const dates = optionExpiryDates(rows, "NIFTY", now)
     expect(dates).toEqual(["2026-09-08", "2026-09-15", "2026-09-29"])
     expect(monthlyOptionExpiry(dates, now)).toBe("2026-09-29")
+  })
+})
+
+describe("futuresLotSizes", () => {
+  const now = dayjs("2026-09-07T10:00:00+05:30")
+
+  it("uses the front-month future lot size, including names outside the four indexes", () => {
+    const rows: InstrumentSlice[] = [
+      row({ tradingsymbol: "NIFTY26SEPFUT", instrumentType: "FUT", expiry: "2026-09-29", lotSize: 65 }),
+      row({
+        tradingsymbol: "RELIANCE26SEPFUT",
+        name: "RELIANCE",
+        instrumentType: "FUT",
+        expiry: "2026-09-29",
+        lotSize: 500,
+      }),
+      row({
+        tradingsymbol: "RELIANCE26OCTFUT",
+        name: "RELIANCE",
+        instrumentType: "FUT",
+        expiry: "2026-10-27",
+        lotSize: 500,
+      }),
+    ]
+    expect(futuresLotSizes(rows, ["RELIANCE", "NIFTY", "INFY"], now)).toEqual({
+      RELIANCE: 500,
+      NIFTY: 65,
+    })
   })
 })

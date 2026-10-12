@@ -1,5 +1,6 @@
 import {
   Alert,
+  Box,
   Button,
   Chip,
   MenuItem,
@@ -31,6 +32,45 @@ import { normalizeChaseOpenClassify } from "../lib/chaseOpenClassify"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
 import useUser from "../lib/useUser"
+
+const CHASE_COLUMN_NOTES = [
+  {
+    term: "Trade",
+    text: "Whether this book is in the hourly engine. Off skips candles and new signals. If it is already LONG, SHORT, or waiting on an entry, the minute job still trails and stops it.",
+  },
+  {
+    term: "Pause / Resume",
+    text: "Blocks new entries on this book only. EMA still updates. An open position keeps its stop until flat, then it will not re-enter until you Resume. Pause is disabled while Trade is off. It saves immediately.",
+  },
+  {
+    term: "Lots",
+    text: "How many futures lots this book trades. Quantity is lots × the front-month contract’s lot size. Desk max notional and Chase max lots still apply to every Chase book together.",
+  },
+  {
+    term: "EMA",
+    text: "Length of the hourly exponential moving average on typical price (high + low + close) / 3. Shipped value is 40. A longer period turns less often.",
+  },
+  {
+    term: "Buffer %",
+    text: "The close must be this percent above the EMA for a long, or this percent below for a short. Shipped value is 0.2, which is 1.002× / 0.998× the EMA. A larger buffer means fewer signals.",
+  },
+  {
+    term: "Protect %",
+    text: "How far the limit may sit from the last price on a Chase market order. Shipped value is 1.5. Allowed range is 0.25 to 5.",
+  },
+  {
+    term: "Entry offset",
+    text: "When the trigger is not yet traded, the limit is the trigger plus this many rupees on a buy, and minus on a sell. Shipped value is 5. This is not the strategy stop.",
+  },
+  {
+    term: "09:16",
+    text: "PDF compares the 09:16 candle close with the overnight hourly EMA. Legacy steps the EMA on a 60-minute bar and is only for comparing with the older port.",
+  },
+  {
+    term: "Save / Reset / Remove",
+    text: "Save writes the row. Reset returns this book to a fresh signal and does not flatten an open future. Remove drops the underlying and is refused while the book is open. Neither sends an order.",
+  },
+] as const
 
 const ChasePlanPage = () => {
   useUser({ redirectTo: "/" })
@@ -237,7 +277,7 @@ const ChasePlanPage = () => {
                 <TableCell title="PDF uses the 09:16 candle close. Legacy steps the EMA on a 60-minute bar.">
                   09:16
                 </TableCell>
-                <TableCell />
+                <TableCell align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -338,12 +378,20 @@ const ChasePlanPage = () => {
                       <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy 60m</MenuItem>
                     </TextField>
                   </TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap" }}>
+                  <TableCell sx={{ verticalAlign: "middle", width: 196 }}>
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 0.75,
+                        width: 188,
+                      }}
+                    >
                       <Button
                         size="small"
                         variant="contained"
                         onClick={() => saveBook(book.instrument)}
+                        sx={{ minWidth: 0 }}
                       >
                         Save
                       </Button>
@@ -353,6 +401,7 @@ const ChasePlanPage = () => {
                         disabled={!book.enabled}
                         title="Blocks new entries on this book only. An open position still trails until flat."
                         onClick={() => saveBook(book.instrument, { paused: !book.paused })}
+                        sx={{ minWidth: 0 }}
                       >
                         {book.paused ? "Resume" : "Pause"}
                       </Button>
@@ -361,18 +410,20 @@ const ChasePlanPage = () => {
                         color="warning"
                         variant="outlined"
                         onClick={() => setResetInstrument(book.instrument)}
+                        sx={{ minWidth: 0 }}
                       >
                         Reset
                       </Button>
                       <Button
                         size="small"
                         color="warning"
-                        variant="text"
+                        variant="outlined"
                         onClick={() => setRemoveTarget(book.instrument)}
+                        sx={{ minWidth: 0 }}
                       >
                         Remove
                       </Button>
-                    </Stack>
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))}
@@ -391,8 +442,24 @@ const ChasePlanPage = () => {
             priceByIndex={Object.fromEntries(
               (data.notional?.rows ?? []).map(row => [row.instrument, row.price])
             )}
+            lotSizeByIndex={data.notional?.lotSizes}
           />
         ))}
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          What each column does
+        </Typography>
+        <Stack spacing={0.75}>
+          {CHASE_COLUMN_NOTES.map(note => (
+            <Typography key={note.term} variant="body2" color="text.secondary">
+              <Box component="span" sx={{ color: "text.primary", fontWeight: 600 }}>
+                {note.term}.
+              </Box>{" "}
+              {note.text}
+            </Typography>
+          ))}
+        </Stack>
+      </Paper>
       <Typography variant="body2" color="text.secondary" sx={{ my: 2 }}>
         Edit a cell, then Save that row. A book that is off and flat does not load candles or write
         signals. The minute job still trails a book that is already open.

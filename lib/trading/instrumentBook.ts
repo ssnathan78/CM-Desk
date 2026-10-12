@@ -63,6 +63,21 @@ export function futuresChain(
     .sort((a, b) => dayjs(a.expiry).valueOf() - dayjs(b.expiry).valueOf())
 }
 
+/** Front-month lot size for each underlying, from an already-loaded NFO dump. */
+export function futuresLotSizes(
+  rows: InstrumentSlice[],
+  names: string[],
+  now: Dayjs = dayjs()
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const name of names) {
+    const selected = chaseFuturesSelection(futuresChain(rows, name, now), now)
+    const lotSize = selected.newEntry?.lotSize || selected.front?.lotSize || 0
+    if (lotSize > 0) out[name] = lotSize
+  }
+  return out
+}
+
 export function chaseFuturesSelection(
   chain: InstrumentSlice[],
   now: Dayjs = dayjs()

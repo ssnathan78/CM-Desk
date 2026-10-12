@@ -109,18 +109,6 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListItemButton>
         <ListItemButton
           component={Link}
-          href="/plan"
-          selected={selected(asPath, "/plan")}
-          onClick={close}
-          sx={{ ...itemSx, pl: 1.5 }}
-        >
-          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <CalendarMonthOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Trade plan" secondary="Weekday templates" />
-        </ListItemButton>
-        <ListItemButton
-          component={Link}
           href={alertCount ? "/desk?tab=alerts" : "/desk"}
           selected={selected(asPath, "/desk")}
           onClick={close}
@@ -147,6 +135,18 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         >
           Intraday
         </ListSubheader>
+        <ListItemButton
+          component={Link}
+          href="/plan"
+          selected={selected(asPath, "/plan")}
+          onClick={close}
+          sx={itemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
+            <CalendarMonthOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Trade plan" secondary="Weekday templates" />
+        </ListItemButton>
         <ListItemButton
           component={Link}
           href="/strat/straddle"

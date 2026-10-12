@@ -12,6 +12,21 @@ import { validateChaseSettings } from "../../lib/chaseValidation"
 import logger from "../../lib/logger"
 import withSession from "../../lib/session"
 
+async function chaseBookLotSizes(names: string[]): Promise<Record<string, number>> {
+  if (!names.length) return {}
+  try {
+    const { getIndexInstruments } = await import("../../lib/kiteUtils")
+    const { fromKiteInstrument, futuresLotSizes } = await import("../../lib/trading/instrumentBook")
+    const rows = (await getIndexInstruments())
+      .map(row => fromKiteInstrument(row))
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    return futuresLotSizes(rows, names)
+  } catch (e) {
+    logger.warn("[chase-settings] lot size preview unavailable", e)
+    return {}
+  }
+}
+
 export default withSession(async (req, res) => {
   const user = req.session.user
   if (!user) {
@@ -21,6 +36,7 @@ export default withSession(async (req, res) => {
   try {
     if (req.method === "GET") {
       const [config, books] = await Promise.all([getChaseSettings(), listChaseBooks()])
+      const lotSizes = await chaseBookLotSizes(books.map(book => book.instrument))
       try {
         const { buildDeskSetupNotional } = await import("../../lib/trading/setupNotional")
         const setups = await buildDeskSetupNotional()
@@ -30,11 +46,12 @@ export default withSession(async (req, res) => {
           notional: {
             maxNotionalInr: setups.maxNotionalInr,
             rows: setups.rows.filter(row => row.source === "CHASE"),
+            lotSizes,
           },
         })
       } catch (e) {
         logger.warn("[chase-settings] notional preview unavailable", e)
-        return res.json({ config, books })
+        return res.json({ config, books, notional: { maxNotionalInr: 0, rows: [], lotSizes } })
       }
     }
 

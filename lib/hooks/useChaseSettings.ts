@@ -9,6 +9,7 @@ type ChaseSettingsResponse = {
   notional?: {
     maxNotionalInr: number
     rows: SetupNotionalRow[]
+    lotSizes?: Record<string, number>
   }
 }
 
