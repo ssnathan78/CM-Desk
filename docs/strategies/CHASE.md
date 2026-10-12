@@ -245,11 +245,11 @@ Every minute, after paper matching, `planChaseSlBreachFlatten` (`lib/chaseFill.t
 | Plan | Meaning | Orders |
 |---|---|---|
 | `already_covered` | Paper stop filled this tick, book qty is 0, or live SL `filled_quantity` ≥ open qty (stale book after COMPLETE). | **Do not** place a second MARKET. Persist EXIT only once qty is gone. |
-| `convert_working_stop` | Live book still open; a working trigger exists. | Convert that order to MARKET. Do not also `placeOrder` flatten. |
-| `place_flatten` | Open book, no covering stop fill. | Place FLATTEN MARKET sized from **ledger qty**, never from configured lots. |
-| `phantom_empty` | `chase_status` is LONG/SHORT but book qty is 0. | No flatten. Reset to `AWAITING_SIGNAL`. Do not `JOB_FAILED` / `CHASE_SL_NO_POSITION`. |
+| `convert_working_stop` | Live book still open and Kite still has that trigger. A desk-only row is not a working live stop. | Convert that Kite order to MARKET. If Kite does not have it, send nothing. Do not invent a replacement market order. |
+| `place_flatten` | Open book, no covering stop fill, and the cover side still matches the open quantity (buy only while short, sell only while long). | One MARKET cover. Live size is **Kite qty**. Paper size is the paper ledger. Never configured lots. A flat or flipped Kite book is not a cover. |
+| `phantom_empty` | `chase_status` is LONG/SHORT but the watched qty is 0. Live watches Kite, not a stale desk row. | No flatten. Reset to `AWAITING_SIGNAL` only when that qty is flat. Do not `JOB_FAILED` / `CHASE_SL_NO_POSITION`. |
 
-Never open size from Chase lots while trying to exit. Halt / trading-disabled must still allow flatten/SL except when the strategy is fully disabled.
+Never open size from Chase lots while trying to exit. Halt / trading-disabled must still allow flatten/SL except when the strategy is fully disabled. A cover is stored as `EXIT` (`FLATTEN` is not a column value). If the desk cannot save the order, it is not sent.
 
 ---
 

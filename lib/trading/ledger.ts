@@ -24,6 +24,7 @@ import {
 } from "./accounting"
 import { fillFingerprint, mapKiteOrderStatus } from "./kiteMap"
 import { moneyFromUnknown, moneyMulQty, moneyToString } from "./money"
+import { storedOrderPurpose } from "./orderPurpose"
 import { assertOrderTransition } from "./stateMachine"
 import {
   type AuditEventType,
@@ -221,7 +222,8 @@ export async function recordOrderIntent(input: {
   const job = input.jobId
     ? { id: input.jobId, strategy: input.strategy ?? null }
     : await lookupJobByTag(input.orderTag)
-  const purpose = input.purpose ?? inferPurpose({ orderType: input.orderType })
+  const purpose =
+    storedOrderPurpose(input.purpose ?? inferPurpose({ orderType: input.orderType })) ?? "OTHER"
   const key =
     input.idempotencyKey ??
     orderIntentKey({

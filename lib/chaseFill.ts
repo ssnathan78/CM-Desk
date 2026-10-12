@@ -220,6 +220,41 @@ export function isChaseWorkingBrokerStatus(status?: string | null): boolean {
   )
 }
 
+export function chaseCoverMatchesOpenBook(side: "BUY" | "SELL", signedQty: number): boolean {
+  if (side === "BUY") return signedQty < 0
+  return signedQty > 0
+}
+
+/** Clear LONG/SHORT only once the watched quantity is flat. A sent cover is not a flat book. */
+export function chaseSlBreachMayClearStatus(input: { plan: string; signedQty: number }): boolean {
+  if (
+    input.plan !== "phantom_empty" &&
+    input.plan !== "already_covered" &&
+    input.plan !== "place_flatten" &&
+    input.plan !== "convert_working_stop"
+  ) {
+    return false
+  }
+  return chaseFlattenQty(input.signedQty) === 0
+}
+
+export function chaseHasWorkingSameSideOrder(input: {
+  tradingsymbol: string
+  side: "BUY" | "SELL"
+  kiteOrders?: Array<{
+    tradingsymbol?: string | null
+    transaction_type?: string | null
+    status?: string | null
+  }>
+}): boolean {
+  return (input.kiteOrders ?? []).some(
+    o =>
+      o.tradingsymbol === input.tradingsymbol &&
+      o.transaction_type === input.side &&
+      isChaseWorkingBrokerStatus(o.status)
+  )
+}
+
 export function chaseHasWorkingProtectiveStop(input: {
   paperBook: boolean
   tradingsymbol: string
@@ -243,8 +278,7 @@ export function chaseHasWorkingProtectiveStop(input: {
     const paperOrder = isSyntheticProvenance(ledgerProvenance(o.provenance))
     return input.paperBook ? paperOrder : !paperOrder
   })
-  if (ledgerHit) return true
-  if (input.paperBook) return false
+  if (input.paperBook) return ledgerHit
   return (input.kiteOrders ?? []).some(
     o =>
       o.tradingsymbol === input.tradingsymbol &&

@@ -391,6 +391,11 @@ export async function placeOrder(
       strategy: strategy ?? null,
     }
   )
+  if (!ledgerOrderId) {
+    const message = `Refusing ${kiteOrder.transaction_type || ""} ${kiteOrder.quantity || ""} ${kiteOrder.tradingsymbol || ""} — the order was not saved`
+    logger.error(`[placeOrder] ${message}`)
+    throw new Error(message)
+  }
   try {
     if (paperExecution) {
       const mockId = ledgerOrderId ? `paper:${ledgerOrderId}` : `paper:${Date.now()}`
@@ -1538,22 +1543,23 @@ export async function placeSL(
   const kite = getKiteInstance(accessToken)
 
   const kitePositions = (await kite.getPositions()) as any
+  const paperBook = isMockOrder() || isPaperStrategy(await getRiskSettings(), "CHASE")
   let position = kitePositions.net?.find(
-    (p: any) => p.tradingsymbol === tradingsymbol && p.quantity !== 0
+    (p: any) => p.tradingsymbol === tradingsymbol && Number(p.quantity) !== 0
   )
-  if (!position) {
-    const paperBook = isMockOrder() || isPaperStrategy(await getRiskSettings(), "CHASE")
+  if (!position && paperBook) {
     const ledger = (await getOpenPositions()).find(p => {
       if (p.tradingsymbol !== tradingsymbol || p.quantity === 0) return false
-      const paperRow = isSyntheticProvenance(ledgerProvenance(p.provenance))
-      return paperBook ? paperRow : !paperRow
+      return isSyntheticProvenance(ledgerProvenance(p.provenance))
     })
     if (ledger) {
       position = { tradingsymbol, quantity: ledger.quantity, product: ledger.product }
     }
   }
   if (!position) {
-    logger.warn(`[placeSL] No open position found for ${tradingsymbol}`)
+    logger.warn(
+      `[placeSL] No open ${paperBook ? "paper" : "Kite"} position for ${tradingsymbol} — not placing a stop or cover`
+    )
     return
   }
   const actualTransactionType = position.quantity > 0 ? "SELL" : "BUY"
@@ -1565,7 +1571,6 @@ export async function placeSL(
   }
 
   const price = chaseSlLimitPrice(transactionType, stoploss)
-  const paperBook = isMockOrder() || isPaperStrategy(await getRiskSettings(), "CHASE")
   if (paperBook) {
     const paperSl = (await getOpenOrders()).find(o => {
       if (o.tradingsymbol !== tradingsymbol || o.side !== transactionType) return false
@@ -1749,7 +1754,7 @@ export async function getMultipleInstrumentPrices(
 export async function getNetPositionQty(
   kite: any,
   tradingsymbol: string,
-  opts?: { ledgerFallback?: boolean }
+  opts?: { ledgerFallback?: boolean; strict?: boolean }
 ): Promise<number> {
   try {
     const positions = await kite.getPositions()
@@ -1757,6 +1762,7 @@ export async function getNetPositionQty(
     return Number(net?.quantity || 0)
   } catch (e) {
     logger.warn("[getNetPositionQty] kite positions unavailable", e)
+    if (opts?.strict) throw e
   }
   if (opts?.ledgerFallback === false) return 0
   const ledger = (await getOpenPositions()).filter(

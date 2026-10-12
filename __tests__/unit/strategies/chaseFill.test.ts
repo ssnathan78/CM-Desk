@@ -4,8 +4,12 @@ import {
   chaseExecutionModeSwitchBlocked,
   chaseFillAllowsStatusFlip,
   chaseFillFromDecision,
+  chaseCoverMatchesOpenBook,
   chaseFlattenQty,
+  chaseHasWorkingProtectiveStop,
+  chaseHasWorkingSameSideOrder,
   chaseRolloverOrderQty,
+  chaseSlBreachMayClearStatus,
   chaseLotsFromConfig,
   chaseProtectiveStopFillQty,
   chaseSideFromNetQty,
@@ -349,5 +353,98 @@ describe("chaseFill", () => {
         ],
       })
     ).toBe(130)
+  })
+
+  it("does not treat a desk-only live stop as a working Kite stop", () => {
+    expect(
+      chaseHasWorkingProtectiveStop({
+        paperBook: false,
+        tradingsymbol: "MIDCPNIFTY26OCTFUT",
+        side: "BUY",
+        ledgerOrders: [
+          {
+            tradingsymbol: "MIDCPNIFTY26OCTFUT",
+            purpose: "SL",
+            side: "BUY",
+            provenance: "LIVE",
+          },
+        ],
+        kiteOrders: [],
+      })
+    ).toBe(false)
+    expect(
+      chaseHasWorkingProtectiveStop({
+        paperBook: false,
+        tradingsymbol: "MIDCPNIFTY26OCTFUT",
+        side: "BUY",
+        ledgerOrders: [],
+        kiteOrders: [
+          {
+            tradingsymbol: "MIDCPNIFTY26OCTFUT",
+            transaction_type: "BUY",
+            status: "TRIGGER PENDING",
+          },
+        ],
+      })
+    ).toBe(true)
+    expect(
+      chaseHasWorkingProtectiveStop({
+        paperBook: true,
+        tradingsymbol: "MIDCPNIFTY26OCTFUT",
+        side: "BUY",
+        ledgerOrders: [
+          {
+            tradingsymbol: "MIDCPNIFTY26OCTFUT",
+            purpose: "SL",
+            side: "BUY",
+            provenance: "PAPER",
+          },
+        ],
+      })
+    ).toBe(true)
+  })
+
+  it("covers only a book that is still on that side", () => {
+    expect(chaseCoverMatchesOpenBook("BUY", -240)).toBe(true)
+    expect(chaseCoverMatchesOpenBook("BUY", 0)).toBe(false)
+    expect(chaseCoverMatchesOpenBook("BUY", 240)).toBe(false)
+    expect(chaseCoverMatchesOpenBook("SELL", 240)).toBe(true)
+    expect(chaseCoverMatchesOpenBook("SELL", -240)).toBe(false)
+  })
+
+  it("clears Chase status only when the watched quantity is flat", () => {
+    expect(chaseSlBreachMayClearStatus({ plan: "phantom_empty", signedQty: 0 })).toBe(true)
+    expect(chaseSlBreachMayClearStatus({ plan: "place_flatten", signedQty: -240 })).toBe(false)
+    expect(chaseSlBreachMayClearStatus({ plan: "skip_cover", signedQty: 0 })).toBe(false)
+    expect(chaseSlBreachMayClearStatus({ plan: "already_covered", signedQty: 0 })).toBe(true)
+  })
+
+  it("sees a working same-side order so a second cover is not sent", () => {
+    expect(
+      chaseHasWorkingSameSideOrder({
+        tradingsymbol: "MIDCPNIFTY26OCTFUT",
+        side: "BUY",
+        kiteOrders: [
+          {
+            tradingsymbol: "MIDCPNIFTY26OCTFUT",
+            transaction_type: "BUY",
+            status: "OPEN",
+          },
+        ],
+      })
+    ).toBe(true)
+    expect(
+      chaseHasWorkingSameSideOrder({
+        tradingsymbol: "MIDCPNIFTY26OCTFUT",
+        side: "BUY",
+        kiteOrders: [
+          {
+            tradingsymbol: "MIDCPNIFTY26OCTFUT",
+            transaction_type: "BUY",
+            status: "COMPLETE",
+          },
+        ],
+      })
+    ).toBe(false)
   })
 })

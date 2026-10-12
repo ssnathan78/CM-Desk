@@ -79,12 +79,15 @@ export async function resolveChaseBookBreakdown(
   const settings = await getRiskSettings()
   const paperBook = isMockOrder() || isPaperStrategy(settings, "CHASE")
   if (!tradingsymbol) {
-    return chaseBookFromSources({
-      paperBook,
-      kiteQty: 0,
-      paperLedgerQty: 0,
-      liveLedgerQty: 0,
-    })
+    return {
+      ...chaseBookFromSources({
+        paperBook,
+        kiteQty: 0,
+        paperLedgerQty: 0,
+        liveLedgerQty: 0,
+      }),
+      kiteQtyKnown: paperBook,
+    }
   }
   const { getOpenPositions } = await import("./trading/ledger")
   const { paperLedgerQty, liveLedgerQty } = splitChaseLedgerQty(
@@ -92,16 +95,23 @@ export async function resolveChaseBookBreakdown(
     tradingsymbol
   )
   let kiteQty = 0
+  let kiteQtyKnown = paperBook
   if (!paperBook) {
     try {
       kiteQty = await getNetPositionQty(getKiteInstance(accessToken), tradingsymbol, {
         ledgerFallback: false,
+        strict: true,
       })
+      kiteQtyKnown = true
     } catch (e) {
+      kiteQtyKnown = false
       logger.warn("[generateSignal] kite qty unavailable", e)
     }
   }
-  return chaseBookFromSources({ paperBook, kiteQty, paperLedgerQty, liveLedgerQty })
+  return {
+    ...chaseBookFromSources({ paperBook, kiteQty, paperLedgerQty, liveLedgerQty }),
+    kiteQtyKnown,
+  }
 }
 
 export type ChaseInstrument = {
