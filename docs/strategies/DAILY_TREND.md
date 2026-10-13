@@ -37,7 +37,7 @@ The database check allows `A`–`Z`, digits, `&`, and `-`, and requires a letter
 
 Search on the page looks up the NSE cash dump by symbol or company name, the same way Chase searches futures, and adds the name **off**. Names already on the book are omitted from the search results. The filter box on the table searches the rows you already have, including the company name and industry shown under the symbol.
 
-The table keeps symbol, market cap (₹ crore, with the stored date), budget, EMA, entry buffer, exit buffer, entry style, state, and stop. Company name and industry sit under the symbol so the row fits the page. **Buf** is the entry buffer percent. **Exit** is the exit buffer percent. **Mcap** is market cap in crore.
+The table keeps On, symbol, company name, industry, market cap (₹ crore, with the stored date), budget, EMA, entry buffer, exit buffer, entry style, state, and stop. Edit, Pause, and Remove sit on the left, next to On. Those controls, the symbol, and the company name stay on screen while industry and the numbers scroll.
 
 ## Nifty 100
 

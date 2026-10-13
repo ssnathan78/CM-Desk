@@ -506,9 +506,10 @@ export default function DailyTrendPage() {
           this process is running, so the book turns over inside a day. The date next to the figure
           is when it was stored. The signal ignores today's candle and uses the last completed daily
           close. Buffer defaults are 1%. A buy size is floor(budget / that close). Turn a row on and
-          set a budget before it can buy.
+          set a budget before it can buy. Edit, Pause, and Remove stay on the left while the numbers
+          scroll. Name and industry stay as their own columns.
         </Typography>
-        <ScrollTable minWidth={860}>
+        <ScrollTable minWidth={1180}>
           <Table size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
             <TableHead>
               <TableRow>
@@ -518,16 +519,38 @@ export default function DailyTrendPage() {
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
+                  sx={{ ...pin(0, 2), width: 48, minWidth: 48 }}
                 />
+                <TableCell sx={{ ...pin(48, 2), width: 156, minWidth: 156 }} />
                 <Sortable
                   label="Symbol"
                   sortKey="symbol"
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
+                  sx={{ ...pin(204, 2), width: 96, minWidth: 96 }}
                 />
                 <Sortable
-                  label="Mcap"
+                  label="Name"
+                  sortKey="name"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                  sx={{
+                    ...pin(300, 2),
+                    minWidth: 160,
+                    boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
+                  }}
+                />
+                <Sortable
+                  label="Industry"
+                  sortKey="industry"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Mcap ₹ cr"
                   sortKey="marketCapCr"
                   active={sortKey}
                   dir={sortDir}
@@ -548,7 +571,7 @@ export default function DailyTrendPage() {
                   onSort={toggleSort}
                 />
                 <Sortable
-                  label="Buf"
+                  label="Buffer"
                   sortKey="bufferPercent"
                   active={sortKey}
                   dir={sortDir}
@@ -582,49 +605,19 @@ export default function DailyTrendPage() {
                   dir={sortDir}
                   onSort={toggleSort}
                 />
-                <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
               {books.map(book => (
                 <TableRow key={book.symbol}>
-                  <TableCell>
+                  <TableCell sx={{ ...pin(0), width: 48, minWidth: 48 }}>
                     <Switch
                       size="small"
                       checked={book.enabled}
                       onChange={e => void saveBook({ ...book, enabled: e.target.checked })}
                     />
                   </TableCell>
-                  <TableCell>
-                    {book.symbol}
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ display: "block", whiteSpace: "normal", maxWidth: 180 }}
-                    >
-                      {[book.name, book.industry].filter(Boolean).join(" · ") || "—"}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatCr(book.marketCapCr)}
-                    {book.marketCapAsOf ? (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block" }}
-                      >
-                        {book.marketCapAsOf}
-                      </Typography>
-                    ) : null}
-                  </TableCell>
-                  <TableCell align="right">{formatCr(book.budgetInr)}</TableCell>
-                  <TableCell>{book.emaPeriod}</TableCell>
-                  <TableCell>{book.bufferPercent}</TableCell>
-                  <TableCell>{book.exitBufferPercent}</TableCell>
-                  <TableCell>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
-                  <TableCell>{book.paused ? "paused" : book.status}</TableCell>
-                  <TableCell>{book.stop ?? "—"}</TableCell>
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  <TableCell sx={{ ...pin(48), whiteSpace: "nowrap", width: 156, minWidth: 156 }}>
                     <Button
                       size="small"
                       sx={{ minWidth: 0, px: 0.5 }}
@@ -653,6 +646,36 @@ export default function DailyTrendPage() {
                       Remove
                     </Button>
                   </TableCell>
+                  <TableCell sx={{ ...pin(204), width: 96, minWidth: 96 }}>{book.symbol}</TableCell>
+                  <TableCell
+                    sx={{
+                      ...pin(300),
+                      minWidth: 160,
+                      boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    {book.name || "—"}
+                  </TableCell>
+                  <TableCell>{book.industry || "—"}</TableCell>
+                  <TableCell align="right">
+                    {formatCr(book.marketCapCr)}
+                    {book.marketCapAsOf ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block" }}
+                      >
+                        {book.marketCapAsOf}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell align="right">{formatCr(book.budgetInr)}</TableCell>
+                  <TableCell>{book.emaPeriod}</TableCell>
+                  <TableCell>{book.bufferPercent}</TableCell>
+                  <TableCell>{book.exitBufferPercent}</TableCell>
+                  <TableCell>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
+                  <TableCell>{book.paused ? "paused" : book.status}</TableCell>
+                  <TableCell>{book.stop ?? "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -680,21 +703,32 @@ function formatCr(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value)
 }
 
+function pin(left: number, z = 1) {
+  return {
+    position: "sticky" as const,
+    left,
+    zIndex: z,
+    bgcolor: "background.paper",
+  }
+}
+
 function Sortable({
   label,
   sortKey,
   active,
   dir,
   onSort,
+  sx,
 }: {
   label: string
   sortKey: SortKey
   active: SortKey
   dir: "asc" | "desc"
   onSort: (key: SortKey) => void
+  sx?: object
 }) {
   return (
-    <TableCell sortDirection={active === sortKey ? dir : false}>
+    <TableCell sortDirection={active === sortKey ? dir : false} sx={sx}>
       <TableSortLabel
         active={active === sortKey}
         direction={active === sortKey ? dir : "asc"}
