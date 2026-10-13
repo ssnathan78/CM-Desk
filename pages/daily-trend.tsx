@@ -35,6 +35,7 @@ type Book = {
   bufferPercent: number
   exitBufferPercent: number
   quantity: number
+  budgetInr: number
   entryStyle: "CLOSE_CROSS" | "BREAK_HIGH"
   status: string
   stop: number | null
