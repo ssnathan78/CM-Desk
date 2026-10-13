@@ -101,13 +101,26 @@ export async function markMomentumRebalance(day: string): Promise<void> {
 
 export async function listUniverse(): Promise<{ symbol: string; name: string; series: string }[]> {
   const rows = await db.select().from(momentumUniverse)
-  if (rows.length === 0) {
-    const bundled = loadBundledUniverse()
-    if (bundled.length) {
+  const bundled = loadBundledUniverse()
+  if (rows.length === 0 && bundled.length) {
+    await db
+      .insert(momentumUniverse)
+      .values(
+        bundled.map(row => ({
+          tradingsymbol: row.symbol,
+          companyName: row.name,
+          series: row.series,
+        }))
+      )
+      .onConflictDoNothing()
+  } else if (rows.length > 0) {
+    const have = new Set(rows.map(row => row.tradingsymbol))
+    const missing = bundled.filter(row => row.symbol.includes("&") && !have.has(row.symbol))
+    if (missing.length) {
       await db
         .insert(momentumUniverse)
         .values(
-          bundled.map(row => ({
+          missing.map(row => ({
             tradingsymbol: row.symbol,
             companyName: row.name,
             series: row.series,

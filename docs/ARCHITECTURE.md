@@ -38,6 +38,8 @@ If you run only `next start`, you lose that glue.
 | `/dashboard` | `pages/dashboard.js` | Today's jobs, new trade links, weekday plan runner |
 | `/plan` | `pages/plan.tsx` | Weekday straddle/strangle templates |
 | `/chase` | `pages/chase.tsx` | Single Chase config (not weekday-based) |
+| `/momentum` | `pages/momentum.tsx` | Cash momentum rank and rebalance |
+| `/daily-trend` | `pages/daily-trend.tsx` | Long-only cash trend on daily candles |
 | `/strat/straddle` | `pages/strat/[strategy].js` | Punch-now ATM straddle |
 | `/strat/strangle` | `pages/strat/[strategy].js` | Punch-now ATM strangle |
 | `/profile` | `pages/profile.tsx` | Read-only broker profile |
@@ -130,6 +132,7 @@ Workers: `lib/queue-processor/`. Stale jobs (scheduled date ≠ today) are disca
 |---------|------|
 | `slmWatcher` | Re-exit if exchange cancels SL-M |
 | `sllWatcher` | Convert stuck SL-L to market after 30s |
+| Cash scheduler | `lib/momentum/scheduler.ts`. In-process, not a BullMQ queue. First pass 20s after boot, then every hour. Pulls NSE day candles at most once per IST day, then evaluates momentum (rebalance day only) and daily trend (same stored day bar). |
 
 ## Database
 
@@ -142,6 +145,12 @@ Postgres via Drizzle (`lib/schema.ts`). Migrations in `drizzle/`.
 | `strategy_defaults` | Master JSON per strategy |
 | `job_executions` | Scheduled/live jobs (audit; not daily-deleted) |
 | `transactions` | Completed orders (`order_id` unique) |
+| `momentum_settings` | One momentum config row, last pull day, last rebalance day |
+| `momentum_universe` | Stored NSE symbols for the rank |
+| `momentum_weight_locks` | Hold-weight or exclude for one symbol |
+| `equity_daily_bars` | Day candles, primary key `(tradingsymbol, session_date)` |
+| `daily_trend_settings` | One daily-trend runtime row and last pull day |
+| `daily_trend_books` | One row per symbol: EMA, buffers, shares, status |
 | `accesstoken` | Daily Kite token |
 | `ema`, `chase_status`, `chase_log` | Chase engine state |
 | `orders`, `order_events`, `fills` | Local order book and executions |
@@ -165,7 +174,9 @@ See [TRADING_DOMAIN_MODEL.md](./TRADING_DOMAIN_MODEL.md). `transactions` remains
 |----------|--------|-------|
 | ATM Straddle | `lib/strategies/atmStraddle.ts` | Skew gate, optional hedge |
 | ATM Strangle | `lib/strategies/strangle.ts` | Strike selection modes |
-| Chase | `lib/chaseSignal.ts` | Index futures NRML; hourly EMA. Stored strategy key is `CHASE` (renamed from `SUBSCRIBE_CHASE` in `drizzle/0010_rename_subscribe_chase_to_chase.sql`) |
+| Chase | `lib/chaseSignal.ts` | Index futures NRML; hourly EMA. Stored strategy key is `CHASE` |
+| Momentum | `lib/momentum/` | NSE cash CNC. Daily candles. Report-only until execution changes. Spec: `docs/strategies/MOMENTUM.md` |
+| Daily trend | `lib/dailyTrend/engine.ts`, `lib/momentum/trendRun.ts` | NSE cash CNC, long only, daily EMA. Spec: `docs/strategies/DAILY_TREND.md` |
 
 ### Known partial features
 

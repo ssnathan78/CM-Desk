@@ -4,7 +4,6 @@ import { resolve } from "node:path"
 import { emaFromCloses, evaluateDailyLong } from "../../lib/dailyTrend/engine"
 import { buildMomentumPlan, executableOrders, metricsFromBars } from "../../lib/momentum/engine"
 import { firstTradingSessionOfMonth } from "../../lib/momentum/calendar"
-import { parseUniverseCsv } from "../../lib/momentum/universe"
 import {
   DEFAULT_MOMENTUM_CONFIG,
   dataPullAllowed,
@@ -12,6 +11,8 @@ import {
   ordersAllowed,
   rebalanceDue,
 } from "../../lib/momentum/types"
+import { parseUniverseCsv } from "../../lib/momentum/universe"
+import { normalizeNseCashSymbol } from "../../lib/nseCashSymbol"
 
 function passing(symbol: string, score: number, price = 100) {
   return {
@@ -145,6 +146,15 @@ describe("momentum rank and rebalance", () => {
   })
 })
 
+describe("NSE cash symbols", () => {
+  it("accepts M&M and rejects a leading digit or a made-up ticker shape", () => {
+    expect(normalizeNseCashSymbol("m&m")).toBe("M&M")
+    expect(normalizeNseCashSymbol(" niftybees ")).toBe("NIFTYBEES")
+    expect(normalizeNseCashSymbol("123")).toBeNull()
+    expect(normalizeNseCashSymbol("")).toBeNull()
+  })
+})
+
 describe("momentum switches", () => {
   it("defaults to off, report-only, and no data pull", () => {
     const next = normalizeMomentumConfig({})
@@ -169,6 +179,7 @@ describe("momentum switches", () => {
     const rows = parseUniverseCsv(text)
     expect(rows.length).toBeGreaterThan(700)
     expect(rows.some(row => row.symbol === "RELIANCE")).toBe(true)
+    expect(rows.some(row => row.symbol === "M&M")).toBe(true)
     expect(firstTradingSessionOfMonth(new Date("2026-09-01T04:00:00Z"))).toBe(true)
     expect(firstTradingSessionOfMonth(new Date("2026-09-02T04:00:00Z"))).toBe(false)
   })

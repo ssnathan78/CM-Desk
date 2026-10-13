@@ -8,7 +8,7 @@ This desk has two kinds of process:
 |---|---|---|---|
 | **Intraday (9:20-style)** | [ATM straddle](./ATM_STRADDLE.md), [ATM strangle](./ATM_STRANGLE.md) | Index options (MIS by default) | Delta-neutral entry; **per-leg SL**; leftover wing until time square-off |
 | **Continuous** | [Chase](./CHASE.md) | Index futures (NRML) | Can hold overnight; not a weekday template |
-| **Cash** | [Momentum](./MOMENTUM.md), [Daily trend](./DAILY_TREND.md) | NSE equity (CNC) | Report-only until execution is changed. Momentum is a monthly rank. Daily trend is long-only on daily candles |
+| **Cash** | [Momentum](./MOMENTUM.md), [Daily trend](./DAILY_TREND.md) | NSE equity (CNC) | Daily candles. Report-only until execution is changed. Momentum rebalances on its schedule. Daily trend is long-only on the stored day bar; the hourly pass is a retry and send loop, not an hourly EMA |
 
 Related (execution, not alpha):
 

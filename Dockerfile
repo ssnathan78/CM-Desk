@@ -51,6 +51,7 @@ COPY --from=builder /app/otel.js ./
 COPY --from=builder /app/bootup.js ./
 COPY --from=builder /app/drizzle.config.js ./
 COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/data ./data
 COPY --from=builder /app/scripts ./scripts
 RUN sed -i 's/\r$//' ./scripts/docker-entrypoint.sh \
   && find ./drizzle -name '*.sql' -exec sed -i 's/\r$//' {} \; \

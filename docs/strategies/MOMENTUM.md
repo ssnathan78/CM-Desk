@@ -1,57 +1,113 @@
 # Cash momentum
 
-Long-only NSE cash book. It ranks a stored universe (the bundled list is a Nifty Total Market snapshot, about 750 names) and shows the rank, filters, target weights, and order diff at any time. It does not trade until execution is changed off `report`.
+Long-only NSE cash book. It ranks a stored universe (the bundled list is a Nifty Total Market snapshot, about 750 names, including `M&M`) and shows the rank, filters, target weights, and order diff at any time. It does not trade until execution is changed off `report`.
 
-This is not Chase and not the 9:20 short-vol book. A correct run of a losing rank is still a losing rank.
+This is not Chase and not the 9:20 short-vol book. A correct run of a losing rank is still a losing rank. The published sheet this follows ranks first and filters later. Filters do not re-rank. Adding capital during a drawdown is operator funding, not a signal in this app.
+
+## Candles and the hour loop
+
+History is Kite **day** candles, about 1,100 calendar days, one symbol at a time with a 350ms pause. The pull runs at most once per IST day, and only while the page is **On** and **Pull data** is on. **Pull history now** still runs while On is enabled even if Pull data is off.
+
+The same hourly pass as daily trend (`lib/momentum/scheduler.ts`, 20s after boot, then every hour) then asks whether **today** is a rebalance day and whether this IST day was already marked done. It does not build an hourly rank. Later hours reuse the day bars stored on the first pull.
+
+Zerodha adjusts those candles for splits, bonuses, rights, spin-offs, and extraordinary dividends. Ordinary dividends are not adjusted. There is no unadjusted series and no corporate-actions API. The rank uses the stored series as Kite returned it.
+
+The universe file is `data/universe/nifty-total-market.csv`. The production image copies `data/` or the list never seeds. An empty `momentum_universe` table is filled from that file on the first report. Symbols the old pattern dropped because of `&` (`M&M`, `M&MFIN`) are inserted on a later report if they are still missing. The file is a snapshot, not point-in-time index membership, and it does not know delistings after the snapshot.
 
 ## Switches
 
 | Switch | Off means |
 |---|---|
-| Page **On** (`active`) | No history pull and no ranking. The symbol list can still be viewed. |
+| Page **On** (`active`) | No history pull and no ranking. The symbol list can still be viewed, with the reason “strategy is off”. |
 | **Pull data** | The hourly scheduler does not call Kite. **Pull history now** still works while On is enabled. |
 | Execution `report` | Orders are calculated and shown. Nothing is sent. This is the default. |
 | Execution `manual` | Orders go out only from **Send rebalance**. |
-| Execution `auto` | Orders go out on the rebalance day, during the session, once that day. |
-| Desk → Risk → Momentum disabled | No orders at all, including sells. |
+| Execution `auto` | Orders go out on the rebalance day, during the NSE session, once that IST day. |
+| Desk → Risk → Momentum disabled | No orders at all, including sells. The card starts off. |
 | Desk halt | New buys stop. Sells still run. |
-
-Data refresh and the scheduler both no-op while On is off.
 
 ## Rank
 
-Scores are computed on the full universe first. Filters do not re-rank the survivors. Rank 1 stays rank 1 if it later fails a filter.
+Scores are computed on the full universe first. Filters do not re-rank the survivors. Rank 1 stays rank 1 if it later fails a filter. Ties break by symbol ascending. A null score is unranked.
+
+Session counts are fixed: 21, 252, and 504 trading rows in the stored series. They are not calendar months.
 
 | Method | Score |
 |---|---|
-| `SHARPE_12M` | 252-session Sharpe of daily returns. Default. |
+| `SHARPE_12M` | Mean of the last 252 daily returns, divided by their sample standard deviation, times √252. Needs 253 closes. Default. |
 | `RETURN_12M` | Close / close 252 sessions ago − 1 |
-| `RETURN_12_1` | Same return, ending 21 sessions ago |
+| `RETURN_12_1` | The same return ending 21 sessions ago (skip the last month) |
 
 A name with no score is unranked and fails closed.
 
 ## Filters
 
-All thresholds are on the Momentum page.
+All thresholds are on the Momentum page, behind **Filters**. Defaults:
 
-- 12-month and 24-month price multiple caps (default 10×)
-- Percent below the high of the stored history (default 25)
-- Average daily turnover (close × volume, default ₹1 crore)
-- Close above an SMA (default 200 sessions)
-- Last month’s return is less than half of the positive 12-month return
-- Circuit count and market cap are **off** by default. Kite day candles do not carry a 12-month circuit count or market cap. Strict mode fails a name when that field is missing.
+| Filter | Default | Fail |
+|---|---|---|
+| 12-month price multiple | 10× | `1 + roc12` at or above the cap, or 12-month history missing |
+| 24-month price multiple | 10× | same for 504 sessions |
+| Max percent below the stored high | 25 | close is farther than that from the high of the stored bars |
+| Min average turnover | ₹1 crore | mean of `close × volume` over the last 21 sessions |
+| SMA | 200 sessions, must be above | close at or below that average |
+| Last month vs 12-month | 0.5 | when the 12-month return is positive, `roc1 / roc12` at or above 0.5 |
+| 12-month return | must be positive | not strictly above 0 |
+| Circuit count | off | strict fails closed when the field is missing (Kite day candles do not have it) |
+| Market cap | off | strict fails closed when the field is missing |
 
-A held name that fails a filter, falls past the worst rank held, or leaves the universe is a sell of the **open quantity**. The sell is never sized from the configured holding count.
+A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past the worst rank held, or leaves the universe is a sell of the **open quantity**. The sell is never sized from the configured holding count.
 
 ## Book
 
-- Holdings count, worst rank held, and entry rank are independent. A new name must be inside the entry rank. A name already held may stay until the worst rank held.
-- New names are equal-weight, capped by max weight. Locked **hold weight** stays at that weight even when it is below equal weight, and the rebalance does not buy it back up. **Exclude** sells it and does not buy it again.
-- Quantity is `floor(capital × weight / price)`. Capital 0 produces a report and no buy.
-- Rebalance is monthly (first NSE session of the month), weekly (weekday 1–5), or ad hoc (never automatic).
+- Holdings count, worst rank held, and entry rank are independent. Defaults are 30, 75, and 75. A new name must be inside the entry rank. A name already held may stay until the worst rank held.
+- Equal-weight slot is `100 / holdingsCount`, then capped by max weight (default 10%). Min weight (default 2%) is stored on the config. Target quantity is `floor(capital × weight / price)`.
+- Capital 0 produces a report and no buys.
+- Locked **hold weight** keeps the target at `min(held quantity, quantity from the locked weight)`. The rebalance does not buy it back up to equal weight. **Exclude** sells the open quantity and does not buy the name again.
+- A top-up buy of a name that is already held and still selected is a buy. It is not a new leader.
+- Rebalance is monthly (first NSE session of the month), weekly (ISO weekday 1–5, default Monday), or ad hoc (never automatic).
 
-## Orders
+## Orders and a short Zerodha balance
 
-CNC limit on NSE. Buys are limited a small buffer above the last close, sells a small buffer below. Each order goes through Desk risk. A rejected buy does not create a holding. History is adjusted by Zerodha for splits and bonuses; the rank uses that series as stored.
+CNC limit on NSE, validity DAY, tag `momentum`, strategy `MOMENTUM`. Buy limit is the last close × (1 + buffer), sell limit is the last close × (1 − buffer). The buffer defaults to 0.15% and is capped at 5%. Prices round to ₹0.05. Each order goes through Desk risk. Lots are not sent, so the options max-lots cap is not applied to the share count. Desk max quantity per order and max notional still apply.
 
-Code: `lib/momentum/`. Page: `/momentum`. API: `/api/momentum`.
+The desk does not read the Zerodha balance before sending. A shortfall is Kite rejecting the order. Each throw is a Desk → Alerts row (`BROKER_ERROR`). A rejected buy does not create a holding.
+
+| Mode | After a rejection |
+|---|---|
+| `auto` | The pass still marks this IST day done (`last_rebalance_on`), including when every order fails and when only some fail. Later hours the same day do not send again. The next automatic attempt is the next rebalance day. Names that never filled are still buys then, if they still qualify. |
+| `manual` | **Send rebalance** can be clicked again the same day. The once-a-day mark blocks only the scheduler. The page’s success message does not mean every order was accepted. |
+| `report` | Nothing is sent. |
+
+Paper mode and `MOCK_ORDERS=true` fill the desk ledger and never see the Zerodha balance.
+
+## Desk
+
+There is no separate desk tab for this strategy.
+
+| Tab | What you see |
+|---|---|
+| Orders | The CNC order, including a rejection. Tag `momentum`. This tab has no Strategy column. |
+| Positions | The name after a fill. Strategy `MOMENTUM`. A refused order is not a position. |
+| Trades | The round-trip, with that strategy, once the ledger has opened it. |
+| Sessions | Only round-trips that **closed** that IST day. An open holding stays on Positions. |
+| Alerts | The broker or risk rejection. |
+| Signals | Nothing. This strategy does not write `strategy_signals`. The rank table is on `/momentum`. |
+| Risk | Enable, halt, paper/live, max open positions. The card starts off. Max lots is hidden because size is `floor(capital × weight / price)`. |
+
+## Code
+
+| Piece | Path |
+|---|---|
+| Rank, filters, weights, order diff | `lib/momentum/engine.ts` |
+| Config and the report / manual / auto gate | `lib/momentum/types.ts` |
+| First session of the month, IST date | `lib/momentum/calendar.ts` |
+| Universe CSV | `lib/momentum/universe.ts`, `data/universe/nifty-total-market.csv` |
+| Settings, locks, bars | `lib/momentum/store.ts` |
+| Day-candle pull | `lib/momentum/history.ts` |
+| Hourly pass | `lib/momentum/scheduler.ts` |
+| CNC submit | `lib/momentum/execute.ts` |
+| Page | `/momentum` |
+| API | `/api/momentum` |
+
+Tables: `momentum_settings`, `momentum_universe`, `momentum_weight_locks`, `equity_daily_bars` (`drizzle/0019_momentum_and_daily_trend.sql`).

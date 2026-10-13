@@ -248,10 +248,9 @@ export default function RiskControls({
           <Paper key={key} sx={{ p: 2 }}>
             <Typography sx={{ fontWeight: 600, mb: 1 }}>{LABELS[key]}</Typography>
             <Typography color="text.secondary" sx={{ mb: 1 }}>
-              Lots and open-position caps are per strategy so a straddle punch cannot steal Chase
-              size. Open positions are an execution cap (do not stack another entry when this book
-              already has N rows). Strategy enabled is on/off for every order; Not halted only
-              blocks new entries. Flatten and stop-loss still work.
+              {key === "MOMENTUM" || key === "DAILY_TREND"
+                ? "Cash book. Share count and the symbol list live on that strategy page, not here. Max open positions caps how many names can be entered. Strategy enabled is on/off for every order; Not halted only blocks new buys. Sells still work while entries are halted. These rows start off."
+                : "Lots and open-position caps are per strategy so a straddle punch cannot steal Chase size. Open positions are an execution cap (do not stack another entry when this book already has N rows). Strategy enabled is on/off for every order; Not halted only blocks new entries. Flatten and stop-loss still work."}
             </Typography>
             <Stack spacing={1}>
               <FormControlLabel
@@ -350,22 +349,24 @@ export default function RiskControls({
                 }
               />
               <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                <TextField
-                  label="Max lots"
-                  type="number"
-                  size="small"
-                  sx={fieldSx}
-                  value={row.maxLots}
-                  onChange={e =>
-                    setSettings({
-                      ...settings,
-                      strategies: {
-                        ...settings.strategies,
-                        [key]: { ...row, maxLots: num(e.target.value, 20) },
-                      },
-                    })
-                  }
-                />
+                {key === "MOMENTUM" || key === "DAILY_TREND" ? null : (
+                  <TextField
+                    label="Max lots"
+                    type="number"
+                    size="small"
+                    sx={fieldSx}
+                    value={row.maxLots}
+                    onChange={e =>
+                      setSettings({
+                        ...settings,
+                        strategies: {
+                          ...settings.strategies,
+                          [key]: { ...row, maxLots: num(e.target.value, 20) },
+                        },
+                      })
+                    }
+                  />
+                )}
                 <TextField
                   label="Max open positions"
                   type="number"

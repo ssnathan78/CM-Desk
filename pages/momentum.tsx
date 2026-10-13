@@ -1,4 +1,8 @@
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Button,
   Chip,
@@ -14,7 +18,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
-import { type ReactNode, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
@@ -128,27 +132,30 @@ export default function MomentumPage() {
           </Typography>
         </Box>
         <Paper sx={{ p: 2 }}>
-          <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-            <Field
-              label="On"
-              control={
-                <Switch
-                  checked={config.active}
-                  onChange={e => patch({ active: e.target.checked })}
-                />
-              }
+          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+            Run
+          </Typography>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: 2,
+              alignItems: "center",
+            }}
+          >
+            <SwitchField
+              label="Strategy on"
+              checked={config.active}
+              onChange={active => patch({ active })}
             />
-            <Field
-              label="Pull data"
-              control={
-                <Switch
-                  checked={config.dataRefresh}
-                  onChange={e => patch({ dataRefresh: e.target.checked })}
-                />
-              }
+            <SwitchField
+              label="Pull data daily"
+              checked={config.dataRefresh}
+              onChange={dataRefresh => patch({ dataRefresh })}
             />
             <TextField
               select
+              fullWidth
               size="small"
               label="Execution"
               value={config.execution}
@@ -160,6 +167,7 @@ export default function MomentumPage() {
             </TextField>
             <TextField
               select
+              fullWidth
               size="small"
               label="Rebalance"
               value={config.rebalance}
@@ -170,7 +178,7 @@ export default function MomentumPage() {
               <MenuItem value="adhoc">Ad hoc</MenuItem>
             </TextField>
             <Num
-              label="Weekday"
+              label="Weekday (1–5)"
               value={config.weeklyDay}
               onChange={weeklyDay => patch({ weeklyDay })}
             />
@@ -180,17 +188,18 @@ export default function MomentumPage() {
               onChange={holdingsCount => patch({ holdingsCount })}
             />
             <Num
-              label="WRH"
+              label="Worst rank held"
               value={config.worstRankHeld}
               onChange={worstRankHeld => patch({ worstRankHeld })}
             />
             <Num
-              label="Entry rank"
+              label="Entry rank max"
               value={config.entryRankMax}
               onChange={entryRankMax => patch({ entryRankMax })}
             />
             <TextField
               select
+              fullWidth
               size="small"
               label="Rank"
               value={config.ranking}
@@ -210,78 +219,98 @@ export default function MomentumPage() {
               value={config.capitalInr}
               onChange={capitalInr => patch({ capitalInr })}
             />
-            <Num
-              label="12m multiple cap"
-              value={config.filters.maxPriceMultiple12m}
-              onChange={maxPriceMultiple12m =>
-                patch({ filters: { ...config.filters, maxPriceMultiple12m } })
-              }
-            />
-            <Num
-              label="24m multiple cap"
-              value={config.filters.maxPriceMultiple24m}
-              onChange={maxPriceMultiple24m =>
-                patch({ filters: { ...config.filters, maxPriceMultiple24m } })
-              }
-            />
-            <Num
-              label="Max % below high"
-              value={config.filters.maxPctBelowHigh}
-              onChange={maxPctBelowHigh =>
-                patch({ filters: { ...config.filters, maxPctBelowHigh } })
-              }
-            />
-            <Num
-              label="Min turnover INR"
-              value={config.filters.minAvgTurnoverInr}
-              onChange={minAvgTurnoverInr =>
-                patch({ filters: { ...config.filters, minAvgTurnoverInr } })
-              }
-            />
-            <Num
-              label="SMA days"
-              value={config.filters.smaPeriod}
-              onChange={smaPeriod => patch({ filters: { ...config.filters, smaPeriod } })}
-            />
-            <Num
-              label="1m / 12m cap"
-              value={config.filters.maxOneMonthShare}
-              onChange={maxOneMonthShare =>
-                patch({ filters: { ...config.filters, maxOneMonthShare } })
-              }
-            />
-            <TextField
-              select
-              size="small"
-              label="Circuits"
-              value={config.filters.circuitFilter}
-              onChange={e =>
-                patch({
-                  filters: { ...config.filters, circuitFilter: e.target.value as "off" | "strict" },
-                })
-              }
-            >
-              <MenuItem value="off">Off (Kite has no 12-month circuit count)</MenuItem>
-              <MenuItem value="strict">Strict</MenuItem>
-            </TextField>
-            <TextField
-              select
-              size="small"
-              label="Market cap"
-              value={config.filters.marketCapFilter}
-              onChange={e =>
-                patch({
-                  filters: {
-                    ...config.filters,
-                    marketCapFilter: e.target.value as "off" | "strict",
-                  },
-                })
-              }
-            >
-              <MenuItem value="off">Off (not in Kite history)</MenuItem>
-              <MenuItem value="strict">Strict</MenuItem>
-            </TextField>
-          </Stack>
+          </Box>
+          <Accordion disableGutters elevation={0} sx={{ mt: 1, bgcolor: "transparent" }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="subtitle2">Filters</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                  gap: 2,
+                }}
+              >
+                <Num
+                  label="12-month multiple cap"
+                  value={config.filters.maxPriceMultiple12m}
+                  onChange={maxPriceMultiple12m =>
+                    patch({ filters: { ...config.filters, maxPriceMultiple12m } })
+                  }
+                />
+                <Num
+                  label="24-month multiple cap"
+                  value={config.filters.maxPriceMultiple24m}
+                  onChange={maxPriceMultiple24m =>
+                    patch({ filters: { ...config.filters, maxPriceMultiple24m } })
+                  }
+                />
+                <Num
+                  label="Max % below high"
+                  value={config.filters.maxPctBelowHigh}
+                  onChange={maxPctBelowHigh =>
+                    patch({ filters: { ...config.filters, maxPctBelowHigh } })
+                  }
+                />
+                <Num
+                  label="Min turnover INR"
+                  value={config.filters.minAvgTurnoverInr}
+                  onChange={minAvgTurnoverInr =>
+                    patch({ filters: { ...config.filters, minAvgTurnoverInr } })
+                  }
+                />
+                <Num
+                  label="SMA days"
+                  value={config.filters.smaPeriod}
+                  onChange={smaPeriod => patch({ filters: { ...config.filters, smaPeriod } })}
+                />
+                <Num
+                  label="1-month / 12-month cap"
+                  value={config.filters.maxOneMonthShare}
+                  onChange={maxOneMonthShare =>
+                    patch({ filters: { ...config.filters, maxOneMonthShare } })
+                  }
+                />
+                <TextField
+                  select
+                  fullWidth
+                  size="small"
+                  label="Circuit count"
+                  value={config.filters.circuitFilter}
+                  onChange={e =>
+                    patch({
+                      filters: {
+                        ...config.filters,
+                        circuitFilter: e.target.value as "off" | "strict",
+                      },
+                    })
+                  }
+                >
+                  <MenuItem value="off">Off</MenuItem>
+                  <MenuItem value="strict">Strict</MenuItem>
+                </TextField>
+                <TextField
+                  select
+                  fullWidth
+                  size="small"
+                  label="Market cap"
+                  value={config.filters.marketCapFilter}
+                  onChange={e =>
+                    patch({
+                      filters: {
+                        ...config.filters,
+                        marketCapFilter: e.target.value as "off" | "strict",
+                      },
+                    })
+                  }
+                >
+                  <MenuItem value="off">Off</MenuItem>
+                  <MenuItem value="strict">Strict</MenuItem>
+                </TextField>
+              </Box>
+            </AccordionDetails>
+          </Accordion>
           <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
             <Button variant="contained" disabled={busy} onClick={() => void save()}>
               Save
@@ -423,11 +452,19 @@ export default function MomentumPage() {
   )
 }
 
-function Field({ label, control }: { label: string; control: ReactNode }) {
+function SwitchField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
   return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+    <Stack direction="row" spacing={1} sx={{ alignItems: "center", minHeight: 40 }}>
+      <Switch checked={checked} onChange={e => onChange(e.target.checked)} />
       <Typography variant="body2">{label}</Typography>
-      {control}
     </Stack>
   )
 }
@@ -443,12 +480,12 @@ function Num({
 }) {
   return (
     <TextField
+      fullWidth
       size="small"
       label={label}
       type="number"
       value={value}
       onChange={e => onChange(Number(e.target.value))}
-      sx={{ width: 140 }}
     />
   )
 }

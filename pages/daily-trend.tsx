@@ -221,6 +221,7 @@ export default function DailyTrendPage() {
             <TextField
               size="small"
               label="Symbol"
+              helperText="NSE cash only. M&M is valid. 123 and ABC are not."
               value={draft.symbol}
               onChange={e => setDraft({ ...draft, symbol: e.target.value.toUpperCase() })}
             />

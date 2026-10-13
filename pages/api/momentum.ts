@@ -16,6 +16,7 @@ import {
   saveMomentumConfig,
 } from "../../lib/momentum/store"
 import { normalizeMomentumConfig, rebalanceDue } from "../../lib/momentum/types"
+import { normalizeNseCashSymbol } from "../../lib/nseCashSymbol"
 import withSession from "../../lib/session"
 
 async function report() {
@@ -83,10 +84,10 @@ export default withSession(async (req, res) => {
       const count = await replaceUniverse(
         rows
           .map((row: { symbol?: string; name?: string }) => ({
-            symbol: String(row.symbol || "").toUpperCase(),
+            symbol: normalizeNseCashSymbol(String(row.symbol || "")) || "",
             name: row.name,
           }))
-          .filter((row: { symbol: string }) => /^[A-Z0-9][A-Z0-9-]{0,29}$/.test(row.symbol))
+          .filter((row: { symbol: string }) => row.symbol.length > 0)
       )
       return res.json({ count })
     }

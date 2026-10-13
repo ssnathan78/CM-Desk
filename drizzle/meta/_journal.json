@@ -148,6 +148,13 @@
       "when": 1756980000020,
       "tag": "0019_momentum_and_daily_trend",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1756980000021,
+      "tag": "0020_nse_cash_symbol",
+      "breakpoints": true
     }
   ]
 }

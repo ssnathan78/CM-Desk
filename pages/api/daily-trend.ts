@@ -11,6 +11,7 @@ import {
   saveDailyTrendRuntime,
 } from "../../lib/momentum/store"
 import { evaluateDailyTrend } from "../../lib/momentum/trendRun"
+import { requireListedNseCash } from "../../lib/nseCashSymbol"
 import withSession from "../../lib/session"
 
 function bookFromBody(
@@ -50,10 +51,12 @@ export default withSession(async (req, res) => {
       return res.json({ ...state, books: await listDailyTrendBooks() })
     }
     if (req.method === "POST" && req.body?.action === "save-book") {
-      const symbol = String(req.body.symbol || "").toUpperCase()
-      if (!/^[A-Z0-9][A-Z0-9-]{0,29}$/.test(symbol)) {
-        return res.status(400).json({ error: "Symbol must be an NSE trading symbol" })
-      }
+      const listed = await requireListedNseCash(
+        String(req.body.symbol || ""),
+        req.session.user.session?.access_token
+      )
+      if (!listed.ok) return res.status(400).json({ error: listed.error })
+      const symbol = listed.symbol
       const existing = (await listDailyTrendBooks()).find(book => book.symbol === symbol)
       await saveDailyTrendBook(bookFromBody({ ...req.body, symbol }, existing))
       return res.json({ books: await listDailyTrendBooks() })

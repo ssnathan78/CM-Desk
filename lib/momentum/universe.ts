@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
+import { normalizeNseCashSymbol } from "../nseCashSymbol"
+
 export type UniverseRow = {
   symbol: string
   name: string
   series: string
 }
-
-const SYMBOL = /^[A-Z0-9][A-Z0-9-]{0,29}$/
 
 export function parseUniverseCsv(text: string): UniverseRow[] {
   const rows: UniverseRow[] = []
@@ -17,8 +17,8 @@ export function parseUniverseCsv(text: string): UniverseRow[] {
     if (!trimmed || trimmed.startsWith("Company Name")) continue
     const parts = trimmed.split(",")
     if (parts.length < 4) continue
-    const symbol = parts[2]?.trim().toUpperCase()
-    if (!symbol || !SYMBOL.test(symbol) || seen.has(symbol)) continue
+    const symbol = normalizeNseCashSymbol(parts[2] || "")
+    if (!symbol || seen.has(symbol)) continue
     seen.add(symbol)
     rows.push({
       symbol,
