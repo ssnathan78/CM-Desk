@@ -1,13 +1,17 @@
+import { and, eq } from "drizzle-orm"
+
 import { db } from "../drizzle"
 import { orders, positions, reconciliationEvents } from "../schema"
 import { isMockOrder } from "../utils"
 import {
   applyBrokerOrderSnapshot,
   applyUnappliedFills,
+  closeOpenOrderAsCancelled,
   getOpenOrders,
   recordAuditEvent,
 } from "./ledger"
 import { backfillFromTransactions } from "./migrateHistory"
+import { missingDayOrderShouldExpire, PRIOR_DAY_MISSING_CANCEL_REASON } from "./missingDayOrder"
 import { moneyFromUnknown, moneyMaterialDiff, moneyToString } from "./money"
 import { markPositions, snapshotPortfolio } from "./portfolio"
 import { DEFAULT_ACCOUNT_ID, isSyntheticProvenance, type ReconKind } from "./types"
@@ -119,6 +123,36 @@ export async function reconcileWithBroker(
     )
     for (const order of openInternal) {
       if (order.brokerOrderId && !brokerIds.has(order.brokerOrderId)) {
+        const expire = missingDayOrderShouldExpire({
+          status: order.status,
+          validity: order.validity,
+          filledQty: order.filledQty,
+          updatedAt: order.updatedAt,
+        })
+        if (expire) {
+          const closed = await closeOpenOrderAsCancelled({
+            orderId: order.id,
+            reason: PRIOR_DAY_MISSING_CANCEL_REASON,
+            occurredAt: order.updatedAt,
+          })
+          if (closed) {
+            await db
+              .update(reconciliationEvents)
+              .set({
+                resolved: true,
+                resolvedAt: new Date(),
+                resolvedHow: "prior-day DAY order closed",
+              })
+              .where(
+                and(
+                  eq(reconciliationEvents.resolved, false),
+                  eq(reconciliationEvents.kind, "MISSING_ORDER"),
+                  eq(reconciliationEvents.internalOrderId, order.id)
+                )
+              )
+            continue
+          }
+        }
         mismatches += 1
         await recordMismatch({
           kind: "MISSING_ORDER",

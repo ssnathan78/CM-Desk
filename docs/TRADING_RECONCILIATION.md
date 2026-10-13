@@ -24,9 +24,13 @@ rows so the books can still balance.
 3. Backfill any `transactions` rows not yet in `orders` (idempotent).
 4. Fetch Kite orders, positions, margins (when a session exists).
 5. For each Kite order: `applyBrokerOrderSnapshot`.
-6. For each internal open/unknown order missing from the Kite book: emit
-   `MISSING_ORDER` (or mark cancelled/expired if the broker says so on a later
-   day — we do **not** auto-cancel without evidence).
+6. For each internal open/unknown order missing from the Kite book: if it is a
+   **DAY** or **IOC** order, filled quantity is 0, and the desk last updated it
+   before today's IST session, mark it `CANCELLED` and resolve older
+   `MISSING_ORDER` rows for that order. Kite's book is today-only, so a
+   prior-session day order cannot still be working. An order touched **today**
+   stays `MISSING_ORDER` — that fetch may be incomplete. A partial fill is
+   never auto-cancelled.
 7. Aggregate internal positions vs Kite net → `POSITION_MISMATCH` /
    `AVG_PRICE` when they differ.
 8. Unexpected Kite net with zero internal qty → `UNEXPECTED_ORDER` / create

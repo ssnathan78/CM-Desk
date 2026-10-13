@@ -33,6 +33,7 @@ import {
   directionFromQty,
   type ExitReason,
   ledgerProvenance,
+  OPEN_ORDER_STATUSES,
   type OrderPurpose,
   type OrderStatus,
   type Provenance,
@@ -616,6 +617,62 @@ export async function applyBrokerOrderSnapshot(
   }
 
   return { orderId: row.id, fillIds }
+}
+
+/**
+ * Close a working order that can no longer be at the broker.
+ * Refuses a row that already filled or is no longer open, so a race cannot cancel a fill.
+ */
+export async function closeOpenOrderAsCancelled(input: {
+  orderId: string
+  reason: string
+  occurredAt?: Date
+}): Promise<boolean> {
+  const rows = await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1)
+  const current = rows[0]
+  if (!current) return false
+  const from = current.status as OrderStatus
+  if (!OPEN_ORDER_STATUSES.includes(from)) return false
+  if ((current.filledQty ?? 0) !== 0) return false
+  assertOrderTransition(from, "CANCELLED")
+  const now = new Date()
+  const updated = await db
+    .update(orders)
+    .set({
+      status: "CANCELLED",
+      brokerStatus: "CANCELLED",
+      cancelReason: input.reason,
+      cancelledAt: input.occurredAt ?? current.updatedAt ?? now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(orders.id, current.id),
+        eq(orders.status, from),
+        eq(orders.filledQty, current.filledQty)
+      )
+    )
+    .returning({ id: orders.id })
+  if (!updated.length) return false
+  await appendOrderEvent({
+    orderId: current.id,
+    fromStatus: from,
+    toStatus: "CANCELLED",
+    eventType: "CANCELLED",
+    brokerStatus: "CANCELLED",
+    filledQty: current.filledQty,
+    remainingQty: current.remainingQty,
+    message: input.reason,
+    occurredAt: input.occurredAt ?? now,
+  })
+  await recordAuditEvent({
+    eventType: "ORDER_CANCELLED",
+    orderId: current.id,
+    jobId: current.jobId,
+    summary: [current.tradingsymbol, input.reason].filter(Boolean).join(" — "),
+    idempotencyKey: `can-missing:${current.id}`,
+  })
+  return true
 }
 
 /** Write terminal Kite orders into the ledger as soon as Chase sees them, not only at the 15:30 sync. */
