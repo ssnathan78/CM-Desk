@@ -50,6 +50,63 @@ export function sharesForBudget(budgetInr: number, price: number): number {
   return Math.floor(budgetInr / price)
 }
 
+export type DailyTrendBulkPatch = {
+  emaPeriod?: number
+  bufferPercent?: number
+  exitBufferPercent?: number
+  budgetInr?: number
+  entryStyle?: "CLOSE_CROSS" | "BREAK_HIGH"
+}
+
+/** Fields the operator can stamp onto every book. Blank fields are left alone. */
+export function parseDailyTrendBulkPatch(
+  raw: unknown
+): { ok: true; patch: DailyTrendBulkPatch } | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object") return { ok: false, error: "Nothing to apply" }
+  const row = raw as Record<string, unknown>
+  const patch: DailyTrendBulkPatch = {}
+  if (row.emaPeriod != null && row.emaPeriod !== "") {
+    const ema = Math.round(Number(row.emaPeriod))
+    if (!Number.isFinite(ema) || ema < 2 || ema > 400)
+      return { ok: false, error: "EMA must be between 2 and 400" }
+    patch.emaPeriod = ema
+  }
+  if (row.bufferPercent != null && row.bufferPercent !== "") {
+    const buffer = Number(row.bufferPercent)
+    if (!Number.isFinite(buffer) || buffer < 0 || buffer > 20)
+      return { ok: false, error: "Buffer % must be between 0 and 20" }
+    patch.bufferPercent = buffer
+  }
+  if (row.exitBufferPercent != null && row.exitBufferPercent !== "") {
+    const exitBuffer = Number(row.exitBufferPercent)
+    if (!Number.isFinite(exitBuffer) || exitBuffer < 0 || exitBuffer > 20)
+      return { ok: false, error: "Exit buffer % must be between 0 and 20" }
+    patch.exitBufferPercent = exitBuffer
+  }
+  if (row.budgetInr != null && row.budgetInr !== "") {
+    const budget = Number(row.budgetInr)
+    if (!Number.isFinite(budget) || budget < 0 || budget > 1_000_000_000)
+      return { ok: false, error: "Budget must be a rupee amount from 0 up" }
+    patch.budgetInr = budget
+  }
+  if (row.entryStyle != null && row.entryStyle !== "") {
+    if (row.entryStyle !== "CLOSE_CROSS" && row.entryStyle !== "BREAK_HIGH")
+      return { ok: false, error: "Entry must be close cross or break high" }
+    patch.entryStyle = row.entryStyle
+  }
+  if (!Object.keys(patch).length)
+    return { ok: false, error: "Fill at least one field to apply to every symbol" }
+  return { ok: true, patch }
+}
+
+/** Copies only the filled settings. On/off, pause, status, stop, and entry stay on the book. */
+export function applyDailyTrendBulk<T extends DailyTrendBulkPatch>(
+  book: T,
+  patch: DailyTrendBulkPatch
+): T {
+  return { ...book, ...patch }
+}
+
 export function normalizeDailyTrendConfig(raw: unknown): DailyTrendConfig {
   const row = raw && typeof raw === "object" ? (raw as Partial<DailyTrendConfig>) : {}
   const quantity = Math.round(Number(row.quantity))

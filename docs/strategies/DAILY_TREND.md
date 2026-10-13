@@ -11,9 +11,7 @@ The process wakes about 20 seconds after boot, then every hour (`lib/momentum/sc
 1. Pull NSE **day** candles from Kite, at most once per IST day, and only while the strategy is on and **Pull data** is on. **Pull history** on the page still runs while On is enabled.
 2. Re-read the last stored day bar and, if execution is `auto`, send the order that bar already implies.
 
-Later hours the same day do not fetch a new candle. They look at the bar from the first successful pull of that IST day. That is why a buy Kite refused can be sent again without waiting for the next official close.
-
-The first pull of the day happens whenever that pass runs. If the process is up during the session, Kite can return **today’s candle so far**. The signal then uses that partial close, not the 15:30 close. The finished day is what the next day’s pull stores. There is no separate “wait until the close” job.
+Later hours the same day do not fetch a new candle. They look at the stored day bars. The signal uses the last bar **dated before today**, so a morning pull of today’s unfinished candle is stored and then ignored. A buy Kite refused can be sent again on a later hour while that completed close is still above the band.
 
 ## Switches
 
@@ -29,7 +27,7 @@ The first pull of the day happens whenever that pass runs. If the process is up 
 | Desk → Risk → Daily trend disabled | No orders, including the stop. The card starts off. Share count is set on this page, not as max lots. |
 | Desk halt | Blocks the buy. The stop still sells the open quantity. |
 
-Each symbol has its own EMA length, buffer, exit buffer, share quantity, and entry style. Nothing in the signal is fixed at 40 or 0.2 except the form defaults. The limit buffer (default 0.15%, capped at 5%) is on the strategy runtime, shared by every symbol: a buy limit is the last close × (1 + buffer), a sell limit is the last close × (1 − buffer), rounded to ₹0.05.
+Each symbol has its own EMA length, buffer, exit buffer, rupee budget, and entry style. Nothing in the signal is fixed at 40 or 1 except the form defaults. **Apply to all** writes only the fields you fill onto every saved symbol. Blank fields stay as they are. It does not turn a symbol on or off, and it does not change pause, status, the stored stop, or the open quantity. The limit buffer (default 0.15%, capped at 5%) is on the strategy runtime, shared by every symbol: a buy limit is the last completed close × (1 + buffer), a sell limit is that close × (1 − buffer), rounded to ₹0.05.
 
 ## Symbol
 
@@ -37,7 +35,9 @@ A symbol is accepted only when it is an NSE cash instrument (`instrument_type` E
 
 The database check allows `A`–`Z`, digits, `&`, and `-`, and requires a letter first (`drizzle/0020_nse_cash_symbol.sql`). That shape is not a listing check. Names already saved that failed the shape are deleted by that migration.
 
-Search on the page looks up the NSE cash dump by symbol or company name, the same way Chase searches futures, and adds the name **off**. Names already on the book are omitted from the search results. The filter box on the table searches the rows you already have.
+Search on the page looks up the NSE cash dump by symbol or company name, the same way Chase searches futures, and adds the name **off**. Names already on the book are omitted from the search results. The filter box on the table searches the rows you already have, including the company name and industry shown under the symbol.
+
+The table keeps symbol, market cap (₹ crore, with the stored date), budget, EMA, entry buffer, exit buffer, entry style, state, and stop. Company name and industry sit under the symbol so the row fits the page. **Buf** is the entry buffer percent. **Exit** is the exit buffer percent. **Mcap** is market cap in crore.
 
 ## Nifty 100
 
@@ -53,7 +53,7 @@ EMA is the standard daily close EMA. The seed is the SMA of the first `period` c
 - Exit line = EMA × (1 − exit buffer%). Default exit buffer is also 1.
 - The decision uses the last daily bar **dated before today**. Today’s candle is ignored, including after the close, until the next IST date stores it as a completed bar. A morning pull cannot trade a partial day.
 - Buy size is `floor(budget INR / that close)`. Budget 0 buys nothing. The old share count is not the order size.
-- `CLOSE_CROSS`: a close above the long line buys `quantity` shares. Status stays `PENDING_LONG` until the book has a long quantity. A rejected buy stays `FLAT`.
+- `CLOSE_CROSS`: a close above the long line buys `floor(budget / close)` shares. Status stays `PENDING_LONG` until the book has a long quantity. A rejected buy stays `FLAT`.
 - `BREAK_HIGH`: that close only arms a buy at that day’s high. A later bar whose high reaches that entry buys. A close back through the exit line or the stored stop cancels the pending buy and does not sell a flat book.
 - Once long, the stop is the lower of the EMA and the signal day’s low. A **later** close through that stop, or through the exit line, sells the **open quantity**. The same day’s low is not a fill, because a daily close cannot trade through that bar’s low.
 - It does not sell `quantity` if the book is flat, and it does not sell twice into a short.

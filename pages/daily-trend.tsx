@@ -97,6 +97,13 @@ export default function DailyTrendPage() {
   const [matches, setMatches] = useState<{ symbol: string; name: string }[]>([])
   const [sortKey, setSortKey] = useState<SortKey>("symbol")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const [bulk, setBulk] = useState({
+    emaPeriod: "",
+    bufferPercent: "",
+    exitBufferPercent: "",
+    budgetInr: "",
+    entryStyle: "",
+  })
   const runtime = config ??
     data?.config ?? {
       active: false,
@@ -137,6 +144,47 @@ export default function DailyTrendPage() {
       showMessage(`${book.symbol} saved`, "success")
     } catch (error) {
       showMessage(error instanceof Error ? error.message : "Save failed", "error")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function applyToAll() {
+    const body: Record<string, unknown> = { action: "apply-all" }
+    if (bulk.emaPeriod !== "") body.emaPeriod = Number(bulk.emaPeriod)
+    if (bulk.bufferPercent !== "") body.bufferPercent = Number(bulk.bufferPercent)
+    if (bulk.exitBufferPercent !== "") body.exitBufferPercent = Number(bulk.exitBufferPercent)
+    if (bulk.budgetInr !== "") body.budgetInr = Number(bulk.budgetInr)
+    if (bulk.entryStyle !== "") body.entryStyle = bulk.entryStyle
+    if (Object.keys(body).length === 1) {
+      showMessage("Fill at least one field. Blank fields stay as they are.", "info")
+      return
+    }
+    const count = data?.books.length ?? 0
+    if (
+      !window.confirm(
+        `Apply these settings to all ${count} symbols? On/off, pause, status, and stops stay as they are.`
+      )
+    )
+      return
+    setBusy(true)
+    try {
+      const result = await fetchJson<{ count: number }>("/api/daily-trend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      setBulk({
+        emaPeriod: "",
+        bufferPercent: "",
+        exitBufferPercent: "",
+        budgetInr: "",
+        entryStyle: "",
+      })
+      await mutate()
+      showMessage(`Applied to ${result.count} symbols`, "success")
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Apply failed", "error")
     } finally {
       setBusy(false)
     }
@@ -331,7 +379,66 @@ export default function DailyTrendPage() {
         </Paper>
         <Paper sx={{ p: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
-            Edit a symbol
+            Apply to every symbol
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Fill only the fields you want to change. Blank fields stay as they are on each symbol.
+            This does not turn a symbol on or off, and it does not change pause, status, or the
+            stored stop.
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+            <TextField
+              size="small"
+              label="EMA"
+              type="number"
+              value={bulk.emaPeriod}
+              onChange={e => setBulk({ ...bulk, emaPeriod: e.target.value })}
+              sx={{ width: 90 }}
+            />
+            <TextField
+              size="small"
+              label="Buffer %"
+              type="number"
+              value={bulk.bufferPercent}
+              onChange={e => setBulk({ ...bulk, bufferPercent: e.target.value })}
+              sx={{ width: 110 }}
+            />
+            <TextField
+              size="small"
+              label="Exit %"
+              type="number"
+              value={bulk.exitBufferPercent}
+              onChange={e => setBulk({ ...bulk, exitBufferPercent: e.target.value })}
+              sx={{ width: 100 }}
+            />
+            <TextField
+              size="small"
+              label="Budget INR"
+              type="number"
+              value={bulk.budgetInr}
+              onChange={e => setBulk({ ...bulk, budgetInr: e.target.value })}
+              sx={{ width: 140 }}
+            />
+            <TextField
+              select
+              size="small"
+              label="Entry"
+              value={bulk.entryStyle}
+              onChange={e => setBulk({ ...bulk, entryStyle: e.target.value })}
+              sx={{ width: 160 }}
+            >
+              <MenuItem value="">Leave as is</MenuItem>
+              <MenuItem value="CLOSE_CROSS">Close cross</MenuItem>
+              <MenuItem value="BREAK_HIGH">Break high</MenuItem>
+            </TextField>
+            <Button variant="outlined" disabled={busy} onClick={() => void applyToAll()}>
+              Apply to all
+            </Button>
+          </Stack>
+        </Paper>
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Edit one symbol
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
             <TextField
@@ -401,8 +508,8 @@ export default function DailyTrendPage() {
           close. Buffer defaults are 1%. A buy size is floor(budget / that close). Turn a row on and
           set a budget before it can buy.
         </Typography>
-        <ScrollTable minWidth={1400}>
-          <Table size="small">
+        <ScrollTable minWidth={860}>
+          <Table size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
             <TableHead>
               <TableRow>
                 <Sortable
@@ -420,28 +527,14 @@ export default function DailyTrendPage() {
                   onSort={toggleSort}
                 />
                 <Sortable
-                  label="Name"
-                  sortKey="name"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Industry"
-                  sortKey="industry"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Mcap ₹ cr"
+                  label="Mcap"
                   sortKey="marketCapCr"
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
                 />
                 <Sortable
-                  label="Budget INR"
+                  label="Budget"
                   sortKey="budgetInr"
                   active={sortKey}
                   dir={sortDir}
@@ -455,14 +548,14 @@ export default function DailyTrendPage() {
                   onSort={toggleSort}
                 />
                 <Sortable
-                  label="Buffer %"
+                  label="Buf"
                   sortKey="bufferPercent"
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
                 />
                 <Sortable
-                  label="Exit buffer %"
+                  label="Exit"
                   sortKey="exitBufferPercent"
                   active={sortKey}
                   dir={sortDir}
@@ -476,7 +569,7 @@ export default function DailyTrendPage() {
                   onSort={toggleSort}
                 />
                 <Sortable
-                  label="Status"
+                  label="State"
                   sortKey="status"
                   active={sortKey}
                   dir={sortDir}
@@ -497,13 +590,21 @@ export default function DailyTrendPage() {
                 <TableRow key={book.symbol}>
                   <TableCell>
                     <Switch
+                      size="small"
                       checked={book.enabled}
                       onChange={e => void saveBook({ ...book, enabled: e.target.checked })}
                     />
                   </TableCell>
-                  <TableCell>{book.symbol}</TableCell>
-                  <TableCell>{book.name || "—"}</TableCell>
-                  <TableCell>{book.industry || "—"}</TableCell>
+                  <TableCell>
+                    {book.symbol}
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: "block", whiteSpace: "normal", maxWidth: 180 }}
+                    >
+                      {[book.name, book.industry].filter(Boolean).join(" · ") || "—"}
+                    </Typography>
+                  </TableCell>
                   <TableCell align="right">
                     {formatCr(book.marketCapCr)}
                     {book.marketCapAsOf ? (
@@ -520,23 +621,27 @@ export default function DailyTrendPage() {
                   <TableCell>{book.emaPeriod}</TableCell>
                   <TableCell>{book.bufferPercent}</TableCell>
                   <TableCell>{book.exitBufferPercent}</TableCell>
-                  <TableCell>
-                    {book.entryStyle === "BREAK_HIGH" ? "Break high" : "Close cross"}
-                  </TableCell>
+                  <TableCell>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
                   <TableCell>{book.paused ? "paused" : book.status}</TableCell>
                   <TableCell>{book.stop ?? "—"}</TableCell>
-                  <TableCell>
-                    <Button size="small" onClick={() => setDraft(book)}>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                    <Button
+                      size="small"
+                      sx={{ minWidth: 0, px: 0.5 }}
+                      onClick={() => setDraft(book)}
+                    >
                       Edit
                     </Button>
                     <Button
                       size="small"
+                      sx={{ minWidth: 0, px: 0.5 }}
                       onClick={() => void saveBook({ ...book, paused: !book.paused })}
                     >
                       {book.paused ? "Resume" : "Pause"}
                     </Button>
                     <Button
                       size="small"
+                      sx={{ minWidth: 0, px: 0.5 }}
                       onClick={() =>
                         void fetchJson("/api/daily-trend", {
                           method: "POST",

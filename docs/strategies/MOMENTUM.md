@@ -54,8 +54,9 @@ All thresholds are on the Momentum page, behind **Filters**. Defaults:
 | SMA | 200 sessions, must be above | close at or below that average |
 | Last month vs 12-month | 0.5 | when the 12-month return is positive, `roc1 / roc12` at or above 0.5 |
 | 12-month return | must be positive | not strictly above 0 |
-| Circuit count | off | Kite has no circuit count. Strict fails every name. Leave Off |
 | Market cap | off | Strict fails a name with no stored market cap, or below the minimum. The refresh covers the daily-trend book, not all 750 |
+
+Circuit count is not a filter. Kite day candles do not include it, and a strict reading of a missing count used to fail every name. A saved `circuitFilter: strict` is ignored and rewritten to off the next time the config is saved.
 
 A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past the worst rank held, or leaves the universe is a sell of the **open quantity**. The sell is never sized from the configured holding count.
 

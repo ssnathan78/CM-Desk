@@ -1,8 +1,14 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { emaFromCloses, evaluateDailyLong } from "../../lib/dailyTrend/engine"
-import { completedDailyBars, sharesForBudget } from "../../lib/dailyTrend/engine"
+import {
+  applyDailyTrendBulk,
+  completedDailyBars,
+  emaFromCloses,
+  evaluateDailyLong,
+  parseDailyTrendBulkPatch,
+  sharesForBudget,
+} from "../../lib/dailyTrend/engine"
 import { parseScreenerMarketCapCr } from "../../lib/dailyTrend/marketCap"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import { buildMomentumPlan, executableOrders, metricsFromBars } from "../../lib/momentum/engine"
@@ -200,6 +206,25 @@ describe("momentum switches", () => {
     expect(rebalanceDue({ ...config, active: false }, { isoWeekday: 1, firstSessionOfMonth: true })).toBe(false)
   })
 
+  it("ignores a stored strict circuit filter because Kite has no circuit count", () => {
+    const stored = normalizeMomentumConfig({
+      ...config,
+      filters: { ...config.filters, circuitFilter: "strict", maxCircuits12m: 0 },
+    })
+    expect(stored.filters.circuitFilter).toBe("off")
+    const plan = buildMomentumPlan({
+      config: {
+        ...config,
+        filters: { ...config.filters, circuitFilter: "strict", maxCircuits12m: 0 },
+      },
+      holdings: [],
+      locks: [],
+      symbols: [{ ...passing("AAA", 3), metrics: { ...passing("AAA", 3).metrics, circuitCount12m: null } }],
+    })
+    expect(plan.ranked[0]?.filterPass).toBe(true)
+    expect(plan.ranked[0]?.filterReasons.join(" ")).not.toMatch(/circuit/i)
+  })
+
   it("loads the bundled universe and knows the first session of a month", () => {
     const text = readFileSync(resolve(process.cwd(), "data/universe/nifty-total-market.csv"), "utf8")
     const rows = parseUniverseCsv(text)
@@ -212,6 +237,43 @@ describe("momentum switches", () => {
 })
 
 describe("daily long-only trend", () => {
+  it("applies only the filled settings and leaves a long book's stop alone", () => {
+    const book = {
+      symbol: "ABB",
+      enabled: true,
+      paused: true,
+      emaPeriod: 40,
+      bufferPercent: 1,
+      exitBufferPercent: 1,
+      budgetInr: 0,
+      entryStyle: "CLOSE_CROSS" as const,
+      status: "LONG" as const,
+      stop: 2400,
+      entry: 2500,
+      quantity: 12,
+    }
+    expect(parseDailyTrendBulkPatch({})).toEqual({
+      ok: false,
+      error: "Fill at least one field to apply to every symbol",
+    })
+    expect(parseDailyTrendBulkPatch({ emaPeriod: 1 }).ok).toBe(false)
+    const parsed = parseDailyTrendBulkPatch({ emaPeriod: "50", budgetInr: "100000" })
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const next = applyDailyTrendBulk(book, parsed.patch)
+    expect(next).toMatchObject({
+      emaPeriod: 50,
+      budgetInr: 100000,
+      bufferPercent: 1,
+      enabled: true,
+      paused: true,
+      status: "LONG",
+      stop: 2400,
+      entry: 2500,
+      quantity: 12,
+    })
+  })
+
   it("drops today's bar and sizes a buy from the rupee budget", () => {
     const bars = completedDailyBars(
       [

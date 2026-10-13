@@ -326,25 +326,6 @@ export default function MomentumPage() {
                   select
                   fullWidth
                   size="small"
-                  label="Circuit count"
-                  helperText="Kite day candles have no circuit count. Strict fails every name. Leave Off."
-                  value={config.filters.circuitFilter}
-                  onChange={e =>
-                    patch({
-                      filters: {
-                        ...config.filters,
-                        circuitFilter: e.target.value as "off" | "strict",
-                      },
-                    })
-                  }
-                >
-                  <MenuItem value="off">Off</MenuItem>
-                  <MenuItem value="strict">Strict</MenuItem>
-                </TextField>
-                <TextField
-                  select
-                  fullWidth
-                  size="small"
                   label="Market cap"
                   helperText="Off ignores it. Strict drops a name with no stored market cap, or below the minimum. The daily refresh covers the daily-trend book, not all 750."
                   value={config.filters.marketCapFilter}

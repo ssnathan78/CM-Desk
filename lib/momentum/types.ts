@@ -118,7 +118,7 @@ export function normalizeMomentumConfig(raw: unknown): MomentumConfig {
       maxPriceMultiple24m: num(filters.maxPriceMultiple24m, 10, 1, 1000),
       maxPctBelowHigh: num(filters.maxPctBelowHigh, 25, 0, 100),
       minAvgTurnoverInr: num(filters.minAvgTurnoverInr, 10_000_000, 0, 1e12),
-      circuitFilter: enumOf(filters.circuitFilter, ["off", "strict"] as const, "off"),
+      circuitFilter: "off",
       maxCircuits12m: Math.round(num(filters.maxCircuits12m, 25, 0, 250)),
       marketCapFilter: enumOf(filters.marketCapFilter, ["off", "strict"] as const, "off"),
       minMarketCapCr: num(filters.minMarketCapCr, 1000, 0, 1e9),

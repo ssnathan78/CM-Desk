@@ -1,9 +1,10 @@
 import { sendApiError } from "../../lib/apiErrors"
-import { normalizeDailyTrendConfig } from "../../lib/dailyTrend/engine"
+import { normalizeDailyTrendConfig, parseDailyTrendBulkPatch } from "../../lib/dailyTrend/engine"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import logger from "../../lib/logger"
 import { pullCashHistory } from "../../lib/momentum/history"
 import {
+  applyDailyTrendBulkToBooks,
   type DailyTrendBookRow,
   ensureNifty100Books,
   getDailyTrendState,
@@ -87,6 +88,12 @@ export default withSession(async (req, res) => {
       const existing = (await listDailyTrendBooks()).find(book => book.symbol === symbol)
       await saveDailyTrendBook(bookFromBody({ ...req.body, symbol }, existing))
       return res.json({ books: await listDailyTrendBooks() })
+    }
+    if (req.method === "POST" && req.body?.action === "apply-all") {
+      const parsed = parseDailyTrendBulkPatch(req.body)
+      if (!parsed.ok) return res.status(400).json({ error: parsed.error })
+      const count = await applyDailyTrendBulkToBooks(parsed.patch)
+      return res.json({ count, books: await listDailyTrendBooks() })
     }
     if (req.method === "POST" && req.body?.action === "remove-book") {
       await removeDailyTrendBook(String(req.body.symbol || ""))

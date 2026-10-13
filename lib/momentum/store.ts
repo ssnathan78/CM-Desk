@@ -1,4 +1,5 @@
 import { asc, eq, inArray, sql } from "drizzle-orm"
+import type { DailyTrendBulkPatch } from "../dailyTrend/engine"
 import { loadNifty100 } from "../dailyTrend/nifty100"
 import { db } from "../drizzle"
 import {
@@ -394,6 +395,14 @@ export async function saveDailyTrendBook(book: DailyTrendBookRow): Promise<void>
         updatedAt: new Date(),
       },
     })
+}
+
+export async function applyDailyTrendBulkToBooks(patch: DailyTrendBulkPatch): Promise<number> {
+  const books = await listDailyTrendBooks()
+  for (const book of books) {
+    await saveDailyTrendBook({ ...book, ...patch })
+  }
+  return books.length
 }
 
 export async function removeDailyTrendBook(symbol: string): Promise<void> {

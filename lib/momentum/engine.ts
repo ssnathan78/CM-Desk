@@ -202,10 +202,6 @@ export function filterReasons(metrics: MomentumMetrics, config: MomentumConfig):
   if (metrics.avgTurnoverInr == null) reasons.push("turnover missing")
   else if (metrics.avgTurnoverInr < filters.minAvgTurnoverInr)
     reasons.push("average turnover below the floor")
-  if (filters.circuitFilter === "strict") {
-    if (metrics.circuitCount12m == null) reasons.push("circuit count unavailable")
-    else if (metrics.circuitCount12m >= filters.maxCircuits12m) reasons.push("too many circuits")
-  }
   if (filters.marketCapFilter === "strict") {
     if (metrics.marketCapCr == null) reasons.push("market cap unavailable")
     else if (metrics.marketCapCr < filters.minMarketCapCr)
