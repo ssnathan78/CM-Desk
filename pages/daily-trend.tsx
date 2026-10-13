@@ -10,10 +10,11 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from "@mui/material"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
@@ -24,6 +25,10 @@ import useUser from "../lib/useUser"
 
 type Book = {
   symbol: string
+  name?: string
+  industry?: string
+  marketCapCr?: number | null
+  marketCapAsOf?: string | null
   enabled: boolean
   paused: boolean
   emaPeriod: number
@@ -36,6 +41,21 @@ type Book = {
   entry: number | null
 }
 
+type SortKey =
+  | "enabled"
+  | "symbol"
+  | "name"
+  | "industry"
+  | "marketCapCr"
+  | "budgetInr"
+  | "emaPeriod"
+  | "bufferPercent"
+  | "exitBufferPercent"
+  | "quantity"
+  | "entryStyle"
+  | "status"
+  | "stop"
+
 type Payload = {
   config: {
     active: boolean
@@ -43,6 +63,7 @@ type Payload = {
     execution: "report" | "manual" | "auto"
     limitBufferPercent: number
   }
+  marketCapAsOf?: string
   books: Book[]
   decisions?: { symbol: string; action: string; reason: string; state?: string }[]
 }
@@ -52,9 +73,10 @@ const EMPTY: Book = {
   enabled: false,
   paused: false,
   emaPeriod: 40,
-  bufferPercent: 0.2,
-  exitBufferPercent: 0.2,
+  bufferPercent: 1,
+  exitBufferPercent: 1,
   quantity: 1,
+  budgetInr: 0,
   entryStyle: "CLOSE_CROSS",
   status: "FLAT",
   stop: null,
@@ -69,6 +91,11 @@ export default function DailyTrendPage() {
   const [draft, setDraft] = useState<Book>(EMPTY)
   const [busy, setBusy] = useState(false)
   const [decisions, setDecisions] = useState<Payload["decisions"]>([])
+  const [query, setQuery] = useState("")
+  const [filter, setFilter] = useState("")
+  const [matches, setMatches] = useState<{ symbol: string; name: string }[]>([])
+  const [sortKey, setSortKey] = useState<SortKey>("symbol")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const runtime = config ??
     data?.config ?? {
       active: false,
@@ -104,6 +131,7 @@ export default function DailyTrendPage() {
         body: JSON.stringify({ action: "save-book", ...book }),
       })
       setDraft(EMPTY)
+      setMatches(current => current.filter(row => row.symbol !== book.symbol))
       await mutate()
       showMessage(`${book.symbol} saved`, "success")
     } catch (error) {
@@ -112,6 +140,57 @@ export default function DailyTrendPage() {
       setBusy(false)
     }
   }
+
+  async function searchSymbols() {
+    setBusy(true)
+    try {
+      const found = await fetchJson<{ matches: { symbol: string; name: string }[] }>(
+        `/api/nse-cash-search?q=${encodeURIComponent(query)}`
+      )
+      setMatches(found.matches ?? [])
+      if (!found.matches?.length) showMessage("No matching NSE cash symbol.", "info")
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Search failed", "error")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(current => (current === "asc" ? "desc" : "asc"))
+    else {
+      setSortKey(key)
+      setSortDir(key === "marketCapCr" || key === "enabled" ? "desc" : "asc")
+    }
+  }
+
+  const books = useMemo(() => {
+    const q = filter.trim().toUpperCase()
+    const rows = (data?.books ?? []).filter(book => {
+      if (!q) return true
+      return (
+        book.symbol.includes(q) ||
+        (book.name || "").toUpperCase().includes(q) ||
+        (book.industry || "").toUpperCase().includes(q)
+      )
+    })
+    const dir = sortDir === "asc" ? 1 : -1
+    const value = (book: Book): string | number => {
+      if (sortKey === "enabled") return book.enabled ? 1 : 0
+      if (sortKey === "status") return book.paused ? `paused ${book.status}` : book.status
+      if (sortKey === "marketCapCr" || sortKey === "stop" || sortKey === "budgetInr")
+        return book[sortKey] ?? Number.NEGATIVE_INFINITY
+      if (sortKey === "name") return book.name || book.symbol
+      if (sortKey === "industry") return book.industry || ""
+      return book[sortKey]
+    }
+    return rows.slice().sort((a, b) => {
+      const left = value(a)
+      const right = value(b)
+      if (typeof left === "number" && typeof right === "number") return (left - right) * dir
+      return String(left).localeCompare(String(right)) * dir
+    })
+  }, [data?.books, filter, sortDir, sortKey])
 
   return (
     <Layout title="Daily trend">
@@ -215,7 +294,43 @@ export default function DailyTrendPage() {
         </Paper>
         <Paper sx={{ p: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
-            Add or edit a symbol
+            Add a symbol
+          </Typography>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+            <TextField
+              size="small"
+              label="Search NSE cash"
+              placeholder="RELIANCE, Mahindra, NIFTYBEES"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") void searchSymbols()
+              }}
+              sx={{ minWidth: { sm: 320 } }}
+            />
+            <Button variant="outlined" disabled={busy} onClick={() => void searchSymbols()}>
+              Search
+            </Button>
+          </Stack>
+          {matches.length ? (
+            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+              {matches.map(row => (
+                <Button
+                  key={row.symbol}
+                  size="small"
+                  variant="outlined"
+                  disabled={busy}
+                  onClick={() => void saveBook({ ...EMPTY, symbol: row.symbol, name: row.name })}
+                >
+                  Add {row.symbol}
+                </Button>
+              ))}
+            </Stack>
+          ) : null}
+        </Paper>
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Edit a symbol
           </Typography>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
             <TextField
@@ -224,6 +339,14 @@ export default function DailyTrendPage() {
               helperText="NSE cash only. M&M is valid. 123 and ABC are not."
               value={draft.symbol}
               onChange={e => setDraft({ ...draft, symbol: e.target.value.toUpperCase() })}
+            />
+            <TextField
+              size="small"
+              label="Budget INR"
+              type="number"
+              helperText="Shares bought = floor(budget / last completed close). 0 buys nothing."
+              value={draft.budgetInr}
+              onChange={e => setDraft({ ...draft, budgetInr: Number(e.target.value) })}
             />
             <TextField
               size="small"
@@ -247,13 +370,6 @@ export default function DailyTrendPage() {
               onChange={e => setDraft({ ...draft, exitBufferPercent: Number(e.target.value) })}
             />
             <TextField
-              size="small"
-              label="Shares"
-              type="number"
-              value={draft.quantity}
-              onChange={e => setDraft({ ...draft, quantity: Number(e.target.value) })}
-            />
-            <TextField
               select
               size="small"
               label="Entry"
@@ -270,23 +386,113 @@ export default function DailyTrendPage() {
             </Button>
           </Stack>
         </Paper>
-        <ScrollTable>
+        <TextField
+          size="small"
+          label="Filter symbol, name, or industry"
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          sx={{ maxWidth: 360 }}
+        />
+        <Typography variant="caption" color="text.secondary">
+          Nifty 100 is loaded off. Market cap refreshes about 20 names an hour from Screener while
+          this process is running, so the book turns over inside a day. The date next to the figure
+          is when it was stored. The signal ignores today's candle and uses the last completed daily
+          close. Buffer defaults are 1%. A buy size is floor(budget / that close). Turn a row on and
+          set a budget before it can buy.
+        </Typography>
+        <ScrollTable minWidth={1400}>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>On</TableCell>
-                <TableCell>Symbol</TableCell>
-                <TableCell>EMA</TableCell>
-                <TableCell>Buffer</TableCell>
-                <TableCell>Shares</TableCell>
-                <TableCell>Entry</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Stop</TableCell>
+                <Sortable
+                  label="On"
+                  sortKey="enabled"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Symbol"
+                  sortKey="symbol"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Name"
+                  sortKey="name"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Industry"
+                  sortKey="industry"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Mcap ₹ cr"
+                  sortKey="marketCapCr"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Budget INR"
+                  sortKey="budgetInr"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="EMA"
+                  sortKey="emaPeriod"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Buffer %"
+                  sortKey="bufferPercent"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Exit buffer %"
+                  sortKey="exitBufferPercent"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Entry"
+                  sortKey="entryStyle"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Status"
+                  sortKey="status"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Stop"
+                  sortKey="stop"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
                 <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
-              {(data?.books ?? []).map(book => (
+              {books.map(book => (
                 <TableRow key={book.symbol}>
                   <TableCell>
                     <Switch
@@ -295,10 +501,27 @@ export default function DailyTrendPage() {
                     />
                   </TableCell>
                   <TableCell>{book.symbol}</TableCell>
+                  <TableCell>{book.name || "—"}</TableCell>
+                  <TableCell>{book.industry || "—"}</TableCell>
+                  <TableCell align="right">
+                    {formatCr(book.marketCapCr)}
+                    {book.marketCapAsOf ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block" }}
+                      >
+                        {book.marketCapAsOf}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell align="right">{formatCr(book.budgetInr)}</TableCell>
                   <TableCell>{book.emaPeriod}</TableCell>
                   <TableCell>{book.bufferPercent}</TableCell>
-                  <TableCell>{book.quantity}</TableCell>
-                  <TableCell>{book.entryStyle}</TableCell>
+                  <TableCell>{book.exitBufferPercent}</TableCell>
+                  <TableCell>
+                    {book.entryStyle === "BREAK_HIGH" ? "Break high" : "Close cross"}
+                  </TableCell>
                   <TableCell>{book.paused ? "paused" : book.status}</TableCell>
                   <TableCell>{book.stop ?? "—"}</TableCell>
                   <TableCell>
@@ -343,5 +566,36 @@ export default function DailyTrendPage() {
         </Typography>
       </Stack>
     </Layout>
+  )
+}
+
+function formatCr(value: number | null | undefined): string {
+  if (value == null) return "—"
+  return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value)
+}
+
+function Sortable({
+  label,
+  sortKey,
+  active,
+  dir,
+  onSort,
+}: {
+  label: string
+  sortKey: SortKey
+  active: SortKey
+  dir: "asc" | "desc"
+  onSort: (key: SortKey) => void
+}) {
+  return (
+    <TableCell sortDirection={active === sortKey ? dir : false}>
+      <TableSortLabel
+        active={active === sortKey}
+        direction={active === sortKey ? dir : "asc"}
+        onClick={() => onSort(sortKey)}
+      >
+        {label}
+      </TableSortLabel>
+    </TableCell>
   )
 }

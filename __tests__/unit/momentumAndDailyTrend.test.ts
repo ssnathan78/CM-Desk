@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import { emaFromCloses, evaluateDailyLong } from "../../lib/dailyTrend/engine"
+import { completedDailyBars, sharesForBudget } from "../../lib/dailyTrend/engine"
+import { parseScreenerMarketCapCr } from "../../lib/dailyTrend/marketCap"
+import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import { buildMomentumPlan, executableOrders, metricsFromBars } from "../../lib/momentum/engine"
 import { firstTradingSessionOfMonth } from "../../lib/momentum/calendar"
 import {
@@ -12,7 +15,7 @@ import {
   rebalanceDue,
 } from "../../lib/momentum/types"
 import { parseUniverseCsv } from "../../lib/momentum/universe"
-import { normalizeNseCashSymbol } from "../../lib/nseCashSymbol"
+import { normalizeNseCashSymbol, searchNseCashNames } from "../../lib/nseCashSymbol"
 
 function passing(symbol: string, score: number, price = 100) {
   return {
@@ -147,11 +150,34 @@ describe("momentum rank and rebalance", () => {
 })
 
 describe("NSE cash symbols", () => {
-  it("accepts M&M and rejects a leading digit or a made-up ticker shape", () => {
+  it("accepts M&M and rejects a leading digit", () => {
     expect(normalizeNseCashSymbol("m&m")).toBe("M&M")
     expect(normalizeNseCashSymbol(" niftybees ")).toBe("NIFTYBEES")
     expect(normalizeNseCashSymbol("123")).toBeNull()
     expect(normalizeNseCashSymbol("")).toBeNull()
+  })
+
+  it("matches a company name and prefers a symbol prefix", () => {
+    const found = searchNseCashNames(
+      [
+        { symbol: "RELIANCE", name: "RELIANCE INDUSTRIES" },
+        { symbol: "M&M", name: "MAHINDRA & MAHINDRA" },
+        { symbol: "M&MFIN", name: "MAHINDRA & MAHINDRA FIN" },
+      ],
+      "mahindra"
+    )
+    expect(found.map(row => row.symbol)).toEqual(["M&M", "M&MFIN"])
+  })
+})
+
+describe("Nifty 100 seed list", () => {
+  it("has one hundred names, including M&M, with a market-cap snapshot", () => {
+    const rows = loadNifty100()
+    expect(rows).toHaveLength(100)
+    expect(rows.some(row => row.symbol === "M&M")).toBe(true)
+    const reliance = rows.find(row => row.symbol === "RELIANCE")
+    expect(reliance?.marketCapCr).toBeGreaterThan(100_000)
+    expect(reliance?.name.toLowerCase()).toContain("reliance")
   })
 })
 
@@ -186,6 +212,22 @@ describe("momentum switches", () => {
 })
 
 describe("daily long-only trend", () => {
+  it("drops today's bar and sizes a buy from the rupee budget", () => {
+    const bars = completedDailyBars(
+      [
+        { date: "2026-10-13", close: 100 },
+        { date: "2026-10-14", close: 130 },
+      ],
+      "2026-10-14"
+    )
+    expect(bars.map(bar => bar.close)).toEqual([100])
+    expect(sharesForBudget(100_000, 250)).toBe(400)
+    expect(sharesForBudget(0, 250)).toBe(0)
+    expect(
+      parseScreenerMarketCapCr('<span class="name">Market Cap</span><span class="number">15,78,705</span>')
+    ).toBe(1578705)
+  })
+
   const trend = {
     emaPeriod: 3,
     bufferPercent: 1,

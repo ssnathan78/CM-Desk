@@ -1,6 +1,11 @@
 import { sendApiError } from "../../lib/apiErrors"
 import logger from "../../lib/logger"
-import { firstTradingSessionOfMonth, isoWeekdayIst, istDate } from "../../lib/momentum/calendar"
+import {
+  firstTradingSessionOfMonth,
+  isoWeekdayIst,
+  istDate,
+  previousIstDate,
+} from "../../lib/momentum/calendar"
 import { buildMomentumPlan, executableOrders } from "../../lib/momentum/engine"
 import { submitCashOrders } from "../../lib/momentum/execute"
 import { pullCashHistory } from "../../lib/momentum/history"
@@ -8,6 +13,7 @@ import {
   getMomentumState,
   holdingsFor,
   listLocks,
+  listMarketCaps,
   listUniverse,
   loadBars,
   markMomentumRebalance,
@@ -43,13 +49,19 @@ async function report() {
     }
   }
   const bars = await loadBars(universe.map(row => row.symbol))
+  const caps = new Map((await listMarketCaps()).map(row => [row.symbol, row.marketCapCr]))
   const holdings = await holdingsFor("MOMENTUM")
   const locks = await listLocks()
   const plan = buildMomentumPlan({
-    symbols: universe.map(row => ({ symbol: row.symbol, bars: bars.get(row.symbol) ?? [] })),
+    symbols: universe.map(row => ({
+      symbol: row.symbol,
+      bars: bars.get(row.symbol) ?? [],
+      marketCapCr: caps.get(row.symbol) ?? null,
+    })),
     config: state.config,
     holdings,
     locks,
+    asOf: previousIstDate(new Date()),
   })
   const names = new Map(universe.map(row => [row.symbol, row.name]))
   return {
@@ -102,9 +114,14 @@ export default withSession(async (req, res) => {
       return res.json(await report())
     }
     if (req.method === "POST" && req.body?.action === "pull") {
+      if (req.body.config) await saveMomentumConfig(normalizeMomentumConfig(req.body.config))
       const state = await getMomentumState()
-      if (!state.config.active)
-        return res.status(409).json({ error: "Turn the strategy on before pulling history" })
+      if (!state.config.active) {
+        return res.status(409).json({
+          error:
+            "Strategy on is saved as off. Turn Strategy on on this page. Desk → Risk does not start the history pull. This button saves the switches on the page, then pulls.",
+        })
+      }
       const token = req.session.user.session?.access_token
       return res.json(await pullCashHistory({ accessToken: token, force: true }))
     }

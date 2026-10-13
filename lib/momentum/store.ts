@@ -1,10 +1,11 @@
-import { eq, inArray, sql } from "drizzle-orm"
-
+import { asc, eq, inArray, sql } from "drizzle-orm"
+import { loadNifty100 } from "../dailyTrend/nifty100"
 import { db } from "../drizzle"
 import {
   dailyTrendBooks,
   dailyTrendSettings,
   equityDailyBars,
+  equityMarketCaps,
   momentumSettings,
   momentumUniverse,
   momentumWeightLocks,
@@ -298,6 +299,7 @@ export type DailyTrendBookRow = {
   status: "FLAT" | "PENDING_LONG" | "LONG"
   stop: number | null
   entry: number | null
+  budgetInr: number
 }
 
 function bookFromRow(row: typeof dailyTrendBooks.$inferSelect): DailyTrendBookRow {
@@ -313,12 +315,47 @@ function bookFromRow(row: typeof dailyTrendBooks.$inferSelect): DailyTrendBookRo
     status: row.status === "PENDING_LONG" || row.status === "LONG" ? row.status : "FLAT",
     stop: row.stopPrice == null ? null : Number(row.stopPrice),
     entry: row.entryPrice == null ? null : Number(row.entryPrice),
+    budgetInr: Number(row.budgetInr ?? 0),
   }
 }
 
 export async function listDailyTrendBooks(): Promise<DailyTrendBookRow[]> {
   const rows = await db.select().from(dailyTrendBooks)
   return rows.map(bookFromRow).sort((a, b) => a.symbol.localeCompare(b.symbol))
+}
+
+export async function ensureNifty100Books(): Promise<void> {
+  await getDailyTrendState()
+  const [settings] = await db
+    .select({ seeded: dailyTrendSettings.nifty100Seeded })
+    .from(dailyTrendSettings)
+    .where(eq(dailyTrendSettings.id, 1))
+    .limit(1)
+  if (settings?.seeded) return
+  const names = loadNifty100()
+  if (names.length) {
+    await db
+      .insert(dailyTrendBooks)
+      .values(
+        names.map(row => ({
+          tradingsymbol: row.symbol,
+          enabled: false,
+          paused: false,
+          emaPeriod: 40,
+          bufferPercent: "1",
+          exitBufferPercent: "1",
+          quantity: 1,
+          budgetInr: "0",
+          entryStyle: "CLOSE_CROSS",
+          status: "FLAT",
+        }))
+      )
+      .onConflictDoNothing()
+  }
+  await db
+    .update(dailyTrendSettings)
+    .set({ nifty100Seeded: true, updatedAt: new Date() })
+    .where(eq(dailyTrendSettings.id, 1))
 }
 
 export async function saveDailyTrendBook(book: DailyTrendBookRow): Promise<void> {
@@ -333,6 +370,7 @@ export async function saveDailyTrendBook(book: DailyTrendBookRow): Promise<void>
       bufferPercent: String(book.bufferPercent),
       exitBufferPercent: String(book.exitBufferPercent),
       quantity: book.quantity,
+      budgetInr: String(book.budgetInr || 0),
       entryStyle: book.entryStyle,
       status: book.status,
       stopPrice: book.stop == null ? null : String(book.stop),
@@ -348,6 +386,7 @@ export async function saveDailyTrendBook(book: DailyTrendBookRow): Promise<void>
         bufferPercent: String(book.bufferPercent),
         exitBufferPercent: String(book.exitBufferPercent),
         quantity: book.quantity,
+        budgetInr: String(book.budgetInr || 0),
         entryStyle: book.entryStyle,
         status: book.status,
         stopPrice: book.stop == null ? null : String(book.stop),
@@ -359,4 +398,77 @@ export async function saveDailyTrendBook(book: DailyTrendBookRow): Promise<void>
 
 export async function removeDailyTrendBook(symbol: string): Promise<void> {
   await db.delete(dailyTrendBooks).where(eq(dailyTrendBooks.tradingsymbol, symbol.toUpperCase()))
+}
+
+export type MarketCapRow = {
+  symbol: string
+  name: string
+  industry: string
+  marketCapCr: number | null
+  asOf: string | null
+}
+
+export async function listMarketCaps(): Promise<MarketCapRow[]> {
+  const rows = await db.select().from(equityMarketCaps)
+  return rows.map(row => ({
+    symbol: row.tradingsymbol,
+    name: row.companyName || row.tradingsymbol,
+    industry: row.industry || "",
+    marketCapCr: row.marketCapCr == null ? null : Number(row.marketCapCr),
+    asOf: row.asOf,
+  }))
+}
+
+export async function seedMarketCapsFromList(
+  rows: { symbol: string; name: string; industry: string; marketCapCr: number | null }[],
+  asOf: string
+): Promise<void> {
+  const missing = rows.filter(row => row.symbol)
+  if (!missing.length) return
+  await db
+    .insert(equityMarketCaps)
+    .values(
+      missing.map(row => ({
+        tradingsymbol: row.symbol,
+        companyName: row.name,
+        industry: row.industry,
+        marketCapCr: row.marketCapCr == null ? null : String(row.marketCapCr),
+        asOf: row.marketCapCr == null ? null : asOf,
+      }))
+    )
+    .onConflictDoNothing()
+}
+
+export async function marketCapsDue(today: string, limit: number): Promise<string[]> {
+  const rows = await db
+    .select({ symbol: equityMarketCaps.tradingsymbol, asOf: equityMarketCaps.asOf })
+    .from(equityMarketCaps)
+    .orderBy(asc(equityMarketCaps.asOf))
+  return rows
+    .filter(row => row.asOf == null || row.asOf < today)
+    .slice(0, limit)
+    .map(row => row.symbol)
+}
+
+export async function saveMarketCap(row: {
+  symbol: string
+  marketCapCr: number
+  asOf: string
+}): Promise<void> {
+  await db
+    .insert(equityMarketCaps)
+    .values({
+      tradingsymbol: row.symbol,
+      marketCapCr: String(row.marketCapCr),
+      asOf: row.asOf,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: equityMarketCaps.tradingsymbol,
+      set: {
+        marketCapCr: String(row.marketCapCr),
+        asOf: row.asOf,
+        updatedAt: new Date(),
+      },
+    })
 }

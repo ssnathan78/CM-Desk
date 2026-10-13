@@ -5,6 +5,7 @@ import { buildMomentumPlan, executableOrders } from "./engine"
 import { submitCashOrders } from "./execute"
 import { pullCashHistory } from "./history"
 import {
+  ensureNifty100Books,
   getMomentumState,
   holdingsFor,
   listLocks,
@@ -51,6 +52,10 @@ export async function runCashSchedulerOnce(accessToken?: string | null) {
   }
   const { evaluateDailyTrend } = await import("./trendRun")
   await evaluateDailyTrend({ execute: false, accessToken })
+  await ensureNifty100Books()
+  const { refreshStaleMarketCaps, seedKnownMarketCaps } = await import("../dailyTrend/marketCap")
+  await seedKnownMarketCaps()
+  await refreshStaleMarketCaps(20).catch(error => logger.error("[marketCap]", error))
   return history
 }
 

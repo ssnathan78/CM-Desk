@@ -26,3 +26,7 @@ export function isoWeekdayIst(now: Date): number {
 export function istDate(now: Date): string {
   return dayjs(now).tz(IST_TZ).format("YYYY-MM-DD")
 }
+
+export function previousIstDate(now: Date): string {
+  return dayjs(now).tz(IST_TZ).subtract(1, "day").format("YYYY-MM-DD")
+}

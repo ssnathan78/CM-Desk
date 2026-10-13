@@ -37,12 +37,22 @@ A symbol is accepted only when it is an NSE cash instrument (`instrument_type` E
 
 The database check allows `A`–`Z`, digits, `&`, and `-`, and requires a letter first (`drizzle/0020_nse_cash_symbol.sql`). That shape is not a listing check. Names already saved that failed the shape are deleted by that migration.
 
+Search on the page looks up the NSE cash dump by symbol or company name, the same way Chase searches futures, and adds the name **off**. Names already on the book are omitted from the search results. The filter box on the table searches the rows you already have.
+
+## Nifty 100
+
+The first time the page loads, the Nifty 100 constituent file is inserted as books with **On** switched off (`drizzle/0021_daily_trend_nifty100.sql` records that the seed ran). A name you later remove is not put back. A book you already saved is left as you saved it.
+
+Market cap is stored in `equity_market_caps` and shown with the date it was saved. The hourly job refreshes about 20 of the oldest figures from Screener, so the Nifty 100 book updates inside a day while the process is running. A failed fetch keeps the previous figure. The signal does not use market cap.
+
 ## Signal
 
 EMA is the standard daily close EMA. The seed is the SMA of the first `period` closes, then `k = 2 / (period + 1)`.
 
-- Long line = EMA × (1 + buffer%).
-- Exit line = EMA × (1 − exit buffer%).
+- Long line = EMA × (1 + buffer%). Default buffer is 1, so the close must be 1% above the EMA.
+- Exit line = EMA × (1 − exit buffer%). Default exit buffer is also 1.
+- The decision uses the last daily bar **dated before today**. Today’s candle is ignored, including after the close, until the next IST date stores it as a completed bar. A morning pull cannot trade a partial day.
+- Buy size is `floor(budget INR / that close)`. Budget 0 buys nothing. The old share count is not the order size.
 - `CLOSE_CROSS`: a close above the long line buys `quantity` shares. Status stays `PENDING_LONG` until the book has a long quantity. A rejected buy stays `FLAT`.
 - `BREAK_HIGH`: that close only arms a buy at that day’s high. A later bar whose high reaches that entry buys. A close back through the exit line or the stored stop cancels the pending buy and does not sell a flat book.
 - Once long, the stop is the lower of the EMA and the signal day’s low. A **later** close through that stop, or through the exit line, sells the **open quantity**. The same day’s low is not a fill, because a daily close cannot trade through that bar’s low.
@@ -93,8 +103,9 @@ There is no separate desk tab for this strategy.
 | Hourly pass | `lib/momentum/scheduler.ts` |
 | Day-candle pull | `lib/momentum/history.ts` |
 | CNC submit | `lib/momentum/execute.ts` |
-| Symbol listing check | `lib/nseCashSymbol.ts` |
+| Symbol listing check and search | `lib/nseCashSymbol.ts` |
+| Nifty 100 list and market-cap snapshot | `lib/dailyTrend/nifty100.ts`, `data/universe/nifty-100.csv` |
 | Page | `/daily-trend` |
-| API | `POST /api/daily-trend` actions `save-book`, `remove-book`, `pull`, `evaluate` |
+| API | `GET/POST /api/daily-trend`. Search: `GET /api/nse-cash-search?q=` |
 
 Tables: `daily_trend_settings`, `daily_trend_books`, `equity_daily_bars` (`drizzle/0019_momentum_and_daily_trend.sql`).

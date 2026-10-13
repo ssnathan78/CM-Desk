@@ -1,11 +1,14 @@
 import { sendApiError } from "../../lib/apiErrors"
 import { normalizeDailyTrendConfig } from "../../lib/dailyTrend/engine"
+import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import logger from "../../lib/logger"
 import { pullCashHistory } from "../../lib/momentum/history"
 import {
   type DailyTrendBookRow,
+  ensureNifty100Books,
   getDailyTrendState,
   listDailyTrendBooks,
+  listMarketCaps,
   removeDailyTrendBook,
   saveDailyTrendBook,
   saveDailyTrendRuntime,
@@ -34,6 +37,7 @@ function bookFromBody(
     quantity: config.quantity,
     entryStyle: config.entryStyle,
     status,
+    budgetInr: body.budgetInr == null ? (previous?.budgetInr ?? 0) : Number(body.budgetInr),
     stop: body.stop == null ? (previous?.stop ?? null) : Number(body.stop),
     entry: body.entry == null ? (previous?.entry ?? null) : Number(body.entry),
   }
@@ -43,8 +47,31 @@ export default withSession(async (req, res) => {
   if (!req.session.user) return res.status(401).send("Unauthorized")
   try {
     if (req.method === "GET") {
-      const [state, books] = await Promise.all([getDailyTrendState(), listDailyTrendBooks()])
-      return res.json({ ...state, books })
+      await ensureNifty100Books()
+      const [state, books, caps] = await Promise.all([
+        getDailyTrendState(),
+        listDailyTrendBooks(),
+        listMarketCaps(),
+      ])
+      const profile = new Map(caps.map(row => [row.symbol, row]))
+      const seeded = new Map(loadNifty100().map(row => [row.symbol, row]))
+      return res.json({
+        ...state,
+        books: books.map(book => {
+          const known = profile.get(book.symbol)
+          const listed = seeded.get(book.symbol)
+          return {
+            ...book,
+            name:
+              known?.name && known.name !== book.symbol
+                ? known.name
+                : (listed?.name ?? book.symbol),
+            industry: known?.industry || listed?.industry || "",
+            marketCapCr: known?.marketCapCr ?? listed?.marketCapCr ?? null,
+            marketCapAsOf: known?.asOf ?? null,
+          }
+        }),
+      })
     }
     if (req.method === "PUT") {
       const state = await saveDailyTrendRuntime(req.body?.config ?? req.body)

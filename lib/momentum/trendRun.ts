@@ -1,4 +1,10 @@
-import { emaFromCloses, evaluateDailyLong } from "../dailyTrend/engine"
+import {
+  completedDailyBars,
+  emaFromCloses,
+  evaluateDailyLong,
+  sharesForBudget,
+} from "../dailyTrend/engine"
+import { istDate } from "./calendar"
 import { type SubmitResult, submitCashOrders } from "./execute"
 import {
   getDailyTrendState,
@@ -42,9 +48,11 @@ export async function evaluateDailyTrend(args: { execute: boolean; accessToken?:
       })
       continue
     }
-    const history = (bars.get(book.symbol) ?? [])
-      .slice()
-      .sort((a, b) => a.date.localeCompare(b.date))
+    const today = istDate(new Date())
+    const history = completedDailyBars(
+      (bars.get(book.symbol) ?? []).slice().sort((a, b) => a.date.localeCompare(b.date)),
+      today
+    )
     const ema = emaFromCloses(
       history.map(bar => bar.close),
       book.emaPeriod
@@ -54,7 +62,7 @@ export async function evaluateDailyTrend(args: { execute: boolean; accessToken?:
       decisions.push({
         symbol: book.symbol,
         action: "NONE",
-        reason: "not enough daily bars",
+        reason: "not enough completed daily bars",
         state: book.status,
       })
       continue
@@ -72,7 +80,7 @@ export async function evaluateDailyTrend(args: { execute: boolean; accessToken?:
         bufferPercent: book.bufferPercent,
         exitBufferPercent: book.exitBufferPercent,
         entryStyle: book.entryStyle,
-        quantity: book.quantity,
+        quantity: sharesForBudget(book.budgetInr, bar.close),
       },
     })
     const entryBlocked = book.paused && decision.role === "ENTRY"

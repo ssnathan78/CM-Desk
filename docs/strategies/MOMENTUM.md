@@ -22,7 +22,8 @@ The universe file is `data/universe/nifty-total-market.csv`. The production imag
 | **Pull data** | The hourly scheduler does not call Kite. **Pull history now** still works while On is enabled. |
 | Execution `report` | Orders are calculated and shown. Nothing is sent. This is the default. |
 | Execution `manual` | Orders go out only from **Send rebalance**. |
-| Execution `auto` | Orders go out on the rebalance day, during the NSE session, once that IST day. |
+| Execution `auto` | Orders go out on the rebalance day, during the NSE session, once that IST day. A rejected buy is not retried that day. |
+| Rebalance `adhoc` | No day is ever due, so auto does not send. The order diff is still calculated. **Send rebalance** sends it when execution is Manual. |
 | Desk → Risk → Momentum disabled | No orders at all, including sells. The card starts off. |
 | Desk halt | New buys stop. Sells still run. |
 
@@ -53,19 +54,33 @@ All thresholds are on the Momentum page, behind **Filters**. Defaults:
 | SMA | 200 sessions, must be above | close at or below that average |
 | Last month vs 12-month | 0.5 | when the 12-month return is positive, `roc1 / roc12` at or above 0.5 |
 | 12-month return | must be positive | not strictly above 0 |
-| Circuit count | off | strict fails closed when the field is missing (Kite day candles do not have it) |
-| Market cap | off | strict fails closed when the field is missing |
+| Circuit count | off | Kite has no circuit count. Strict fails every name. Leave Off |
+| Market cap | off | Strict fails a name with no stored market cap, or below the minimum. The refresh covers the daily-trend book, not all 750 |
 
 A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past the worst rank held, or leaves the universe is a sell of the **open quantity**. The sell is never sized from the configured holding count.
 
 ## Book
 
 - Holdings count, worst rank held, and entry rank are independent. Defaults are 30, 75, and 75. A new name must be inside the entry rank. A name already held may stay until the worst rank held.
-- Equal-weight slot is `100 / holdingsCount`, then capped by max weight (default 10%). Min weight (default 2%) is stored on the config. Target quantity is `floor(capital × weight / price)`.
-- Capital 0 produces a report and no buys.
+- Equal-weight slot is `100 / holdingsCount`, then capped by max weight (default 10%). Min weight (default 2%) is stored on the config. Target quantity is `floor(capital × weight / last completed close)`.
+- **Capital INR** is the rupee budget for the whole book. Capital 0 produces weights and no buys.
+- Minimum turnover is the mean of close × volume over the last 21 stored sessions. It appears after a history pull.
 - Locked **hold weight** keeps the target at `min(held quantity, quantity from the locked weight)`. The rebalance does not buy it back up to equal weight. **Exclude** sells the open quantity and does not buy the name again.
 - A top-up buy of a name that is already held and still selected is a buy. It is not a new leader.
-- Rebalance is monthly (first NSE session of the month), weekly (ISO weekday 1–5, default Monday), or ad hoc (never automatic).
+- Rebalance is monthly (first NSE session of the month), weekly (ISO weekday 1–5, default Monday), or ad hoc (never automatic). The weekday field is shown only when rebalance is weekly.
+
+## Buttons
+
+| Button | What it does |
+|---|---|
+| **Save** | Writes the switches on this page. Strategy on here is not Desk → Risk. |
+| **Pull history now** | Saves the switches, then downloads NSE day candles for the momentum universe and the daily-trend names. Refuses when Strategy on is still off. Desk → Risk does not start this pull. |
+| **Preview orders** | Rebuilds the buy and sell diff from the stored candles and sends nothing. |
+| **Send rebalance** | Sends that diff. Disabled while execution is Report only. Manual sends on click. Auto also sends on the rebalance day without this click. |
+
+The rank and the diff use the last completed daily close. A candle dated today is ignored.
+
+The rank table shows every stored name. **Show → Pass the filters** keeps names that clear every filter. **Show → In the order diff** keeps names with a target weight or a buy or sell. **Export this view** downloads that slice as CSV. Column headers sort. The page used to stop at 80 rows; it now shows the whole list.
 
 ## Orders and a short Zerodha balance
 

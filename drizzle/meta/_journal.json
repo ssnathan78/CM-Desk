@@ -155,6 +155,20 @@
       "when": 1756980000021,
       "tag": "0020_nse_cash_symbol",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1756980000022,
+      "tag": "0021_daily_trend_nifty100",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1756980000023,
+      "tag": "0022_daily_trend_budget_and_mcap",
+      "breakpoints": true
     }
   ]
 }

@@ -213,6 +213,16 @@ export const dailyTrendSettings = pgTable("daily_trend_settings", {
   id: integer("id").primaryKey(),
   config: jsonb("config").notNull().default({}),
   lastDataPullOn: date("last_data_pull_on"),
+  nifty100Seeded: boolean("nifty100_seeded").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const equityMarketCaps = pgTable("equity_market_caps", {
+  tradingsymbol: text("tradingsymbol").primaryKey(),
+  companyName: text("company_name"),
+  industry: text("industry"),
+  marketCapCr: numeric("market_cap_cr"),
+  asOf: date("as_of"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -221,9 +231,10 @@ export const dailyTrendBooks = pgTable("daily_trend_books", {
   enabled: boolean("enabled").notNull().default(false),
   paused: boolean("paused").notNull().default(false),
   emaPeriod: integer("ema_period").notNull().default(40),
-  bufferPercent: numeric("buffer_percent").notNull().default("0.2"),
-  exitBufferPercent: numeric("exit_buffer_percent").notNull().default("0.2"),
+  bufferPercent: numeric("buffer_percent").notNull().default("1"),
+  exitBufferPercent: numeric("exit_buffer_percent").notNull().default("1"),
   quantity: integer("quantity").notNull().default(1),
+  budgetInr: numeric("budget_inr").notNull().default("0"),
   entryStyle: text("entry_style").notNull().default("CLOSE_CROSS"),
   status: text("status").notNull().default("FLAT"),
   stopPrice: numeric("stop_price"),

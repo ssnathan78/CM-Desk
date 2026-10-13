@@ -11,8 +11,8 @@ export type DailyTrendConfig = {
 
 export const DEFAULT_DAILY_TREND_CONFIG: DailyTrendConfig = {
   emaPeriod: 40,
-  bufferPercent: 0.2,
-  exitBufferPercent: 0.2,
+  bufferPercent: 1,
+  exitBufferPercent: 1,
   entryStyle: "CLOSE_CROSS",
   quantity: 1,
 }
@@ -39,6 +39,17 @@ export function emaFromCloses(closes: number[], period: number): number | null {
   return ema
 }
 
+/** Bars dated today are still the session in progress, or a partial candle from the morning pull. */
+export function completedDailyBars<T extends { date: string }>(bars: T[], today: string): T[] {
+  return bars.filter(bar => bar.date < today)
+}
+
+/** Shares to buy from a rupee budget. Zero budget buys nothing. */
+export function sharesForBudget(budgetInr: number, price: number): number {
+  if (!(budgetInr > 0) || !(price > 0)) return 0
+  return Math.floor(budgetInr / price)
+}
+
 export function normalizeDailyTrendConfig(raw: unknown): DailyTrendConfig {
   const row = raw && typeof raw === "object" ? (raw as Partial<DailyTrendConfig>) : {}
   const quantity = Math.round(Number(row.quantity))
@@ -47,8 +58,8 @@ export function normalizeDailyTrendConfig(raw: unknown): DailyTrendConfig {
   const exitBuffer = Number(row.exitBufferPercent)
   return {
     emaPeriod: Number.isFinite(emaPeriod) ? Math.min(400, Math.max(2, emaPeriod)) : 40,
-    bufferPercent: Number.isFinite(buffer) ? Math.min(20, Math.max(0, buffer)) : 0.2,
-    exitBufferPercent: Number.isFinite(exitBuffer) ? Math.min(20, Math.max(0, exitBuffer)) : 0.2,
+    bufferPercent: Number.isFinite(buffer) ? Math.min(20, Math.max(0, buffer)) : 1,
+    exitBufferPercent: Number.isFinite(exitBuffer) ? Math.min(20, Math.max(0, exitBuffer)) : 1,
     entryStyle: row.entryStyle === "BREAK_HIGH" ? "BREAK_HIGH" : "CLOSE_CROSS",
     quantity: Number.isFinite(quantity) ? Math.min(1_000_000, Math.max(0, quantity)) : 1,
   }

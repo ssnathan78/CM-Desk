@@ -15,6 +15,7 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from "@mui/material"
@@ -67,15 +68,53 @@ export default function MomentumPage() {
   const { data, mutate } = useSWR<Report>("/api/momentum")
   const [draft, setDraft] = useState<MomentumConfig | null>(null)
   const [query, setQuery] = useState("")
+  const [view, setView] = useState<"all" | "pass" | "orders">("all")
+  const [sortKey, setSortKey] = useState<"rank" | "symbol" | "score" | "pass" | "weight">("rank")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [busy, setBusy] = useState(false)
   const config = draft ?? data?.config ?? DEFAULT_MOMENTUM_CONFIG
   const rows = useMemo(() => {
     const q = query.trim().toUpperCase()
-    const all = data?.rows ?? []
-    return q
-      ? all.filter(row => row.symbol.includes(q) || (row.name || "").toUpperCase().includes(q))
-      : all
-  }, [data?.rows, query])
+    const targets = new Set((data?.targets ?? []).map(row => row.symbol))
+    const orders = new Set((data?.orders ?? []).map(row => row.symbol))
+    const all = (data?.rows ?? []).filter(row => {
+      if (q && !row.symbol.includes(q) && !(row.name || "").toUpperCase().includes(q)) return false
+      if (view === "pass") return row.filterPass
+      if (view === "orders") return targets.has(row.symbol) || orders.has(row.symbol)
+      return true
+    })
+    const dir = sortDir === "asc" ? 1 : -1
+    return all.slice().sort((a, b) => {
+      const weight = (symbol: string) =>
+        data?.targets.find(row => row.symbol === symbol)?.weightPct ?? -1
+      const left =
+        sortKey === "symbol"
+          ? a.symbol
+          : sortKey === "score"
+            ? (a.metrics?.score ?? Number.NEGATIVE_INFINITY)
+            : sortKey === "pass"
+              ? a.filterPass
+                ? 1
+                : 0
+              : sortKey === "weight"
+                ? weight(a.symbol)
+                : (a.rank ?? 10_000)
+      const right =
+        sortKey === "symbol"
+          ? b.symbol
+          : sortKey === "score"
+            ? (b.metrics?.score ?? Number.NEGATIVE_INFINITY)
+            : sortKey === "pass"
+              ? b.filterPass
+                ? 1
+                : 0
+              : sortKey === "weight"
+                ? weight(b.symbol)
+                : (b.rank ?? 10_000)
+      if (typeof left === "number" && typeof right === "number") return (left - right) * dir
+      return String(left).localeCompare(String(right)) * dir
+    })
+  }, [data?.orders, data?.rows, data?.targets, query, sortDir, sortKey, view])
 
   async function save(next: MomentumConfig = config) {
     setBusy(true)
@@ -171,17 +210,26 @@ export default function MomentumPage() {
               size="small"
               label="Rebalance"
               value={config.rebalance}
+              helperText={
+                config.rebalance === "adhoc"
+                  ? "Never sends on a schedule. The order list is the buy and sell diff."
+                  : config.rebalance === "monthly"
+                    ? "First NSE session of the month. Weekday is only for weekly."
+                    : "Sends on the weekday below."
+              }
               onChange={e => patch({ rebalance: e.target.value as MomentumConfig["rebalance"] })}
             >
               <MenuItem value="monthly">Monthly</MenuItem>
               <MenuItem value="weekly">Weekly</MenuItem>
               <MenuItem value="adhoc">Ad hoc</MenuItem>
             </TextField>
-            <Num
-              label="Weekday (1–5)"
-              value={config.weeklyDay}
-              onChange={weeklyDay => patch({ weeklyDay })}
-            />
+            {config.rebalance === "weekly" ? (
+              <Num
+                label="Weekday (1–5)"
+                value={config.weeklyDay}
+                onChange={weeklyDay => patch({ weeklyDay })}
+              />
+            ) : null}
             <Num
               label="Holdings"
               value={config.holdingsCount}
@@ -217,6 +265,7 @@ export default function MomentumPage() {
             <Num
               label="Capital INR"
               value={config.capitalInr}
+              helperText="Rupees for the whole book. 0 shows weights and buys nothing."
               onChange={capitalInr => patch({ capitalInr })}
             />
           </Box>
@@ -256,6 +305,7 @@ export default function MomentumPage() {
                 <Num
                   label="Min turnover INR"
                   value={config.filters.minAvgTurnoverInr}
+                  helperText="Mean of close × volume over the last 21 sessions, after a history pull."
                   onChange={minAvgTurnoverInr =>
                     patch({ filters: { ...config.filters, minAvgTurnoverInr } })
                   }
@@ -277,6 +327,7 @@ export default function MomentumPage() {
                   fullWidth
                   size="small"
                   label="Circuit count"
+                  helperText="Kite day candles have no circuit count. Strict fails every name. Leave Off."
                   value={config.filters.circuitFilter}
                   onChange={e =>
                     patch({
@@ -295,6 +346,7 @@ export default function MomentumPage() {
                   fullWidth
                   size="small"
                   label="Market cap"
+                  helperText="Off ignores it. Strict drops a name with no stored market cap, or below the minimum. The daily refresh covers the daily-trend book, not all 750."
                   value={config.filters.marketCapFilter}
                   onChange={e =>
                     patch({
@@ -317,7 +369,7 @@ export default function MomentumPage() {
             </Button>
             <Button
               disabled={busy}
-              onClick={() => void post({ action: "pull" }, "History pull finished")}
+              onClick={() => void post({ action: "pull", config }, "History pull finished")}
             >
               Pull history now
             </Button>
@@ -342,32 +394,87 @@ export default function MomentumPage() {
             </Button>
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            Last pull {data?.lastDataPullOn ?? "never"}. Rebalance day {data?.due ? "yes" : "no"}.
-            Targets {data?.targets.length ?? 0}. Preview orders {data?.orders.length ?? 0}. A
-            hold-weight lock is not bought back up to equal weight. Exclude keeps the name out and
-            sells it if it is held.
+            Pull history now saves these switches, then downloads NSE day candles. It needs Strategy
+            on. Desk → Risk is a separate switch and does not start the pull. Preview orders
+            refreshes the buy and sell diff and sends nothing. Send rebalance sends that diff, and
+            only after execution is Manual or Auto. Ad hoc never sends by itself: use Preview, then
+            Send. Monthly sends on the first NSE session of the month. The rank uses the last
+            completed daily close, not today’s candle.
           </Typography>
         </Paper>
-        <TextField
-          size="small"
-          label="Filter symbol or name"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-        />
-        <ScrollTable>
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="subtitle2">Planned orders</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Last pull {data?.lastDataPullOn ?? "never"}. Rebalance day {data?.due ? "yes" : "no"}.{" "}
+            {(data?.orders ?? []).length} orders. A sell is the open quantity. A buy is
+            floor(capital × weight / last completed close). Capital 0 lists no buys.
+          </Typography>
+          {(data?.orders ?? []).length === 0 ? (
+            <Typography variant="body2">No buy or sell in the current diff.</Typography>
+          ) : (
+            (data?.orders ?? []).map(order => (
+              <Typography key={`${order.side}-${order.symbol}`} variant="body2">
+                {order.side} {order.symbol} {order.quantity} — {order.reason}
+              </Typography>
+            ))
+          )}
+        </Paper>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+          <TextField
+            size="small"
+            label="Filter symbol or name"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+          <TextField
+            select
+            size="small"
+            label="Show"
+            value={view}
+            onChange={e => setView(e.target.value as "all" | "pass" | "orders")}
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="all">All names</MenuItem>
+            <MenuItem value="pass">Pass the filters</MenuItem>
+            <MenuItem value="orders">In the order diff</MenuItem>
+          </TextField>
+          <Button onClick={() => exportMomentum(rows, data)}>Export this view</Button>
+        </Stack>
+        <ScrollTable minWidth={980}>
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
-                <TableCell>Rank</TableCell>
-                <TableCell>Symbol</TableCell>
-                <TableCell>Score</TableCell>
-                <TableCell>Filters</TableCell>
-                <TableCell>Target</TableCell>
+                {(
+                  [
+                    ["rank", "Rank"],
+                    ["symbol", "Symbol"],
+                    ["score", "Score"],
+                    ["pass", "Filters"],
+                    ["weight", "Target"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <TableCell key={key} sortDirection={sortKey === key ? sortDir : false}>
+                    <TableSortLabel
+                      active={sortKey === key}
+                      direction={sortKey === key ? sortDir : "asc"}
+                      onClick={() => {
+                        if (sortKey === key)
+                          setSortDir(current => (current === "asc" ? "desc" : "asc"))
+                        else {
+                          setSortKey(key)
+                          setSortDir(key === "rank" || key === "symbol" ? "asc" : "desc")
+                        }
+                      }}
+                    >
+                      {label}
+                    </TableSortLabel>
+                  </TableCell>
+                ))}
                 <TableCell>Lock</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.slice(0, 80).map(row => {
+              {rows.map(row => {
                 const target = data?.targets.find(item => item.symbol === row.symbol)
                 const lock = data?.locks.find(item => item.symbol === row.symbol)
                 return (
@@ -445,11 +552,51 @@ export default function MomentumPage() {
           </Table>
         </ScrollTable>
         <Typography variant="caption" color="text.secondary">
-          Showing {Math.min(80, rows.length)} of {rows.length}. Spec: docs/strategies/MOMENTUM.md
+          Showing {rows.length} of {data?.rows.length ?? 0}. Pass the filters is the names that
+          clear every filter. In the order diff is the names with a target weight or a buy or sell.
+          Spec: docs/strategies/MOMENTUM.md
         </Typography>
       </Stack>
     </Layout>
   )
+}
+
+function exportMomentum(rows: Report["rows"], data: Report | undefined) {
+  const header = [
+    "rank",
+    "symbol",
+    "name",
+    "score",
+    "pass",
+    "reasons",
+    "weightPct",
+    "targetQty",
+    "order",
+  ]
+  const lines = [header.join(",")]
+  for (const row of rows) {
+    const target = data?.targets.find(item => item.symbol === row.symbol)
+    const order = data?.orders.find(item => item.symbol === row.symbol)
+    lines.push(
+      [
+        row.rank ?? "",
+        row.symbol,
+        `"${(row.name || "").replace(/"/g, "")}"`,
+        row.metrics?.score ?? "",
+        row.filterPass ? "yes" : "no",
+        `"${row.filterReasons.join("; ").replace(/"/g, "")}"`,
+        target?.weightPct ?? "",
+        target?.targetQty ?? "",
+        order ? `${order.side} ${order.quantity}` : "",
+      ].join(",")
+    )
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" })
+  const link = document.createElement("a")
+  link.href = URL.createObjectURL(blob)
+  link.download = "momentum.csv"
+  link.click()
+  URL.revokeObjectURL(link.href)
 }
 
 function SwitchField({
@@ -472,10 +619,12 @@ function SwitchField({
 function Num({
   label,
   value,
+  helperText,
   onChange,
 }: {
   label: string
   value: number
+  helperText?: string
   onChange: (value: number) => void
 }) {
   return (
@@ -483,6 +632,7 @@ function Num({
       fullWidth
       size="small"
       label={label}
+      helperText={helperText}
       type="number"
       value={value}
       onChange={e => onChange(Number(e.target.value))}

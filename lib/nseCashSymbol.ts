@@ -26,6 +26,49 @@ export async function listedNseCashSymbols(accessToken?: string | null): Promise
   return symbols
 }
 
+export type NseCashMatch = { symbol: string; name: string }
+
+export function searchNseCashNames(
+  listed: NseCashMatch[],
+  query: string,
+  limit = 15
+): NseCashMatch[] {
+  const q = query.trim().toUpperCase()
+  const ranked = listed
+    .filter(
+      row =>
+        row.symbol && (q === "" || row.symbol.includes(q) || row.name.toUpperCase().includes(q))
+    )
+    .sort((a, b) => {
+      const aSym = a.symbol.startsWith(q) ? 0 : 1
+      const bSym = b.symbol.startsWith(q) ? 0 : 1
+      if (aSym !== bSym) return aSym - bSym
+      return a.symbol.localeCompare(b.symbol)
+    })
+  return ranked.slice(0, limit)
+}
+
+export async function searchListedNseCash(
+  query: string,
+  accessToken?: string | null,
+  limit = 15
+): Promise<NseCashMatch[]> {
+  const kite = getKiteInstance(accessToken || undefined)
+  const rows = (await kite.getInstruments("NSE")) as Array<{
+    tradingsymbol?: string
+    name?: string
+    instrument_type?: string
+  }>
+  const listed: NseCashMatch[] = []
+  for (const row of rows) {
+    if (row.instrument_type !== "EQ" || !row.tradingsymbol) continue
+    const symbol = normalizeNseCashSymbol(row.tradingsymbol)
+    if (!symbol) continue
+    listed.push({ symbol, name: row.name?.trim() || symbol })
+  }
+  return searchNseCashNames(listed, query, limit)
+}
+
 export async function requireListedNseCash(
   raw: string,
   accessToken?: string | null
