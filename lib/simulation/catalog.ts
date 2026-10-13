@@ -1247,6 +1247,242 @@ const NAMED: Record<string, () => SimulateConfig> = {
     option920("straddle-920-chop-stops-both-legs", "straddle", "chop"),
   "strangle-920-chop-stops-both-legs": () =>
     option920("strangle-920-chop-stops-both-legs", "strangle", "chop"),
+  "momentum-report-no-orders": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "momentum-report-no-orders",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 100 }],
+      actors: [
+        {
+          kind: "momentum",
+          strategy: "MOMENTUM",
+          symbol: "RELIANCE",
+          lots: 1,
+          momentum: {
+            execution: "report",
+            capitalInr: 100000,
+            holdingsCount: 1,
+            worstRankHeld: 5,
+            entryRankMax: 5,
+            rows: [{ symbol: "RELIANCE", score: 2, price: 100 }],
+          },
+        },
+      ],
+      assertions: [{ type: "no_orders" }],
+    }),
+  "momentum-risk-reject-no-fill": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "momentum-risk-reject-no-fill",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 100 }],
+      risk: {
+        maxNotionalInr: 100,
+        strategies: {
+          ...DEFAULT_STRATS(),
+          MOMENTUM: { ...DEFAULT_STRATS().MOMENTUM, enabled: true },
+        },
+      },
+      actors: [
+        {
+          kind: "momentum",
+          strategy: "MOMENTUM",
+          symbol: "RELIANCE",
+          lots: 1,
+          momentum: {
+            execution: "auto",
+            due: true,
+            capitalInr: 100000,
+            holdingsCount: 1,
+            worstRankHeld: 5,
+            entryRankMax: 5,
+            rows: [{ symbol: "RELIANCE", score: 2, price: 100 }],
+          },
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }, { type: "no_position" }],
+    }),
+  "momentum-halt-allows-exit": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "momentum-halt-allows-exit",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 100 }],
+      risk: {
+        deskHalted: true,
+        haltReason: "test",
+        strategies: {
+          ...DEFAULT_STRATS(),
+          MOMENTUM: { ...DEFAULT_STRATS().MOMENTUM, enabled: true },
+        },
+      },
+      actors: [
+        {
+          kind: "momentum",
+          strategy: "MOMENTUM",
+          symbol: "RELIANCE",
+          lots: 1,
+          seedQty: 10,
+          momentum: {
+            execution: "auto",
+            due: true,
+            capitalInr: 100000,
+            holdingsCount: 1,
+            worstRankHeld: 5,
+            entryRankMax: 5,
+            rows: [{ symbol: "RELIANCE", score: 2, price: 100, pass: false }],
+          },
+        },
+      ],
+      assertions: [{ type: "role_on_symbol", symbol: "RELIANCE", role: "EXIT", min: 1 }],
+    }),
+  "momentum-disabled-no-exit": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "momentum-disabled-no-exit",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 100 }],
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          MOMENTUM: { ...DEFAULT_STRATS().MOMENTUM, enabled: false },
+        },
+      },
+      actors: [
+        {
+          kind: "momentum",
+          strategy: "MOMENTUM",
+          symbol: "RELIANCE",
+          lots: 1,
+          seedQty: 10,
+          momentum: {
+            execution: "auto",
+            due: true,
+            capitalInr: 100000,
+            holdingsCount: 1,
+            worstRankHeld: 5,
+            entryRankMax: 5,
+            rows: [{ symbol: "RELIANCE", score: 2, price: 100, pass: false }],
+          },
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "STRATEGY_DISABLED" }],
+    }),
+  "daily-trend-reject-no-phantom": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "daily-trend-reject-no-phantom",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 100 }],
+      risk: {
+        maxNotionalInr: 100,
+        strategies: {
+          ...DEFAULT_STRATS(),
+          DAILY_TREND: { ...DEFAULT_STRATS().DAILY_TREND, enabled: true },
+        },
+      },
+      actors: [
+        {
+          kind: "dailyTrend",
+          strategy: "DAILY_TREND",
+          symbol: "RELIANCE",
+          lots: 5,
+          ema: 50,
+          bufferPercent: 0.2,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "MAX_NOTIONAL" }, { type: "no_position" }],
+    }),
+  "daily-trend-flat-stop-does-not-open": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "daily-trend-flat-stop-does-not-open",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 80 }],
+      pricePath: "flat",
+      volatility: "very_low",
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          DAILY_TREND: { ...DEFAULT_STRATS().DAILY_TREND, enabled: true },
+        },
+      },
+      actors: [
+        {
+          kind: "dailyTrend",
+          strategy: "DAILY_TREND",
+          symbol: "RELIANCE",
+          lots: 5,
+          ema: 100,
+          bufferPercent: 0.2,
+          trendState: "LONG",
+        },
+      ],
+      assertions: [{ type: "no_orders" }, { type: "no_position" }],
+    }),
+  "daily-trend-halt-allows-exit": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "daily-trend-halt-allows-exit",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 80 }],
+      pricePath: "flat",
+      volatility: "very_low",
+      risk: {
+        deskHalted: true,
+        haltReason: "test",
+        strategies: {
+          ...DEFAULT_STRATS(),
+          DAILY_TREND: { ...DEFAULT_STRATS().DAILY_TREND, enabled: true },
+        },
+      },
+      actors: [
+        {
+          kind: "dailyTrend",
+          strategy: "DAILY_TREND",
+          symbol: "RELIANCE",
+          lots: 5,
+          ema: 100,
+          seedQty: 4,
+          trendState: "LONG",
+        },
+      ],
+      assertions: [{ type: "role_on_symbol", symbol: "RELIANCE", role: "SL", min: 1 }],
+    }),
+  "daily-trend-disabled-no-exit": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "daily-trend-disabled-no-exit",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 80 }],
+      pricePath: "flat",
+      volatility: "very_low",
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          DAILY_TREND: { ...DEFAULT_STRATS().DAILY_TREND, enabled: false },
+        },
+      },
+      actors: [
+        {
+          kind: "dailyTrend",
+          strategy: "DAILY_TREND",
+          symbol: "RELIANCE",
+          lots: 5,
+          ema: 100,
+          seedQty: 4,
+          trendState: "LONG",
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "STRATEGY_DISABLED" }],
+    }),
+  "daily-trend-paper-blocked-by-live": () =>
+    day(MON, "09:15", "15:30", {
+      scenario: "daily-trend-paper-blocked-by-live",
+      instruments: [{ symbol: "RELIANCE", lotSize: 1, startPrice: 100 }],
+      risk: {
+        strategies: {
+          ...DEFAULT_STRATS(),
+          DAILY_TREND: { ...DEFAULT_STRATS().DAILY_TREND, enabled: true },
+        },
+      },
+      actors: [
+        {
+          kind: "dailyTrend",
+          strategy: "DAILY_TREND",
+          symbol: "RELIANCE",
+          lots: 5,
+          ema: 50,
+          seedOtherQty: 3,
+        },
+      ],
+      assertions: [{ type: "risk_code_seen", code: "OTHER_BOOK" }, { type: "no_position" }],
+    }),
   random: () =>
     day(MON, "09:15", "15:30", {
       scenario: "random",

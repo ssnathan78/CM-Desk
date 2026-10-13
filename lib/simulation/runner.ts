@@ -95,6 +95,9 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
             if (goingLive && actor.config.kind === "chase") {
               actor.chaseStatus = "AWAITING_SIGNAL"
             }
+            if (goingLive && actor.config.kind === "dailyTrend") {
+              actor.trendStatus = "FLAT"
+            }
           }
           paperRisk = sched.paperRisk
         }
@@ -187,6 +190,7 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
           market,
           broker,
           book: paperRisk ? paperLedger : liveLedger,
+          combined: book,
           paperLedger,
           liveLedger,
           settings,
@@ -271,6 +275,7 @@ export function simulate(input: Partial<SimulateConfig> & { scenario?: string })
       actorStatus: actors.map(a => ({
         strategy: a.config.strategy,
         chaseStatus: a.chaseStatus,
+        trendStatus: a.trendStatus,
         fired: a.fired,
       })),
       paperQty: qtyBySymbol(paperLedger),

@@ -1,6 +1,12 @@
 export type OrderRole = "ENTRY" | "EXIT" | "SL" | "FLATTEN"
 
-export const RISK_STRATEGY_KEYS = ["ATM_STRADDLE", "ATM_STRANGLE", "CHASE"] as const
+export const RISK_STRATEGY_KEYS = [
+  "ATM_STRADDLE",
+  "ATM_STRANGLE",
+  "CHASE",
+  "MOMENTUM",
+  "DAILY_TREND",
+] as const
 export type RiskStrategyKey = (typeof RISK_STRATEGY_KEYS)[number]
 
 export type ExecutionMode = "PAPER" | "LIVE"
@@ -29,6 +35,8 @@ export function defaultStrategyLimits(): Record<RiskStrategyKey, StrategyRiskLim
     ATM_STRADDLE: { ...DEFAULT_STRATEGY_LIMITS },
     ATM_STRANGLE: { ...DEFAULT_STRATEGY_LIMITS },
     CHASE: { ...DEFAULT_STRATEGY_LIMITS },
+    MOMENTUM: { ...DEFAULT_STRATEGY_LIMITS, enabled: false, maxLots: 40, maxOpenPositions: 40 },
+    DAILY_TREND: { ...DEFAULT_STRATEGY_LIMITS, enabled: false, maxLots: 40, maxOpenPositions: 30 },
   }
 }
 

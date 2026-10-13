@@ -44,8 +44,8 @@ function pathOnly(asPath: string) {
 }
 
 function selected(asPath: string, href: string) {
-  if (href === "/chase") {
-    return pathOnly(asPath) === "/chase"
+  if (href === "/chase" || href === "/momentum" || href === "/daily-trend") {
+    return pathOnly(asPath) === href
   }
   if (href === "/plan") {
     return pathOnly(asPath) === "/plan"
@@ -189,6 +189,30 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
             <AllInclusiveOutlinedIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText primary="Chase" secondary="One futures plan, pause/resume" />
+        </ListItemButton>
+        <ListItemButton
+          component={Link}
+          href="/momentum"
+          selected={selected(asPath, "/momentum")}
+          onClick={close}
+          sx={itemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
+            <ShowChartOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Momentum" secondary="Cash book, report until you arm it" />
+        </ListItemButton>
+        <ListItemButton
+          component={Link}
+          href="/daily-trend"
+          selected={selected(asPath, "/daily-trend")}
+          onClick={close}
+          sx={itemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
+            <AllInclusiveOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Daily trend" secondary="Long-only cash, daily EMA" />
         </ListItemButton>
 
         <ListSubheader

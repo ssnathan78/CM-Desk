@@ -12,4 +12,8 @@ Read `docs/strategies/` for the strategy you touch. A correct implementation of 
 
 **Chase:** continuous NRML index **futures**, overnight OK, one book per index. Entry is SL-M at day’s extreme, not a market punch on the signal bar. Expiry day: flatten front at **15:00 IST**, reopen next month; new entries already use next month. `hasWeeklyExpiry` is Nifty only.
 
+**Momentum:** long-only NSE cash rank. Default execution is report-only. Do not schedule orders, and do not pull history, while the strategy is off. A hold-weight lock is not bought back to equal weight. Sells use open quantity.
+
+**Daily trend:** long-only cash on daily candles. No short. A flat book does not sell. Entry size is the configured share count. Exit size is the open quantity. Symbol off is fully dark. Pause blocks entries and still allows the stop.
+
 Lot sizes (Jan 2026 NFO): Nifty 65, BankNifty 30, FinNifty 60, Midcap 120. Midcap strike step 25; cash quote `NIFTY MID SELECT`.

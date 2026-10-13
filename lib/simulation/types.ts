@@ -154,7 +154,7 @@ export type JournalEvent = {
   detail: Record<string, unknown>
 }
 
-export type ActorKind = "chase" | "straddle" | "strangle" | "manual"
+export type ActorKind = "chase" | "straddle" | "strangle" | "manual" | "momentum" | "dailyTrend"
 
 export type ActorConfig = {
   kind: ActorKind
@@ -177,6 +177,24 @@ export type ActorConfig = {
   bufferPercent?: number
   highestHigh?: number
   lowestLow?: number
+  /** Daily-trend state at the start of the scenario. */
+  trendState?: "FLAT" | "PENDING_LONG" | "LONG"
+  /** Positive quantity seeded onto this actor's book before the first decision. */
+  seedQty?: number
+  /** Positive quantity seeded onto the other paper/live book. */
+  seedOtherQty?: number
+  momentum?: {
+    execution: "report" | "manual" | "auto"
+    execute?: boolean
+    due?: boolean
+    capitalInr: number
+    holdingsCount: number
+    worstRankHeld: number
+    entryRankMax: number
+    maxWeightPct?: number
+    rows: Array<{ symbol: string; score: number; price: number; pass?: boolean }>
+    locks?: Array<{ symbol: string; mode: "HOLD_WEIGHT" | "EXCLUDE"; weightPct: number }>
+  }
 }
 
 export type FailureSpec = {

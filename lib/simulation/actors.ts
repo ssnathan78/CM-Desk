@@ -3,7 +3,10 @@ import timezone from "dayjs/plugin/timezone"
 import utc from "dayjs/plugin/utc"
 
 import { chaseAllowsNewEntry, chaseTolerances } from "../chaseDefaults"
+import { evaluateDailyLong } from "../dailyTrend/engine"
 import { IST_TZ } from "../marketCalendar"
+import { buildMomentumPlan, executableOrders, type MomentumSymbol } from "../momentum/engine"
+import { DEFAULT_MOMENTUM_CONFIG } from "../momentum/types"
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -22,6 +25,10 @@ import type { ActorConfig, RiskEvent, SignalEvent } from "./types"
 export type ActorRuntime = {
   config: ActorConfig
   chaseStatus: string
+  trendStatus: "FLAT" | "PENDING_LONG" | "LONG"
+  trendStop: number | null
+  trendEntry: number | null
+  seeded: boolean
   fired: boolean
   legStopped: Record<string, boolean>
 }
@@ -31,6 +38,7 @@ type ActorCtx = {
   market: SimulatedMarket
   broker: SimulatedExchange
   book: PortfolioBook
+  combined: PortfolioBook
   paperLedger: PortfolioBook
   liveLedger: PortfolioBook
   settings: RiskSettings
@@ -42,6 +50,10 @@ export function createActorRuntime(config: ActorConfig): ActorRuntime {
   return {
     config: { enabled: true, paused: false, ...config },
     chaseStatus: CHASE_STATUS.AWAITING_SIGNAL,
+    trendStatus: config.trendState ?? "FLAT",
+    trendStop: null,
+    trendEntry: null,
+    seeded: false,
     fired: false,
     legStopped: {},
   }
@@ -53,6 +65,7 @@ export function runActors(args: {
   market: SimulatedMarket
   broker: SimulatedExchange
   book: PortfolioBook
+  combined: PortfolioBook
   paperLedger: PortfolioBook
   liveLedger: PortfolioBook
   settings: RiskSettings
@@ -70,6 +83,10 @@ export function runActors(args: {
         stepChase(actor, args, signals, risk)
       } else if (actor.config.kind === "straddle" || actor.config.kind === "strangle") {
         stepTimeEntry(actor, args, signals, risk)
+      } else if (actor.config.kind === "dailyTrend") {
+        stepDailyTrend(actor, args, signals, risk)
+      } else if (actor.config.kind === "momentum") {
+        stepMomentum(actor, args, signals, risk)
       }
     } catch (e) {
       errors.push(`${actor.config.strategy}: ${e instanceof Error ? e.message : String(e)}`)
@@ -369,6 +386,153 @@ function maybeEnter(
     ctx.nowMs
   )
   return true
+}
+
+function seedBook(actor: ActorRuntime, ctx: ActorCtx) {
+  if (actor.seeded) return
+  actor.seeded = true
+  const quote = ctx.market.get(actor.config.symbol)
+  const price = quote?.last ?? 100
+  const fill = (book: PortfolioBook, quantity: number, suffix: string) => {
+    if (quantity <= 0) return
+    book.applyFill({
+      fillId: `seed-${suffix}-${actor.config.symbol}`,
+      orderId: `seed-${suffix}-${actor.config.symbol}`,
+      symbol: actor.config.symbol,
+      side: "BUY",
+      quantity,
+      price,
+      fee: 0,
+      at: ctx.nowMs,
+      provenance:
+        suffix === "other" ? (ctx.paperRisk ? "LIVE" : "PAPER") : ctx.paperRisk ? "PAPER" : "LIVE",
+    })
+  }
+  fill(ctx.book, actor.config.seedQty ?? 0, "book")
+  fill(ctx.paperRisk ? ctx.liveLedger : ctx.paperLedger, actor.config.seedOtherQty ?? 0, "other")
+}
+
+function stepDailyTrend(
+  actor: ActorRuntime,
+  ctx: ActorCtx,
+  signals: SignalEvent[],
+  risk: RiskEvent[]
+): void {
+  if (!isSessionOpen(ctx.nowMs)) return
+  seedBook(actor, ctx)
+  const quote = ctx.market.get(actor.config.symbol)
+  if (!quote) return
+  const bookQty = ctx.book.qty(actor.config.symbol)
+  const decision = evaluateDailyLong({
+    ema: actor.config.ema ?? quote.last,
+    bar: { high: quote.high, low: quote.low, close: quote.last },
+    state: actor.trendStatus,
+    bookQty,
+    stop: actor.trendStop,
+    entry: actor.trendEntry,
+    config: {
+      emaPeriod: 40,
+      bufferPercent: actor.config.bufferPercent ?? 0.2,
+      exitBufferPercent: actor.config.bufferPercent ?? 0.2,
+      entryStyle: "CLOSE_CROSS",
+      quantity: Math.max(0, actor.config.lots),
+    },
+  })
+  actor.trendStop = decision.stop
+  actor.trendEntry = decision.entry
+  if (decision.action === "NONE" || decision.quantity <= 0) {
+    actor.trendStatus = bookQty > 0 ? "LONG" : decision.state
+    return
+  }
+  if (actor.config.paused && decision.role === "ENTRY") {
+    actor.trendStatus = bookQty > 0 ? "LONG" : "FLAT"
+    return
+  }
+  signals.push(signal(ctx.nowMs, actor.config, decision.action, decision.role, decision.reason))
+  const placed = maybeEnter(
+    ctx,
+    actor.config,
+    decision.action,
+    quote.last,
+    decision.quantity,
+    "MARKET",
+    risk,
+    decision.role === "SL" ? "SL" : decision.role === "FLATTEN" ? "FLATTEN" : "ENTRY"
+  )
+  if (ctx.book.qty(actor.config.symbol) > 0) actor.trendStatus = "LONG"
+  else if (decision.role === "ENTRY" && !placed) actor.trendStatus = "FLAT"
+  else actor.trendStatus = decision.state
+}
+
+function stepMomentum(
+  actor: ActorRuntime,
+  ctx: ActorCtx,
+  signals: SignalEvent[],
+  risk: RiskEvent[]
+): void {
+  const planInput = actor.config.momentum
+  if (!planInput || actor.fired) return
+  if (dayjs(ctx.nowMs).tz(IST_TZ).format("HH:mm") < "09:20") return
+  actor.fired = true
+  seedBook(actor, ctx)
+  const symbols: MomentumSymbol[] = planInput.rows.map(row => ({
+    symbol: row.symbol,
+    price: row.price,
+    metrics: {
+      score: row.score,
+      roc12: 0.2,
+      roc24: 0.3,
+      roc1: 0.02,
+      pctBelowHigh: 5,
+      aboveSma: row.pass !== false,
+      avgTurnoverInr: 20_000_000,
+      circuitCount12m: 0,
+      marketCapCr: 5000,
+    },
+  }))
+  const built = buildMomentumPlan({
+    symbols,
+    holdings: planInput.rows.map(row => ({
+      symbol: row.symbol,
+      quantity: Math.max(0, ctx.book.qty(row.symbol)),
+    })),
+    locks: planInput.locks ?? [],
+    config: {
+      ...DEFAULT_MOMENTUM_CONFIG,
+      active: true,
+      execution: planInput.execution,
+      capitalInr: planInput.capitalInr,
+      holdingsCount: planInput.holdingsCount,
+      worstRankHeld: planInput.worstRankHeld,
+      entryRankMax: planInput.entryRankMax,
+      maxWeightPct: planInput.maxWeightPct ?? 100,
+    },
+  })
+  const orders = executableOrders(built, {
+    execution: planInput.execution,
+    executeRequested: planInput.execute === true,
+    due: planInput.due !== false,
+  })
+  for (const order of orders) {
+    signals.push(
+      signal(ctx.nowMs, actor.config, order.side, order.role, order.reason, order.symbol)
+    )
+    maybeEnter(
+      ctx,
+      { ...actor.config, lots: 1 },
+      order.side,
+      order.limitPrice ?? rowPrice(planInput.rows, order.symbol),
+      order.quantity,
+      "MARKET",
+      risk,
+      order.role,
+      order.symbol
+    )
+  }
+}
+
+function rowPrice(rows: Array<{ symbol: string; price: number }>, symbol: string): number {
+  return rows.find(row => row.symbol === symbol)?.price ?? 0
 }
 
 function signal(

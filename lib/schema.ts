@@ -8,6 +8,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   serial,
   smallint,
   text,
@@ -167,6 +168,66 @@ export const tradePlans = pgTable(
 export const strategyDefaults = pgTable("strategy_defaults", {
   strategy: jobExecutionStrategyEnum("strategy").primaryKey(),
   config: jsonb("config").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const momentumSettings = pgTable("momentum_settings", {
+  id: integer("id").primaryKey(),
+  config: jsonb("config").notNull().default({}),
+  lastDataPullOn: date("last_data_pull_on"),
+  lastRebalanceOn: date("last_rebalance_on"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const momentumUniverse = pgTable("momentum_universe", {
+  tradingsymbol: text("tradingsymbol").primaryKey(),
+  companyName: text("company_name"),
+  series: text("series").notNull().default("EQ"),
+})
+
+export const momentumWeightLocks = pgTable("momentum_weight_locks", {
+  tradingsymbol: text("tradingsymbol").primaryKey(),
+  mode: text("mode").notNull(),
+  weightPct: numeric("weight_pct"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const equityDailyBars = pgTable(
+  "equity_daily_bars",
+  {
+    tradingsymbol: text("tradingsymbol").notNull(),
+    sessionDate: date("session_date").notNull(),
+    open: numeric("open").notNull(),
+    high: numeric("high").notNull(),
+    low: numeric("low").notNull(),
+    close: numeric("close").notNull(),
+    volume: numeric("volume").notNull().default("0"),
+  },
+  table => [
+    primaryKey({ columns: [table.tradingsymbol, table.sessionDate] }),
+    index("idx_equity_daily_bars_symbol").on(table.tradingsymbol),
+  ]
+)
+
+export const dailyTrendSettings = pgTable("daily_trend_settings", {
+  id: integer("id").primaryKey(),
+  config: jsonb("config").notNull().default({}),
+  lastDataPullOn: date("last_data_pull_on"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const dailyTrendBooks = pgTable("daily_trend_books", {
+  tradingsymbol: text("tradingsymbol").primaryKey(),
+  enabled: boolean("enabled").notNull().default(false),
+  paused: boolean("paused").notNull().default(false),
+  emaPeriod: integer("ema_period").notNull().default(40),
+  bufferPercent: numeric("buffer_percent").notNull().default("0.2"),
+  exitBufferPercent: numeric("exit_buffer_percent").notNull().default("0.2"),
+  quantity: integer("quantity").notNull().default(1),
+  entryStyle: text("entry_style").notNull().default("CLOSE_CROSS"),
+  status: text("status").notNull().default("FLAT"),
+  stopPrice: numeric("stop_price"),
+  entryPrice: numeric("entry_price"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
 

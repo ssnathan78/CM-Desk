@@ -25,6 +25,8 @@ const LABELS: Record<(typeof RISK_STRATEGY_KEYS)[number], string> = {
   ATM_STRADDLE: "ATM Straddle",
   ATM_STRANGLE: "ATM Strangle",
   CHASE: "Chase",
+  MOMENTUM: "Momentum",
+  DAILY_TREND: "Daily trend",
 }
 
 function FlagLabel({ title, hint }: { title: string; hint: string }) {

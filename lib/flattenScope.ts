@@ -22,7 +22,7 @@ export function parseFlattenScope(
   if (typeof body.strategy === "string" && body.strategy.trim()) {
     const strategy = body.strategy.trim().toUpperCase()
     if (!RISK_STRATEGY_KEYS.includes(strategy as RiskStrategyKey)) {
-      return { ok: false, error: "strategy must be ATM_STRADDLE, ATM_STRANGLE, or CHASE" }
+      return { ok: false, error: `strategy must be ${RISK_STRATEGY_KEYS.join(", ")}` }
     }
     picks.push({ kind: "strategy", strategy })
   }

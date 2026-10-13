@@ -3,6 +3,7 @@ import "./squareOffQueue"
 import "./exitTradingQueue"
 import "./tradingQueue"
 import "./targetPnLQueue"
+import { startCashScheduler } from "../momentum/scheduler"
 import { redisConnection } from "../queue"
 import { worker as ancillaryWorker } from "./ancillaryQueue"
 import { worker as chaseWorker } from "./chaseQueue"
@@ -19,6 +20,8 @@ const workers = [
   targetPnLWorker,
   chaseWorker,
 ]
+
+startCashScheduler()
 
 export async function closeAllWorkers() {
   await Promise.all(workers.map(worker => worker.close()))
