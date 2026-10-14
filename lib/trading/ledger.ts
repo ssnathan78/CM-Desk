@@ -24,7 +24,11 @@ import {
 } from "./accounting"
 import { fillFingerprint, mapKiteOrderStatus } from "./kiteMap"
 import { moneyFromUnknown, moneyMulQty, moneyToString } from "./money"
-import { storedOrderPurpose } from "./orderPurpose"
+import {
+  exitReasonForOrderPurpose,
+  shouldRecordOrderStatusEvent,
+  storedOrderPurpose,
+} from "./orderPurpose"
 import { assertOrderTransition } from "./stateMachine"
 import {
   type AuditEventType,
@@ -533,7 +537,7 @@ export async function applyBrokerOrderSnapshot(
   if (nextStatus === "CANCELLED") patch.cancelledAt = row.cancelledAt ?? occurred
 
   await db.update(orders).set(patch).where(eq(orders.id, row.id))
-  if (fromStatus !== (patch.status as string)) {
+  if (shouldRecordOrderStatusEvent(fromStatus, patch.status as string | undefined)) {
     await appendOrderEvent({
       orderId: row.id,
       fromStatus,
@@ -604,7 +608,7 @@ export async function applyBrokerOrderSnapshot(
       })
       if (fillId) {
         fillIds.push(fillId)
-        await applyFillById(fillId, context?.exitReason)
+        await applyFillById(fillId, context?.exitReason ?? exitReasonForOrderPurpose(row.purpose))
         await recordAuditEvent({
           eventType: incremental.quantity < requested ? "PARTIAL_FILL" : "FILL_RECEIVED",
           orderId: row.id,
