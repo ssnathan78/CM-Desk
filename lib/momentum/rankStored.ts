@@ -1,5 +1,6 @@
-import { type MomentumConfig, symbolFromBars } from "./engine"
+import { type MomentumSymbol, symbolFromBars } from "./engine"
 import { listMarketCaps, loadBars } from "./store"
+import type { MomentumConfig } from "./types"
 
 /** Rank inputs for a slice of names, then drop the candles before the next slice. */
 export async function rankedSymbols(
@@ -8,7 +9,7 @@ export async function rankedSymbols(
   asOf: string
 ) {
   const caps = new Map((await listMarketCaps()).map(row => [row.symbol, row.marketCapCr]))
-  const symbols = []
+  const symbols: MomentumSymbol[] = []
   const batch = 20
   for (let i = 0; i < universe.length; i += batch) {
     const slice = universe.slice(i, i + batch)
