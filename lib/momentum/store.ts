@@ -200,6 +200,34 @@ export async function holdingsFor(
     .map(([symbol, quantity]) => ({ symbol, quantity }))
 }
 
+export async function listLatestCloses(
+  symbols: string[]
+): Promise<Map<string, { close: number; date: string }>> {
+  const out = new Map<string, { close: number; date: string }>()
+  if (!symbols.length) return out
+  const result = await db.execute(sql`
+    select distinct on (tradingsymbol)
+      tradingsymbol,
+      close::float8 as close,
+      session_date::text as session_date
+    from equity_daily_bars
+    where tradingsymbol in (${sql.join(
+      symbols.map(symbol => sql`${symbol}`),
+      sql`, `
+    )})
+    order by tradingsymbol, session_date desc
+  `)
+  const raw = result as { rows?: Record<string, unknown>[] } | Record<string, unknown>[]
+  const rows = Array.isArray(raw) ? raw : (raw.rows ?? [])
+  for (const row of rows) {
+    out.set(String(row.tradingsymbol), {
+      close: Number(row.close),
+      date: String(row.session_date).slice(0, 10),
+    })
+  }
+  return out
+}
+
 export async function loadBars(symbols: string[]): Promise<Map<string, DailyBar[]>> {
   const out = new Map<string, DailyBar[]>()
   if (!symbols.length) return out

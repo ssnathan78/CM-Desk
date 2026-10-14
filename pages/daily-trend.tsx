@@ -1,6 +1,12 @@
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
+import PauseIcon from "@mui/icons-material/Pause"
+import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import {
   Box,
   Button,
+  IconButton,
+  LinearProgress,
   MenuItem,
   Paper,
   Stack,
@@ -12,9 +18,10 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
@@ -36,6 +43,8 @@ type Book = {
   exitBufferPercent: number
   quantity: number
   budgetInr: number
+  close?: number | null
+  closeDate?: string | null
   entryStyle: "CLOSE_CROSS" | "BREAK_HIGH"
   status: string
   stop: number | null
@@ -49,6 +58,7 @@ type SortKey =
   | "industry"
   | "marketCapCr"
   | "budgetInr"
+  | "close"
   | "emaPeriod"
   | "bufferPercent"
   | "exitBufferPercent"
@@ -66,6 +76,14 @@ type Payload = {
   }
   marketCapAsOf?: string
   books: Book[]
+  pull?: {
+    running: boolean
+    done: number
+    total: number
+    symbol: string | null
+    errors: number
+    message: string | null
+  }
   decisions?: { symbol: string; action: string; reason: string; state?: string }[]
 }
 
@@ -227,7 +245,12 @@ export default function DailyTrendPage() {
     const value = (book: Book): string | number => {
       if (sortKey === "enabled") return book.enabled ? 1 : 0
       if (sortKey === "status") return book.paused ? `paused ${book.status}` : book.status
-      if (sortKey === "marketCapCr" || sortKey === "stop" || sortKey === "budgetInr")
+      if (
+        sortKey === "marketCapCr" ||
+        sortKey === "stop" ||
+        sortKey === "budgetInr" ||
+        sortKey === "close"
+      )
         return book[sortKey] ?? Number.NEGATIVE_INFINITY
       if (sortKey === "name") return book.name || book.symbol
       if (sortKey === "industry") return book.industry || ""
@@ -240,6 +263,38 @@ export default function DailyTrendPage() {
       return String(left).localeCompare(String(right)) * dir
     })
   }, [data?.books, filter, sortDir, sortKey])
+
+  useEffect(() => {
+    if (!data?.pull?.running) return
+    const timer = setInterval(() => {
+      void mutate()
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [data?.pull?.running, mutate])
+
+  async function pullHistory() {
+    setBusy(true)
+    try {
+      const result = await fetchJson<{
+        started: boolean
+        progress: { running: boolean; message: string | null }
+      }>("/api/daily-trend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "pull" }),
+      })
+      await mutate()
+      if (!result.started && !result.progress.running) {
+        showMessage(result.progress.message || "History pull did not start", "info")
+      }
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Pull failed", "error")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pull = data?.pull
 
   return (
     <Layout title="Daily trend">
@@ -287,21 +342,8 @@ export default function DailyTrendPage() {
             <Button variant="contained" disabled={busy} onClick={() => void saveRuntime()}>
               Save
             </Button>
-            <Button
-              disabled={busy}
-              onClick={() =>
-                void fetchJson("/api/daily-trend", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "pull" }),
-                })
-                  .then(() => showMessage("History pull finished", "success"))
-                  .catch(error =>
-                    showMessage(error instanceof Error ? error.message : "Pull failed", "error")
-                  )
-              }
-            >
-              Pull history
+            <Button disabled={busy || pull?.running} onClick={() => void pullHistory()}>
+              {pull?.running ? `Pulling ${pull.done} of ${pull.total || "…"}` : "Pull history"}
             </Button>
             <Button
               disabled={busy}
@@ -340,6 +382,20 @@ export default function DailyTrendPage() {
               Evaluate and send
             </Button>
           </Stack>
+          {pull && (pull.running || pull.message) ? (
+            <Box sx={{ mt: 1.5 }}>
+              {pull.running ? (
+                <LinearProgress
+                  variant={pull.total > 0 ? "determinate" : "indeterminate"}
+                  value={pull.total > 0 ? Math.round((100 * pull.done) / pull.total) : 0}
+                />
+              ) : null}
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {pull.message}
+                {pull.symbol ? ` (${pull.symbol})` : ""}
+              </Typography>
+            </Box>
+          ) : null}
         </Paper>
         <Paper sx={{ p: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
@@ -506,11 +562,12 @@ export default function DailyTrendPage() {
           this process is running, so the book turns over inside a day. The date next to the figure
           is when it was stored. The signal ignores today's candle and uses the last completed daily
           close. Buffer defaults are 1%. A buy size is floor(budget / that close). Turn a row on and
-          set a budget before it can buy. Edit, Pause, and Remove stay on the left while the numbers
-          scroll. Name and industry stay as their own columns.
+          set a budget before it can buy. State, last close, and stop sit ahead of the settings.
+          Edit, pause, and remove are the icons on the left. The table scrolls inside the page, so
+          the horizontal bar stays with the rows.
         </Typography>
-        <ScrollTable minWidth={1180}>
-          <Table size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
+        <ScrollTable minWidth={1100} maxHeight="calc(100vh - 240px)">
+          <Table stickyHeader size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
             <TableHead>
               <TableRow>
                 <Sortable
@@ -519,16 +576,42 @@ export default function DailyTrendPage() {
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
-                  sx={{ ...pin(0, 2), width: 48, minWidth: 48 }}
+                  sx={{ ...pin(0, 3), width: 48, minWidth: 48 }}
                 />
-                <TableCell sx={{ ...pin(48, 2), width: 156, minWidth: 156 }} />
+                <TableCell sx={{ ...pin(48, 3), width: 100, minWidth: 100 }} />
                 <Sortable
                   label="Symbol"
                   sortKey="symbol"
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
-                  sx={{ ...pin(204, 2), width: 96, minWidth: 96 }}
+                  sx={{
+                    ...pin(148, 3),
+                    width: 96,
+                    minWidth: 96,
+                    boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
+                  }}
+                />
+                <Sortable
+                  label="State"
+                  sortKey="status"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Close"
+                  sortKey="close"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Stop"
+                  sortKey="stop"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
                 />
                 <Sortable
                   label="Name"
@@ -536,11 +619,6 @@ export default function DailyTrendPage() {
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
-                  sx={{
-                    ...pin(300, 2),
-                    minWidth: 160,
-                    boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
-                  }}
                 />
                 <Sortable
                   label="Industry"
@@ -591,20 +669,6 @@ export default function DailyTrendPage() {
                   dir={sortDir}
                   onSort={toggleSort}
                 />
-                <Sortable
-                  label="State"
-                  sortKey="status"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Stop"
-                  sortKey="stop"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -617,45 +681,64 @@ export default function DailyTrendPage() {
                       onChange={e => void saveBook({ ...book, enabled: e.target.checked })}
                     />
                   </TableCell>
-                  <TableCell sx={{ ...pin(48), whiteSpace: "nowrap", width: 156, minWidth: 156 }}>
-                    <Button
-                      size="small"
-                      sx={{ minWidth: 0, px: 0.5 }}
-                      onClick={() => setDraft(book)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="small"
-                      sx={{ minWidth: 0, px: 0.5 }}
-                      onClick={() => void saveBook({ ...book, paused: !book.paused })}
-                    >
-                      {book.paused ? "Resume" : "Pause"}
-                    </Button>
-                    <Button
-                      size="small"
-                      sx={{ minWidth: 0, px: 0.5 }}
-                      onClick={() =>
-                        void fetchJson("/api/daily-trend", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "remove-book", symbol: book.symbol }),
-                        }).then(() => mutate())
-                      }
-                    >
-                      Remove
-                    </Button>
+                  <TableCell sx={{ ...pin(48), whiteSpace: "nowrap", width: 100, minWidth: 100 }}>
+                    <Tooltip title="Edit">
+                      <IconButton size="small" onClick={() => setDraft(book)}>
+                        <EditOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={book.paused ? "Resume" : "Pause"}>
+                      <IconButton
+                        size="small"
+                        onClick={() => void saveBook({ ...book, paused: !book.paused })}
+                      >
+                        {book.paused ? (
+                          <PlayArrowIcon fontSize="small" />
+                        ) : (
+                          <PauseIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Remove">
+                      <IconButton
+                        size="small"
+                        onClick={() =>
+                          void fetchJson("/api/daily-trend", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "remove-book", symbol: book.symbol }),
+                          }).then(() => mutate())
+                        }
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
-                  <TableCell sx={{ ...pin(204), width: 96, minWidth: 96 }}>{book.symbol}</TableCell>
                   <TableCell
                     sx={{
-                      ...pin(300),
-                      minWidth: 160,
+                      ...pin(148),
+                      width: 96,
+                      minWidth: 96,
                       boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
                     }}
                   >
-                    {book.name || "—"}
+                    {book.symbol}
                   </TableCell>
+                  <TableCell>{book.paused ? "paused" : book.status}</TableCell>
+                  <TableCell align="right">
+                    {book.close == null ? "—" : formatCr(book.close)}
+                    {book.closeDate ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block" }}
+                      >
+                        {book.closeDate}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>{book.stop ?? "—"}</TableCell>
+                  <TableCell>{book.name || "—"}</TableCell>
                   <TableCell>{book.industry || "—"}</TableCell>
                   <TableCell align="right">
                     {formatCr(book.marketCapCr)}
@@ -674,8 +757,6 @@ export default function DailyTrendPage() {
                   <TableCell>{book.bufferPercent}</TableCell>
                   <TableCell>{book.exitBufferPercent}</TableCell>
                   <TableCell>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
-                  <TableCell>{book.paused ? "paused" : book.status}</TableCell>
-                  <TableCell>{book.stop ?? "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -707,6 +788,7 @@ function pin(left: number, z = 1) {
   return {
     position: "sticky" as const,
     left,
+    top: z > 1 ? 0 : undefined,
     zIndex: z,
     bgcolor: "background.paper",
   }

@@ -19,6 +19,7 @@ Later hours the same day do not fetch a new candle. They look at the stored day 
 |---|---|
 | Page **On** | Off skips evaluation and history for this strategy. |
 | **Pull data** | Off skips the scheduled Kite pull. **Pull history** still runs while On is enabled. |
+| **Pull history** | Starts a download for every name on this page, including names that are off, and returns immediately. A bar shows which name is in progress. It does not download the momentum universe. The gateway no longer has to stay open for the whole download. |
 | Execution `report` | Evaluate shows the decision and sends nothing. Default. |
 | Execution `manual` | **Evaluate and send** places the orders. Nothing is retried on its own. |
 | Execution `auto` | The hourly pass evaluates and sends. It does not also require the market-session check that momentum uses. |
@@ -37,7 +38,7 @@ The database check allows `A`–`Z`, digits, `&`, and `-`, and requires a letter
 
 Search on the page looks up the NSE cash dump by symbol or company name, the same way Chase searches futures, and adds the name **off**. Names already on the book are omitted from the search results. The filter box on the table searches the rows you already have, including the company name and industry shown under the symbol.
 
-The table keeps On, symbol, company name, industry, market cap (₹ crore, with the stored date), budget, EMA, entry buffer, exit buffer, entry style, state, and stop. Edit, Pause, and Remove sit on the left, next to On. Those controls, the symbol, and the company name stay on screen while industry and the numbers scroll.
+The table keeps On, the icon actions (edit, pause, remove), symbol, state, last stored close, and stop on the left of the settings. Company name, industry, market cap, budget, EMA, buffers, and entry style follow. The grid scrolls inside the page so the horizontal bar stays next to the rows. State, close, and stop are the columns to watch while a book is on.
 
 ## Nifty 100
 

@@ -2,13 +2,14 @@ import { sendApiError } from "../../lib/apiErrors"
 import { normalizeDailyTrendConfig, parseDailyTrendBulkPatch } from "../../lib/dailyTrend/engine"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import logger from "../../lib/logger"
-import { pullCashHistory } from "../../lib/momentum/history"
+import { cashPullProgress, startCashHistoryPull } from "../../lib/momentum/history"
 import {
   applyDailyTrendBulkToBooks,
   type DailyTrendBookRow,
   ensureNifty100Books,
   getDailyTrendState,
   listDailyTrendBooks,
+  listLatestCloses,
   listMarketCaps,
   removeDailyTrendBook,
   saveDailyTrendBook,
@@ -54,13 +55,16 @@ export default withSession(async (req, res) => {
         listDailyTrendBooks(),
         listMarketCaps(),
       ])
+      const closes = await listLatestCloses(books.map(book => book.symbol))
       const profile = new Map(caps.map(row => [row.symbol, row]))
       const seeded = new Map(loadNifty100().map(row => [row.symbol, row]))
       return res.json({
         ...state,
+        pull: cashPullProgress(),
         books: books.map(book => {
           const known = profile.get(book.symbol)
           const listed = seeded.get(book.symbol)
+          const close = closes.get(book.symbol)
           return {
             ...book,
             name:
@@ -70,6 +74,8 @@ export default withSession(async (req, res) => {
             industry: known?.industry || listed?.industry || "",
             marketCapCr: known?.marketCapCr ?? listed?.marketCapCr ?? null,
             marketCapAsOf: known?.asOf ?? null,
+            close: close?.close ?? null,
+            closeDate: close?.date ?? null,
           }
         }),
       })
@@ -104,7 +110,11 @@ export default withSession(async (req, res) => {
       if (!state.config.active)
         return res.status(409).json({ error: "Turn the strategy on before pulling history" })
       return res.json(
-        await pullCashHistory({ accessToken: req.session.user.session?.access_token, force: true })
+        startCashHistoryPull({
+          accessToken: req.session.user.session?.access_token,
+          force: true,
+          scope: "trend",
+        })
       )
     }
     if (req.method === "POST" && req.body?.action === "evaluate") {

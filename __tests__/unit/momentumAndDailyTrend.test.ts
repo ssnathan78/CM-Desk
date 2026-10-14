@@ -12,6 +12,7 @@ import {
 import { parseScreenerMarketCapCr } from "../../lib/dailyTrend/marketCap"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import { buildMomentumPlan, executableOrders, metricsFromBars, symbolFromBars } from "../../lib/momentum/engine"
+import { symbolsForCashPull } from "../../lib/momentum/history"
 import { firstTradingSessionOfMonth } from "../../lib/momentum/calendar"
 import {
   DEFAULT_MOMENTUM_CONFIG,
@@ -239,6 +240,37 @@ describe("momentum switches", () => {
     expect(symbol.price).toBe(10)
     expect(symbol.bars).toBeUndefined()
     expect(symbol.marketCapCr).toBe(5000)
+  })
+
+  it("keeps a daily-trend pull off the momentum universe, including names that are off", () => {
+    const trend = symbolsForCashPull({
+      scope: "trend",
+      force: true,
+      today: "2026-10-14",
+      momentum: { active: true, dataRefresh: true, lastDataPullOn: null },
+      trend: { active: true, dataRefresh: false, lastDataPullOn: null },
+      universe: ["RELIANCE", "TCS"],
+      trendBooks: [
+        { symbol: "ABB", enabled: false },
+        { symbol: "INFY", enabled: true },
+      ],
+    })
+    expect(trend.momentumDue).toBe(false)
+    expect(trend.symbols.sort()).toEqual(["ABB", "INFY"])
+    const scheduled = symbolsForCashPull({
+      scope: "all",
+      force: false,
+      today: "2026-10-14",
+      momentum: { active: true, dataRefresh: true, lastDataPullOn: null },
+      trend: { active: true, dataRefresh: true, lastDataPullOn: "2026-10-14" },
+      universe: ["RELIANCE"],
+      trendBooks: [
+        { symbol: "ABB", enabled: false },
+        { symbol: "INFY", enabled: true },
+      ],
+    })
+    expect(scheduled.symbols).toEqual(["RELIANCE"])
+    expect(scheduled.trendDue).toBe(false)
   })
 
   it("loads the bundled universe and knows the first session of a month", () => {
