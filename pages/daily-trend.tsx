@@ -1,4 +1,4 @@
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline"
+import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined"
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
 import PauseIcon from "@mui/icons-material/Pause"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
@@ -710,7 +710,7 @@ export default function DailyTrendPage() {
                           }).then(() => mutate())
                         }
                       >
-                        <DeleteOutlineIcon fontSize="small" />
+                        <DeleteOutlinedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
                   </TableCell>
