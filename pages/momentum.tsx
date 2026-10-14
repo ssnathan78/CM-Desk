@@ -130,6 +130,18 @@ export default function MomentumPage() {
   }, [data?.orders, data?.rows, data?.targets, query, sortDir, sortKey, view])
 
   useEffect(() => {
+    let cancelled = false
+    void fetchJson<NonNullable<typeof pullWatch>>("/api/momentum?view=pull")
+      .then(latest => {
+        if (!cancelled && (latest.running || latest.shown)) setPullWatch(latest)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (!pullWatch?.running) return
     const timer = setInterval(() => {
       void fetchJson<NonNullable<typeof pullWatch>>("/api/momentum?view=pull").then(latest => {
@@ -426,12 +438,13 @@ export default function MomentumPage() {
             </Button>
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            Pull history now saves these switches, then downloads NSE day candles. It needs Strategy
-            on. Desk → Risk is a separate switch and does not start the pull. Preview orders
-            refreshes the buy and sell diff and sends nothing. Send rebalance sends that diff, and
-            only after execution is Manual or Auto. Ad hoc never sends by itself: use Preview, then
-            Send. Monthly sends on the first NSE session of the month. The rank uses the last
-            completed daily close, not today’s candle.
+            Pull history now saves these switches, then starts the download and returns at once. You
+            can leave this page. The download keeps going, and the bar comes back when you return.
+            It needs Strategy on. Desk → Risk is a separate switch and does not start the pull.
+            Preview orders refreshes the buy and sell diff and sends nothing. Send rebalance sends
+            that diff, and only after execution is Manual or Auto. Ad hoc never sends by itself: use
+            Preview, then Send. Monthly sends on the first NSE session of the month. The rank uses
+            the last completed daily close, not today’s candle.
           </Typography>
           {pullWatch?.running || pullWatch?.shown ? (
             <Box sx={{ mt: 1.5 }}>

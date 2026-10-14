@@ -75,7 +75,7 @@ A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past
 | Button | What it does |
 |---|---|
 | **Save** | Writes the switches on this page. Strategy on here is not Desk → Risk. |
-| **Pull history now** | Saves the switches, starts the momentum-universe download, and returns immediately. A bar shows which name is in progress. It needs Strategy on. Desk → Risk does not start this pull. |
+| **Pull history now** | Saves the switches, starts the momentum-universe download, and returns immediately. A bar shows which name is in progress. Leaving the page does not stop the download. The bar is shown again when you come back. It needs Strategy on. Desk → Risk does not start this pull. |
 | **Preview orders** | Rebuilds the buy and sell diff from the stored candles and sends nothing. |
 | **Send rebalance** | Sends that diff. Disabled while execution is Report only. Manual sends on click. Auto also sends on the rebalance day without this click. |
 
