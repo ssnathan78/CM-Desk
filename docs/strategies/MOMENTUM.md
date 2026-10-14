@@ -6,7 +6,7 @@ This is not Chase and not the 9:20 short-vol book. A correct run of a losing ran
 
 ## Candles and the hour loop
 
-History is Kite **day** candles, about 1,100 calendar days, one symbol at a time with a 350ms pause. The pull runs at most once per IST day, and only while the page is **On** and **Pull data** is on. **Pull history now** still runs while On is enabled even if Pull data is off.
+History is Kite **day** candles, about 1,100 calendar days, one symbol at a time with a 350ms pause. The pull runs at most once per IST day, and only while the page is **On** and **Pull data daily** is on. **Pull history now** still runs while On is enabled even if Pull data daily is off.
 
 The same hourly pass as daily trend (`lib/momentum/scheduler.ts`, 20s after boot, then every hour) then asks whether **today** is a rebalance day and whether this IST day was already marked done. It does not build an hourly rank. Later hours reuse the day bars stored on the first pull.
 
@@ -19,7 +19,7 @@ The universe file is `data/universe/nifty-total-market.csv`. The production imag
 | Switch | Off means |
 |---|---|
 | Page **On** (`active`) | No history pull and no ranking. The symbol list can still be viewed, with the reason “strategy is off”. |
-| **Pull data** | The hourly scheduler does not call Kite. **Pull history now** still works while On is enabled. |
+| **Pull data daily** | The hourly scheduler does not call Kite. **Pull history now** still works while On is enabled. |
 | Execution `report` | Orders are calculated and shown. Nothing is sent. This is the default. |
 | Execution `manual` | Orders go out only from **Send rebalance**. |
 | Execution `auto` | Orders go out on the rebalance day, during the NSE session, once that IST day. A rejected buy is not retried that day. |
@@ -81,7 +81,7 @@ A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past
 
 The rank and the diff use the last completed daily close. A candle dated today is ignored.
 
-The rank table reads stored candles in batches of 20 names and drops each batch before the next, so opening or saving the page does not load the whole history into memory at once. Save writes the switches and does not download candles. A history download runs only from **Pull history now**, or from the hourly pass when Strategy on and Pull data are both on, once per IST day. That download is one Kite request per name and is the large transfer.
+The rank table reads stored candles in batches of 20 names and drops each batch before the next, so opening or saving the page does not load the whole history into memory at once. Save writes the switches and does not download candles. A history download runs only from **Pull history now**, or from the hourly pass when Strategy on and Pull data daily are both on, once per IST day. That download is one Kite request per name and is the large transfer.
 
 ## Orders and a short Zerodha balance
 

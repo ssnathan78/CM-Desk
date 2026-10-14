@@ -318,7 +318,7 @@ export default function DailyTrendPage() {
               checked={runtime.active}
               onChange={e => setConfig({ ...runtime, active: e.target.checked })}
             />
-            <Typography variant="body2">Pull data</Typography>
+            <Typography variant="body2">Pull data daily</Typography>
             <Switch
               checked={runtime.dataRefresh}
               onChange={e => setConfig({ ...runtime, dataRefresh: e.target.checked })}
@@ -343,7 +343,7 @@ export default function DailyTrendPage() {
               Save
             </Button>
             <Button disabled={busy || pull?.running} onClick={() => void pullHistory()}>
-              {pull?.running ? `Pulling ${pull.done} of ${pull.total || "…"}` : "Pull history"}
+              {pull?.running ? `Pulling ${pull.done} of ${pull.total || "…"}` : "Pull history now"}
             </Button>
             <Button
               disabled={busy}

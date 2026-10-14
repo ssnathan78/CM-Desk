@@ -8,7 +8,7 @@ This is not Chase and not the 9:20 short-vol book. A correct run of a losing tre
 
 The process wakes about 20 seconds after boot, then every hour (`lib/momentum/scheduler.ts`). That wake-up is shared with cash momentum. It is not an hourly signal.
 
-1. Pull NSE **day** candles from Kite, at most once per IST day, and only while the strategy is on and **Pull data** is on. **Pull history** on the page still runs while On is enabled.
+1. Pull NSE **day** candles from Kite, at most once per IST day, and only while the strategy is on and **Pull data daily** is on. **Pull history now** still runs while On is enabled.
 2. Re-read the last stored day bar and, if execution is `auto`, send the order that bar already implies.
 
 Later hours the same day do not fetch a new candle. They look at the stored day bars. The signal uses the last bar **dated before today**, so a morning pull of today’s unfinished candle is stored and then ignored. A buy Kite refused can be sent again on a later hour while that completed close is still above the band.
@@ -18,8 +18,8 @@ Later hours the same day do not fetch a new candle. They look at the stored day 
 | Switch | Effect |
 |---|---|
 | Page **On** | Off skips evaluation and history for this strategy. |
-| **Pull data** | Off skips the scheduled Kite pull. **Pull history** still runs while On is enabled. |
-| **Pull history** | Starts a download for every name on this page, including names that are off, and returns immediately. A bar shows which name is in progress. It does not download the momentum universe. The gateway no longer has to stay open for the whole download. |
+| **Pull data daily** | Off skips the scheduled Kite pull. **Pull history now** still runs while On is enabled. |
+| **Pull history now** | Starts a download for every name on this page, including names that are off, and returns immediately. A bar shows which name is in progress. It does not download the momentum universe. |
 | Execution `report` | Evaluate shows the decision and sends nothing. Default. |
 | Execution `manual` | **Evaluate and send** places the orders. Nothing is retried on its own. |
 | Execution `auto` | The hourly pass evaluates and sends. It does not also require the market-session check that momentum uses. |
