@@ -1,4 +1,4 @@
-export type HelpTopic = "desk" | "plan" | "straddle" | "strangle" | "chase"
+export type HelpTopic = "desk" | "plan" | "straddle" | "strangle" | "chase" | "momentum"
 
 export type HelpPage = {
   title: string
@@ -242,6 +242,74 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Default is PDF: at 09:16 IST, compare the 09:16 candle close (2-minute, or 1-minute if that is missing) to the overnight hourly EMA. Day's high/low till 09:16 come from those session bars. T+1 still uses the four T1 buckets; later days still trail the stop to EMA.",
           "Legacy is the older 60-minute bar that also steps 40-EMA on that stub hour. Keep it only to compare against the legacy 60-minute Anil port.",
+        ],
+      },
+    ],
+  },
+  momentum: {
+    title: "Cash momentum",
+    summary:
+      "A long-only list of NSE shares. The page ranks about 750 names and shows what it would buy and sell. It sends nothing until you change Execution.",
+    sections: [
+      {
+        id: "what",
+        title: "What this page is",
+        body: [
+          "Momentum keeps a stored list of NSE cash names and ranks them from daily prices. Rank 1 is the strongest score. Filters do not reshuffle that order. A name that fails a filter keeps its rank and is simply skipped for a new buy.",
+          "The book is long only. It buys shares and later sells shares it already holds. It does not short. Today’s unfinished daily candle is ignored. The rank uses the last completed close.",
+          "Strategy on, on this page, turns the rank and the history download on. Desk → Risk is a second switch. Both have to allow Momentum before a live order can go out. Report only never sends an order.",
+        ],
+      },
+      {
+        id: "fields",
+        title: "Fields on the page",
+        body: [
+          "Strategy on: the rank and Pull history now work. Off leaves the name list visible and does not download or rank.",
+          "Pull data daily: the hourly check may download each name once per day. Off skips that automatic download. Pull history now still works when Strategy on is saved.",
+          "Execution: Report only shows the buy and sell list. Manual sends only when you click Send rebalance. Auto sends on the rebalance day, once that day, without the click.",
+          "Rebalance: Monthly uses the first NSE session of the month. Weekly uses the weekday below (1 is Monday, 5 is Friday). Ad hoc never sends by itself. The buy and sell list is still calculated. You preview it, then click Send when you want it.",
+          "Holdings: how many names the book wants to own. Default 30. This is a cap, not a pile of extra slots.",
+          "Worst rank held: a share you already own may stay while its rank is this number or better. Default 75. Rank 80 is worse than 75, so that name is sold. A lower number here sells sooner.",
+          "Entry rank max: a new name may be bought only if its rank is this number or better. Default 75. This does not raise the number of names. Holdings still caps the book.",
+          "Rank: 12-month Sharpe is the default. The other choices are 12-month return, and 12-month return that skips the last month.",
+          "Max weight %: no name is given more than this share of the book. Default 10%. The equal slice is 100 divided by Holdings, then cut down to this cap.",
+          "Capital INR: rupees for the whole book, not per share. Quantity is the rupees for that name divided by the last completed close, rounded down to whole shares. 0 shows weights and buys nothing.",
+        ],
+      },
+      {
+        id: "slots",
+        title: "A name that stays, and a new name",
+        body: [
+          "If a share stays because its rank is still inside worst rank held, it keeps its slot. A new name is bought only when a slot is free: someone was sold, excluded, or you hold fewer names than Holdings.",
+          "You do not add a second capital budget so the old name and the new name can sit together past that cap. The same Capital INR is split across the names in the book. When the book is already full and nobody is leaving, the new name waits.",
+        ],
+      },
+      {
+        id: "filters",
+        title: "Filters",
+        body: [
+          "Open Filters to change the gates. A new buy has to pass all of them. Defaults: price has not multiplied by more than 10 in 12 months or in 24 months, close is within 25% of the stored high, average turnover over 21 sessions is at least ₹1 crore, close is above the 200-session average, the last month is not most of a positive 12-month move, and the 12-month return is positive.",
+          "Market cap Off ignores market cap. Strict drops a name with no stored market cap, or one below the minimum. The daily market-cap refresh covers the daily-trend list, not all 750 momentum names.",
+          "Turnover is the average of close times volume over the last 21 stored sessions. It appears after a history pull. There is no circuit-count filter.",
+        ],
+      },
+      {
+        id: "buttons",
+        title: "Buttons",
+        body: [
+          "Save writes Strategy on, Pull data daily, execution, rebalance, holdings, ranks, weights, capital, and filters. Until you save, those edits sit on the form only. Save then ranks the stored names again, which is why the spinner stays up. It does not download from Zerodha.",
+          "Pull history now writes those same switches, then starts the download and returns at once. You can leave the page. The download keeps going, and the bar comes back when you return. It needs Strategy on. One name is requested at a time.",
+          "Preview orders rebuilds the buy and sell list from the stored candles and the last saved settings. It does not place an order. An unsaved edit on the form is ignored until you Save.",
+          "Send rebalance places that list. The button stays off while Execution is Report only. Manual sends on the click. Auto also sends on the rebalance day without the click. The success message means the click was accepted. Check Desk → Orders and Alerts for a rejection.",
+          "In the table, Hold keeps that name at its current weight. Later rebalances do not buy more shares to lift it up to an equal slice. Exclude sells the shares you hold and does not buy that name again. Clear the lock by clicking the lock name. Hold and Exclude save immediately. They do not need the Save button.",
+        ],
+      },
+      {
+        id: "table",
+        title: "The table",
+        body: [
+          "All names shows the ranked list. Pass the filters shows names that clear the gates. In the order diff shows the target book plus any name that is only being sold. That view can be one larger than Holdings. The extra row is a name leaving so the book can come back to the cap. It is not an extra holding.",
+          "Export this view downloads the rows you are looking at. Sorting a column does not need Save.",
         ],
       },
     ],

@@ -198,7 +198,7 @@ export default function DeskPage() {
         sx={{ mb: 2, alignItems: { md: "center" } }}
       >
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h5">Trading desk</Typography>
+          <Typography variant="h5">Desk</Typography>
           <Typography color="text.secondary">
             Ledger view of orders, positions, round-trips, and why they happened. Kite remains live
             execution reality; this page is the application record.{" "}

@@ -3,7 +3,7 @@ import { HELP_PAGES, HELP_TOPICS, type HelpTopic } from "../../lib/helpContent"
 describe("help content", () => {
   it("covers every advertised topic", () => {
     expect([...HELP_TOPICS].sort()).toEqual(
-      ["chase", "desk", "plan", "straddle", "strangle"].sort()
+      ["chase", "desk", "momentum", "plan", "straddle", "strangle"].sort()
     )
     for (const topic of HELP_TOPICS) {
       expect(HELP_PAGES[topic].title.length).toBeGreaterThan(3)

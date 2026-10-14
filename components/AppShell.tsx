@@ -8,11 +8,14 @@ import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined"
 import MenuIcon from "@mui/icons-material/Menu"
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined"
 import ShowChartOutlinedIcon from "@mui/icons-material/ShowChartOutlined"
+import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined"
 import ViewQuiltOutlinedIcon from "@mui/icons-material/ViewQuiltOutlined"
 import {
   AppBar,
   Avatar,
   Badge,
+  BottomNavigation,
+  BottomNavigationAction,
   Box,
   Chip,
   Divider,
@@ -94,7 +97,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           Algo desk
         </Typography>
       </Box>
-      <List sx={{ flex: 1, py: 0 }} subheader={<li />}>
+      <List dense sx={{ flex: 1, py: 0 }} subheader={<li />}>
         <ListItemButton
           component={Link}
           href="/dashboard"
@@ -119,14 +122,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
               <AccountBalanceWalletOutlinedIcon fontSize="small" />
             </Badge>
           </ListItemIcon>
-          <ListItemText
-            primary="Desk"
-            secondary={
-              alertCount
-                ? `${alertCount} alert${alertCount === 1 ? "" : "s"}`
-                : "Orders, signals, alerts"
-            }
-          />
+          <ListItemText primary="Desk" />
         </ListItemButton>
 
         <ListSubheader
@@ -145,7 +141,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <CalendarMonthOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Trade plan" secondary="Weekday templates" />
+          <ListItemText primary="Plan" />
         </ListItemButton>
         <ListItemButton
           component={Link}
@@ -157,7 +153,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <ShowChartOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Straddle" secondary="ATM, same session" />
+          <ListItemText primary="Straddle" />
         </ListItemButton>
         <ListItemButton
           component={Link}
@@ -169,7 +165,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <ViewQuiltOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Strangle" secondary="OTM wings, same session" />
+          <ListItemText primary="Strangle" />
         </ListItemButton>
 
         <ListSubheader
@@ -188,7 +184,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <AllInclusiveOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Chase" secondary="One futures plan, pause/resume" />
+          <ListItemText primary="Chase" />
         </ListItemButton>
         <ListItemButton
           component={Link}
@@ -200,7 +196,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <ShowChartOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Momentum" secondary="Cash book, report until you arm it" />
+          <ListItemText primary="Momentum" />
         </ListItemButton>
         <ListItemButton
           component={Link}
@@ -212,7 +208,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <AllInclusiveOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Daily trend" secondary="Long-only cash, daily EMA" />
+          <ListItemText primary="Daily trend" />
         </ListItemButton>
 
         <ListSubheader
@@ -231,7 +227,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <HubOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Queues" secondary="Bull Board" />
+          <ListItemText primary="Queues" />
         </ListItemButton>
       </List>
       <Divider sx={{ my: 1 }} />
@@ -246,7 +242,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36 }}>
             <MenuBookOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Guide" secondary="What the fields mean" />
+          <ListItemText primary="Guide" />
         </ListItemButton>
         {user?.isLoggedIn ? (
           <>
@@ -259,7 +255,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
               <ListItemIcon sx={{ minWidth: 36 }}>
                 <AccountCircleOutlinedIcon fontSize="small" />
               </ListItemIcon>
-              <ListItemText primary="Profile" secondary={user.user_shortname || user.user_id} />
+              <ListItemText primary="Profile" />
             </ListItemButton>
             <ListItemButton
               sx={{ borderRadius: 2 }}
@@ -384,7 +380,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           minWidth: 0,
           width: { xs: "100%", md: `calc(100% - ${DRAWER_WIDTH}px)` },
           pt: 11,
-          pb: 6,
+          pb: { xs: 12, md: 6 },
           px: { xs: 1.5, sm: 2, md: 4 },
         }}
       >
@@ -399,6 +395,59 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           {children}
         </Box>
       </Box>
+      <BottomNavigation
+        showLabels
+        value={
+          ["/desk", "/chase", "/momentum", "/daily-trend"].find(href => selected(asPath, href)) ??
+          false
+        }
+        sx={{
+          display: { xs: "flex", md: "none" },
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: theme.zIndex.appBar,
+          borderTop: "1px solid",
+          borderColor: "divider",
+          bgcolor: "#0c1422",
+          height: "calc(56px + env(safe-area-inset-bottom))",
+          pb: "env(safe-area-inset-bottom)",
+        }}
+      >
+        <BottomNavigationAction
+          label="Desk"
+          value="/desk"
+          icon={
+            <Badge color="error" badgeContent={alertCount} max={9}>
+              <AccountBalanceWalletOutlinedIcon />
+            </Badge>
+          }
+          component={Link}
+          href={alertCount ? "/desk?tab=alerts" : "/desk"}
+        />
+        <BottomNavigationAction
+          label="Chase"
+          value="/chase"
+          icon={<AllInclusiveOutlinedIcon />}
+          component={Link}
+          href="/chase"
+        />
+        <BottomNavigationAction
+          label="Momentum"
+          value="/momentum"
+          icon={<ShowChartOutlinedIcon />}
+          component={Link}
+          href="/momentum"
+        />
+        <BottomNavigationAction
+          label="Daily trend"
+          value="/daily-trend"
+          icon={<TrendingUpOutlinedIcon />}
+          component={Link}
+          href="/daily-trend"
+        />
+      </BottomNavigation>
     </Box>
   )
 }

@@ -20,6 +20,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 
@@ -226,7 +227,14 @@ export default function MomentumPage() {
       {SnackbarAlert}
       <Stack spacing={2}>
         <Box>
-          <Typography variant="h5">Cash momentum</Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
+            <Typography variant="h5" sx={{ flex: 1 }}>
+              Cash momentum
+            </Typography>
+            <Button component={Link} href="/help/momentum" size="small">
+              Guide
+            </Button>
+          </Stack>
           <Typography variant="body2" color="text.secondary">
             Ranks the stored Nifty Total Market list from daily candles. The book calculates only
             until you change execution from report. Desk → Risk still has to enable Momentum before

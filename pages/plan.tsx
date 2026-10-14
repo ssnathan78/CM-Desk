@@ -683,7 +683,7 @@ const Plan = () => {
   }
 
   return (
-    <Layout title="Trade plan" maxWidth="xl">
+    <Layout title="Plan" maxWidth="xl">
       {SnackbarAlert}
       <Typography variant="h5" component="h1">
         Weekday templates

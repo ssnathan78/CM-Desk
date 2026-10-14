@@ -4,6 +4,22 @@ Long-only NSE cash book. It ranks a stored universe (the bundled list is a Nifty
 
 This is not Chase and not the 9:20 short-vol book. A correct run of a losing rank is still a losing rank. The published sheet this follows ranks first and filters later. Filters do not re-rank. Adding capital during a drawdown is operator funding, not a signal in this app.
 
+The same explanation is on Guide → Cash momentum (`/help/momentum`).
+
+## Reading the page
+
+Strategy on here turns ranking and the history download on. Desk → Risk is a separate switch. Report only calculates the buy and sell list and sends nothing.
+
+Holdings is how many names the book wants to own (default 30). It is a cap. Worst rank held (default 75) is how far an existing share may fall and still stay. Entry rank max (default 75) is how far down the list a new name may come from. A name that stays because its rank is still inside worst rank held keeps its slot. A new name is bought only when a slot is free. The same Capital INR is split across the book. A full book does not need a second budget so a stayer and a new name can be held together.
+
+Capital INR is rupees for the whole book. Share count is that name’s slice divided by the last completed close, rounded down. Capital 0 shows weights and buys nothing.
+
+Hold on a row keeps that name at its current weight and does not buy it back up to an equal slice. Exclude sells the open quantity and does not buy the name again. Both write immediately. Clear the lock by clicking the lock name.
+
+Save writes the form. Pull history now writes the same form and starts the download. Preview orders and Send rebalance use the last saved settings. The symbol filter, sort, and Show menu are only for this visit.
+
+In the order diff lists the target book plus any name that is only being sold. One extra row means a name is leaving so the book can return to Holdings. It is not an extra holding.
+
 ## Candles and the hour loop
 
 History is Kite **day** candles, about 1,100 calendar days, one symbol at a time with a 350ms pause. The pull runs at most once per IST day, and only while the page is **On** and **Pull data daily** is on. **Pull history now** still runs while On is enabled even if Pull data daily is off.
