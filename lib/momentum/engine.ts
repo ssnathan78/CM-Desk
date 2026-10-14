@@ -260,6 +260,24 @@ export function rankSymbols(
   })
 }
 
+/** Metrics and last close only. The caller must not keep the raw bars. */
+export function symbolFromBars(
+  symbol: string,
+  bars: DailyBar[],
+  config: MomentumConfig,
+  asOf: string | undefined,
+  marketCapCr: number | null
+): MomentumSymbol {
+  const metrics = metricsFromBars(bars, config.ranking, config.filters.smaPeriod, asOf)
+  const history = sortedBars(bars, asOf)
+  return {
+    symbol,
+    price: history.at(-1)?.close ?? null,
+    marketCapCr,
+    metrics: { ...metrics, marketCapCr },
+  }
+}
+
 function limitPrice(
   side: "BUY" | "SELL",
   price: number | null,

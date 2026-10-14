@@ -81,7 +81,7 @@ A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past
 
 The rank and the diff use the last completed daily close. A candle dated today is ignored.
 
-The rank table shows every stored name. **Show → Pass the filters** keeps names that clear every filter. **Show → In the order diff** keeps names with a target weight or a buy or sell. **Export this view** downloads that slice as CSV. Column headers sort. The page used to stop at 80 rows; it now shows the whole list.
+The rank table reads stored candles in batches of 20 names and drops each batch before the next, so opening or saving the page does not load the whole history into memory at once. Save writes the switches and does not download candles. A history download runs only from **Pull history now**, or from the hourly pass when Strategy on and Pull data are both on, once per IST day. That download is one Kite request per name and is the large transfer.
 
 ## Orders and a short Zerodha balance
 

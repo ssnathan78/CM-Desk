@@ -11,7 +11,7 @@ import {
 } from "../../lib/dailyTrend/engine"
 import { parseScreenerMarketCapCr } from "../../lib/dailyTrend/marketCap"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
-import { buildMomentumPlan, executableOrders, metricsFromBars } from "../../lib/momentum/engine"
+import { buildMomentumPlan, executableOrders, metricsFromBars, symbolFromBars } from "../../lib/momentum/engine"
 import { firstTradingSessionOfMonth } from "../../lib/momentum/calendar"
 import {
   DEFAULT_MOMENTUM_CONFIG,
@@ -223,6 +223,22 @@ describe("momentum switches", () => {
     })
     expect(plan.ranked[0]?.filterPass).toBe(true)
     expect(plan.ranked[0]?.filterReasons.join(" ")).not.toMatch(/circuit/i)
+  })
+
+  it("ranks from metrics without keeping the raw candles on the symbol", () => {
+    const symbol = symbolFromBars(
+      "AAA",
+      [
+        { date: "2024-01-01", open: 10, high: 11, low: 9, close: 10, volume: 100 },
+        { date: "2026-10-14", open: 20, high: 21, low: 19, close: 20, volume: 100 },
+      ],
+      config,
+      "2026-10-13",
+      5000
+    )
+    expect(symbol.price).toBe(10)
+    expect(symbol.bars).toBeUndefined()
+    expect(symbol.marketCapCr).toBe(5000)
   })
 
   it("loads the bundled universe and knows the first session of a month", () => {

@@ -9,13 +9,12 @@ import {
 import { buildMomentumPlan, executableOrders } from "../../lib/momentum/engine"
 import { submitCashOrders } from "../../lib/momentum/execute"
 import { pullCashHistory } from "../../lib/momentum/history"
+import { rankedSymbols } from "../../lib/momentum/rankStored"
 import {
   getMomentumState,
   holdingsFor,
   listLocks,
-  listMarketCaps,
   listUniverse,
-  loadBars,
   markMomentumRebalance,
   replaceUniverse,
   saveLock,
@@ -25,7 +24,20 @@ import { normalizeMomentumConfig, rebalanceDue } from "../../lib/momentum/types"
 import { normalizeNseCashSymbol } from "../../lib/nseCashSymbol"
 import withSession from "../../lib/session"
 
+let rankGeneration = 0
+let reportInflight: { generation: number; promise: ReturnType<typeof computeReport> } | null = null
+
 async function report() {
+  const generation = rankGeneration
+  if (reportInflight?.generation === generation) return reportInflight.promise
+  const promise = computeReport().finally(() => {
+    if (reportInflight?.promise === promise) reportInflight = null
+  })
+  reportInflight = { generation, promise }
+  return promise
+}
+
+async function computeReport() {
   const state = await getMomentumState()
   const universe = await listUniverse()
   if (!state.config.active) {
@@ -48,16 +60,11 @@ async function report() {
       locks: await listLocks(),
     }
   }
-  const bars = await loadBars(universe.map(row => row.symbol))
-  const caps = new Map((await listMarketCaps()).map(row => [row.symbol, row.marketCapCr]))
+  const symbols = await rankedSymbols(universe, state.config, previousIstDate(new Date()))
   const holdings = await holdingsFor("MOMENTUM")
   const locks = await listLocks()
   const plan = buildMomentumPlan({
-    symbols: universe.map(row => ({
-      symbol: row.symbol,
-      bars: bars.get(row.symbol) ?? [],
-      marketCapCr: caps.get(row.symbol) ?? null,
-    })),
+    symbols,
     config: state.config,
     holdings,
     locks,
@@ -89,7 +96,9 @@ export default withSession(async (req, res) => {
     }
     if (req.method === "PUT") {
       const config = normalizeMomentumConfig(req.body?.config ?? req.body)
-      return res.json(await saveMomentumConfig(config))
+      rankGeneration += 1
+      const saved = await saveMomentumConfig(config)
+      return res.json(saved)
     }
     if (req.method === "POST" && req.body?.action === "replace-universe") {
       const rows = Array.isArray(req.body.rows) ? req.body.rows : []

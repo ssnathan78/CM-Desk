@@ -1,16 +1,16 @@
 import logger from "../logger"
 import { isSessionOpen } from "../marketCalendar"
-import { firstTradingSessionOfMonth, isoWeekdayIst, istDate } from "./calendar"
+import { firstTradingSessionOfMonth, isoWeekdayIst, istDate, previousIstDate } from "./calendar"
 import { buildMomentumPlan, executableOrders } from "./engine"
 import { submitCashOrders } from "./execute"
 import { pullCashHistory } from "./history"
+import { rankedSymbols } from "./rankStored"
 import {
   ensureNifty100Books,
   getMomentumState,
   holdingsFor,
   listLocks,
   listUniverse,
-  loadBars,
   markMomentumRebalance,
 } from "./store"
 import { ordersAllowed, rebalanceDue } from "./types"
@@ -33,12 +33,13 @@ export async function runCashSchedulerOnce(accessToken?: string | null) {
     ordersAllowed({ execution: state.config.execution, executeRequested: false, due })
   ) {
     const universe = await listUniverse()
-    const bars = await loadBars(universe.map(row => row.symbol))
+    const asOf = previousIstDate(new Date())
     const plan = buildMomentumPlan({
-      symbols: universe.map(row => ({ symbol: row.symbol, bars: bars.get(row.symbol) ?? [] })),
+      symbols: await rankedSymbols(universe, state.config, asOf),
       config: state.config,
       holdings: await holdingsFor("MOMENTUM"),
       locks: await listLocks(),
+      asOf,
     })
     const orders = executableOrders(plan, {
       execution: state.config.execution,

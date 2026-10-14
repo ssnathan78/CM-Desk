@@ -65,7 +65,10 @@ type Report = {
 export default function MomentumPage() {
   useUser({ redirectTo: "/" })
   const { showMessage, SnackbarAlert } = useSnackbar()
-  const { data, mutate } = useSWR<Report>("/api/momentum")
+  const { data, mutate } = useSWR<Report>("/api/momentum", {
+    revalidateOnFocus: false,
+    dedupingInterval: 15_000,
+  })
   const [draft, setDraft] = useState<MomentumConfig | null>(null)
   const [query, setQuery] = useState("")
   const [view, setView] = useState<"all" | "pass" | "orders">("all")
