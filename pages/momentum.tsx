@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Chip,
+  LinearProgress,
   MenuItem,
   Paper,
   Stack,
@@ -19,7 +20,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
@@ -75,6 +76,15 @@ export default function MomentumPage() {
   const [sortKey, setSortKey] = useState<"rank" | "symbol" | "score" | "pass" | "weight">("rank")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [busy, setBusy] = useState(false)
+  const [pullWatch, setPullWatch] = useState<{
+    running: boolean
+    done: number
+    total: number
+    symbol: string | null
+    errors: number
+    message: string | null
+    shown: boolean
+  } | null>(null)
   const config = draft ?? data?.config ?? DEFAULT_MOMENTUM_CONFIG
   const rows = useMemo(() => {
     const q = query.trim().toUpperCase()
@@ -118,6 +128,45 @@ export default function MomentumPage() {
       return String(left).localeCompare(String(right)) * dir
     })
   }, [data?.orders, data?.rows, data?.targets, query, sortDir, sortKey, view])
+
+  useEffect(() => {
+    if (!pullWatch?.running) return
+    const timer = setInterval(() => {
+      void fetchJson<NonNullable<typeof pullWatch>>("/api/momentum?view=pull").then(latest => {
+        setPullWatch(latest)
+        if (!latest.running) {
+          showMessage(
+            latest.message || "History pull finished",
+            latest.errors ? "error" : "success"
+          )
+          void mutate()
+        }
+      })
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [mutate, pullWatch?.running, showMessage])
+
+  async function pullHistory() {
+    setBusy(true)
+    try {
+      const result = await fetchJson<{
+        started: boolean
+        progress: NonNullable<typeof pullWatch>
+      }>("/api/momentum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "pull", config }),
+      })
+      setPullWatch(result.progress)
+      if (!result.started && !result.progress.running) {
+        showMessage(result.progress.message || "History pull did not start", "info")
+      }
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Pull failed", "error")
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function save(next: MomentumConfig = config) {
     setBusy(true)
@@ -351,11 +400,10 @@ export default function MomentumPage() {
             <Button variant="contained" disabled={busy} onClick={() => void save()}>
               Save
             </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void post({ action: "pull", config }, "History pull finished")}
-            >
-              Pull history now
+            <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory()}>
+              {pullWatch?.running
+                ? `Pulling ${pullWatch.done} of ${pullWatch.total || "…"}`
+                : "Pull history now"}
             </Button>
             <Button
               disabled={busy}
@@ -385,6 +433,22 @@ export default function MomentumPage() {
             Send. Monthly sends on the first NSE session of the month. The rank uses the last
             completed daily close, not today’s candle.
           </Typography>
+          {pullWatch?.running || pullWatch?.shown ? (
+            <Box sx={{ mt: 1.5 }}>
+              {pullWatch.running ? (
+                <LinearProgress
+                  variant={pullWatch.total > 0 ? "determinate" : "indeterminate"}
+                  value={
+                    pullWatch.total > 0 ? Math.round((100 * pullWatch.done) / pullWatch.total) : 0
+                  }
+                />
+              ) : null}
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                {pullWatch.message}
+                {pullWatch.symbol ? ` (${pullWatch.symbol})` : ""}
+              </Typography>
+            </Box>
+          ) : null}
         </Paper>
         <Paper sx={{ p: 2 }}>
           <Typography variant="subtitle2">Planned orders</Typography>

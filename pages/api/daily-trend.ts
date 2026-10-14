@@ -14,6 +14,7 @@ import {
   removeDailyTrendBook,
   saveDailyTrendBook,
   saveDailyTrendRuntime,
+  setAllDailyTrendEnabled,
 } from "../../lib/momentum/store"
 import { evaluateDailyTrend } from "../../lib/momentum/trendRun"
 import { requireListedNseCash } from "../../lib/nseCashSymbol"
@@ -100,6 +101,11 @@ export default withSession(async (req, res) => {
       if (!parsed.ok) return res.status(400).json({ error: parsed.error })
       const count = await applyDailyTrendBulkToBooks(parsed.patch)
       return res.json({ count, books: await listDailyTrendBooks() })
+    }
+    if (req.method === "POST" && req.body?.action === "set-enabled-all") {
+      const enabled = req.body.enabled === true
+      const count = await setAllDailyTrendEnabled(enabled)
+      return res.json({ count, enabled, books: await listDailyTrendBooks() })
     }
     if (req.method === "POST" && req.body?.action === "remove-book") {
       await removeDailyTrendBook(String(req.body.symbol || ""))

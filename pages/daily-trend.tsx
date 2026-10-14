@@ -83,6 +83,7 @@ type Payload = {
     symbol: string | null
     errors: number
     message: string | null
+    shown: boolean
   }
   decisions?: { symbol: string; action: string; reason: string; state?: string }[]
 }
@@ -162,6 +163,23 @@ export default function DailyTrendPage() {
       showMessage(`${book.symbol} saved`, "success")
     } catch (error) {
       showMessage(error instanceof Error ? error.message : "Save failed", "error")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function setEverySymbol(enabled: boolean) {
+    setBusy(true)
+    try {
+      const result = await fetchJson<{ count: number }>("/api/daily-trend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set-enabled-all", enabled }),
+      })
+      await mutate()
+      showMessage(`${enabled ? "Turned on" : "Turned off"} ${result.count} symbols`, "success")
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Update failed", "error")
     } finally {
       setBusy(false)
     }
@@ -382,7 +400,7 @@ export default function DailyTrendPage() {
               Evaluate and send
             </Button>
           </Stack>
-          {pull && (pull.running || pull.message) ? (
+          {pull && (pull.running || pull.shown) ? (
             <Box sx={{ mt: 1.5 }}>
               {pull.running ? (
                 <LinearProgress
@@ -489,6 +507,38 @@ export default function DailyTrendPage() {
             </TextField>
             <Button variant="outlined" disabled={busy} onClick={() => void applyToAll()}>
               Apply to all
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={busy}
+              onClick={() => {
+                const count = data?.books.length ?? 0
+                if (
+                  !window.confirm(
+                    `Turn all ${count} symbols on? A symbol that is on can buy when execution is Manual or Auto and Desk → Risk allows daily trend.`
+                  )
+                )
+                  return
+                void setEverySymbol(true)
+              }}
+            >
+              Turn all on
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={busy}
+              onClick={() => {
+                const count = data?.books.length ?? 0
+                if (
+                  !window.confirm(
+                    `Turn all ${count} symbols off? Off is fully dark: no new buy and no stop. Shares already at the broker stay there.`
+                  )
+                )
+                  return
+                void setEverySymbol(false)
+              }}
+            >
+              Turn all off
             </Button>
           </Stack>
         </Paper>

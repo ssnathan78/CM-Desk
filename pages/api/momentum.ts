@@ -8,7 +8,7 @@ import {
 } from "../../lib/momentum/calendar"
 import { buildMomentumPlan, executableOrders } from "../../lib/momentum/engine"
 import { submitCashOrders } from "../../lib/momentum/execute"
-import { pullCashHistory } from "../../lib/momentum/history"
+import { cashPullProgress, startCashHistoryPull } from "../../lib/momentum/history"
 import { rankedSymbols } from "../../lib/momentum/rankStored"
 import {
   getMomentumState,
@@ -91,6 +91,9 @@ async function computeReport() {
 export default withSession(async (req, res) => {
   if (!req.session.user) return res.status(401).send("Unauthorized")
   try {
+    if (req.method === "GET" && req.query.view === "pull") {
+      return res.json(cashPullProgress())
+    }
     if (req.method === "GET") {
       return res.json(await report())
     }
@@ -132,7 +135,8 @@ export default withSession(async (req, res) => {
         })
       }
       const token = req.session.user.session?.access_token
-      return res.json(await pullCashHistory({ accessToken: token, force: true }))
+      rankGeneration += 1
+      return res.json(startCashHistoryPull({ accessToken: token, force: true, scope: "momentum" }))
     }
     if (req.method === "POST" && req.body?.action === "rebalance") {
       const snapshot = await report()

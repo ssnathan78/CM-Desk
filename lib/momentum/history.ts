@@ -44,6 +44,7 @@ export type CashPullProgress = {
   symbol: string | null
   errors: number
   message: string | null
+  shown: boolean
 }
 
 const idlePull: CashPullProgress = {
@@ -53,6 +54,7 @@ const idlePull: CashPullProgress = {
   symbol: null,
   errors: 0,
   message: null,
+  shown: false,
 }
 
 let pullProgress: CashPullProgress = { ...idlePull }
@@ -67,7 +69,20 @@ export function cashPullProgress(): CashPullProgress {
   return { ...pullProgress }
 }
 
-/** Which names a pull will request. A daily-trend click does not download the momentum universe. */
+/** Text for a pull that found no names. The hourly skip is not shown on the page. */
+export function emptyPullMessage(input: {
+  scope: CashPullScope
+  trendActive: boolean
+  momentumActive: boolean
+}): string {
+  if (input.scope === "trend" && !input.trendActive)
+    return "Daily trend is off. Turn it on, save, then use Pull history now."
+  if (input.scope === "momentum" && !input.momentumActive)
+    return "Momentum is off. Turn Strategy on, save, then use Pull history now."
+  if (input.scope === "trend") return "There are no symbols on the daily-trend page."
+  if (input.scope === "momentum") return "The momentum list is empty."
+  return "No download is due. Pull data daily is off, or today's candles were already downloaded."
+}
 export function symbolsForCashPull(input: {
   scope: CashPullScope
   force: boolean
@@ -112,6 +127,7 @@ export function startCashHistoryPull(args: {
     symbol: null,
     errors: 0,
     message: "Starting the history pull",
+    shown: true,
   }
   const run = pullCashHistoryNow(args).finally(() => {
     pullActive = null
@@ -164,25 +180,39 @@ async function pullCashHistoryNow(args: {
       enabled: book.enabled,
     })),
   })
+  const requested = args.force === true || scope === "trend" || scope === "momentum"
   if (!planned.symbols.length) {
-    const reason =
-      scope === "trend" && !trend.config.active
-        ? "daily trend is off"
-        : scope === "momentum" && !momentum.config.active
-          ? "momentum is off"
-          : "nothing due"
-    pullProgress = { running: false, done: 0, total: 0, symbol: null, errors: 0, message: reason }
-    return { skipped: true, reason, pulled: 0, errors: [] }
+    const message = emptyPullMessage({
+      scope,
+      trendActive: trend.config.active,
+      momentumActive: momentum.config.active,
+    })
+    if (requested) {
+      pullProgress = {
+        running: false,
+        done: 0,
+        total: 0,
+        symbol: null,
+        errors: 0,
+        message,
+        shown: true,
+      }
+    }
+    return { skipped: true, reason: message, pulled: 0, errors: [] }
   }
   const token = args.accessToken || (await getLatestAccessToken())
   if (!token) {
-    pullProgress = {
-      running: false,
-      done: 0,
-      total: 0,
-      symbol: null,
-      errors: 0,
-      message: "no Kite session",
+    const message = "No Kite session. Log in, then use Pull history now."
+    if (requested) {
+      pullProgress = {
+        running: false,
+        done: 0,
+        total: 0,
+        symbol: null,
+        errors: 0,
+        message,
+        shown: true,
+      }
     }
     return { skipped: true, reason: "no Kite session", pulled: 0, errors: [] }
   }
@@ -208,6 +238,7 @@ async function pullCashHistoryNow(args: {
     symbol: null,
     errors: 0,
     message: `Pulling 0 of ${planned.symbols.length}`,
+    shown: true,
   }
   for (const symbol of planned.symbols) {
     pullProgress = {
@@ -238,6 +269,7 @@ async function pullCashHistoryNow(args: {
       symbol,
       errors: errors.length,
       message: `Pulling ${symbol} — ${pulled} of ${planned.symbols.length}`,
+      shown: true,
     }
     await sleep(350)
   }
@@ -253,6 +285,7 @@ async function pullCashHistoryNow(args: {
     symbol: null,
     errors: errors.length,
     message,
+    shown: true,
   }
   return { skipped: false, pulled, errors }
 }

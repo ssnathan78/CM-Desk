@@ -12,7 +12,7 @@ import {
 import { parseScreenerMarketCapCr } from "../../lib/dailyTrend/marketCap"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import { buildMomentumPlan, executableOrders, metricsFromBars, symbolFromBars } from "../../lib/momentum/engine"
-import { symbolsForCashPull } from "../../lib/momentum/history"
+import { emptyPullMessage, symbolsForCashPull } from "../../lib/momentum/history"
 import { firstTradingSessionOfMonth } from "../../lib/momentum/calendar"
 import {
   DEFAULT_MOMENTUM_CONFIG,
@@ -271,6 +271,9 @@ describe("momentum switches", () => {
     })
     expect(scheduled.symbols).toEqual(["RELIANCE"])
     expect(scheduled.trendDue).toBe(false)
+    expect(emptyPullMessage({ scope: "all", trendActive: true, momentumActive: true })).toMatch(
+      /No download is due/
+    )
   })
 
   it("loads the bundled universe and knows the first session of a month", () => {

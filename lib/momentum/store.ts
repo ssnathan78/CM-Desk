@@ -425,6 +425,14 @@ export async function saveDailyTrendBook(book: DailyTrendBookRow): Promise<void>
     })
 }
 
+export async function setAllDailyTrendEnabled(enabled: boolean): Promise<number> {
+  const rows = await db
+    .update(dailyTrendBooks)
+    .set({ enabled, updatedAt: new Date() })
+    .returning({ symbol: dailyTrendBooks.tradingsymbol })
+  return rows.length
+}
+
 export async function applyDailyTrendBulkToBooks(patch: DailyTrendBulkPatch): Promise<number> {
   const books = await listDailyTrendBooks()
   for (const book of books) {

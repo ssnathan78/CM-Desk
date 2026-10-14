@@ -23,7 +23,7 @@ Later hours the same day do not fetch a new candle. They look at the stored day 
 | Execution `report` | Evaluate shows the decision and sends nothing. Default. |
 | Execution `manual` | **Evaluate and send** places the orders. Nothing is retried on its own. |
 | Execution `auto` | The hourly pass evaluates and sends. It does not also require the market-session check that momentum uses. |
-| Symbol **On** | Off is fully dark for that symbol: no buy and no stop. |
+| Symbol **On** | Off is fully dark for that symbol: no buy and no stop. **Turn all on** and **Turn all off** set that switch on every saved symbol and leave pause, budget, status, and the stop alone. |
 | Pause | Blocks a new buy. A long book still exits on the stop. |
 | Desk → Risk → Daily trend disabled | No orders, including the stop. The card starts off. Share count is set on this page, not as max lots. |
 | Desk halt | Blocks the buy. The stop still sells the open quantity. |
