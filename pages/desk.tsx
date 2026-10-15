@@ -28,6 +28,7 @@ import ContractsPanel from "../components/desk/ContractsPanel"
 import HistoryPeriod from "../components/desk/HistoryPeriod"
 import RiskControls from "../components/desk/RiskControls"
 import SignalsPanel from "../components/desk/SignalsPanel"
+import StrategyReconcile from "../components/desk/StrategyReconcile"
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import ScrollTable from "../components/lib/ScrollTable"
@@ -275,6 +276,11 @@ export default function DeskPage() {
           {reconciling ? "Reconciling…" : "Reconcile with broker"}
         </Button>
       </Stack>
+      <StrategyReconcile
+        onChanged={async () => {
+          await Promise.all([mutatePortfolio(), mutatePositions(), mutateOrders(), mutateTrades()])
+        }}
+      />
       {reconMsg ? (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => setReconMsg(null)}>
           {reconMsg}

@@ -12,9 +12,9 @@ Strategy on here turns ranking and the history download on. Desk → Risk is a s
 
 Holdings is how many names the book wants to own (default 30). It is a cap. Worst rank held (default 75) is how far an existing share may fall and still stay. Entry rank max (default 75) is how far down the list a new name may come from. A name that stays because its rank is still inside worst rank held keeps its slot. A new name is bought only when a slot is free. The same Capital INR is split across the book. A full book does not need a second budget so a stayer and a new name can be held together.
 
-Capital INR is rupees for the whole book. Share count is that name’s slice divided by the last completed close, rounded down. Capital 0 shows weights and buys nothing.
+Capital INR is rupees for the whole book. With equal weight, share count is that name’s slice divided by the last completed close, rounded down. Capital 0 shows weights and buys nothing. With let winners run, new rupees buy only names not yet held.
 
-Hold on a row keeps that name at its current weight and does not buy it back up to an equal slice. Exclude sells the open quantity and does not buy the name again. Both write immediately. Clear the lock by clicking the lock name.
+Hold on a row, in equal weight, keeps that name at its current weight and does not buy it back up to an equal slice. Exclude sells the open quantity and does not buy the name again. The row changes at once and shows Clear hold or Clear exclude. The rank runs once after the clicks stop.
 
 Save writes the form. Pull history now writes the same form and starts the download. Preview orders and Send rebalance use the last saved settings. The symbol filter, sort, and Show menu are only for this visit.
 
@@ -79,8 +79,12 @@ A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past
 ## Book
 
 - Holdings count, worst rank held, and entry rank are independent. Defaults are 30, 75, and 75. A new name must be inside the entry rank. A name already held may stay until the worst rank held.
-- Equal-weight slot is `100 / holdingsCount`, then capped by max weight (default 10%). Min weight (default 2%) is stored on the config. Target quantity is `floor(capital × weight / last completed close)`.
-- **Capital INR** is the rupee budget for the whole book. Capital 0 produces weights and no buys.
+- **Weights** chooses how a rebalance treats shares you already hold.
+  - **Equal weight each rebalance** (default). Slot is `100 / holdingsCount`, then capped by max weight (default 10%). Target quantity is `floor(capital × weight / last completed close)`. A name above that slice is sold down. A name still in the book and below that slice is bought up.
+  - **Let winners run.** Held shares stay. A name is sold in full only when it leaves the book (filter, worst rank held, exclude, or it no longer fits). The cap is measured against the larger of the book's market value and Capital INR, so cash not yet invested counts and a single starter position is not trimmed just for being the only name. A name that reaches **Trim above %** (default 20) of that amount is sold down to **Trim down to %** (default 15) of the same amount. Other held names are not bought or sold to restore an equal slice.
+- **New capital** in let-winners-run waits, except a new name can still be bought up to one equal slice. **Deploy spare cash** spends `max(0, capital − current market value)` plus rupees raised by sells and trims in that plan. The cash is split in equal rupees across today's book, including names you already hold. A buy stops at max weight and at the trim-down level. Unspent rupees stay aside. The hourly pass does not deploy.
+- **Trim book** sells `floor(quantity × percent / 100)` of every open momentum position. A name that is 20% of the book stays about 20%, because every name gives up the same fraction of its shares. Whole shares only. Capital INR is reduced by the same percent, so the rupees taken out are not spare cash. This is not the concentration trim and not an equal-weight resize.
+- **Capital INR** is the rupee budget for the whole book. Capital 0 produces weights and no buys. In let-winners-run, capital 0 still sells a name that leaves and still trims a name past the cap. It does not buy.
 - Minimum turnover is the mean of close × volume over the last 21 stored sessions. It appears after a history pull.
 - Locked **hold weight** keeps the target at `min(held quantity, quantity from the locked weight)`. The rebalance does not buy it back up to equal weight. **Exclude** sells the open quantity and does not buy the name again.
 - A top-up buy of a name that is already held and still selected is a buy. It is not a new leader.
@@ -94,6 +98,8 @@ A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past
 | **Pull history now** | Saves the switches, starts the momentum-universe download, and returns immediately. A bar shows which name is in progress. Leaving the page does not stop the download. The bar is shown again when you come back. It needs Strategy on. Desk → Risk does not start this pull. |
 | **Preview orders** | Rebuilds the buy and sell diff from the stored candles and sends nothing. |
 | **Send rebalance** | Sends that diff. Disabled while execution is Report only. Manual sends on click. Auto also sends on the rebalance day without this click. |
+| **Preview deploy** / **Deploy spare cash** | Shown when Weights is Let winners run. Splits spare cash in equal rupees across today's book. Sends only after you confirm, and only when execution is Manual or Auto. |
+| **Preview trim** / **Trim book** | Shown when Weights is Let winners run. Sells the same percent of each open position and reduces Capital INR by that percent when you confirm. |
 
 The rank and the diff use the last completed daily close. A candle dated today is ignored.
 

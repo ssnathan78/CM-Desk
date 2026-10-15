@@ -27,7 +27,8 @@ import withSession from "../../lib/session"
 let rankGeneration = 0
 let reportInflight: { generation: number; promise: ReturnType<typeof computeReport> } | null = null
 
-async function report() {
+async function report(options?: { deployCash?: boolean; trimPct?: number }) {
+  if (options?.deployCash || (options?.trimPct ?? 0) > 0) return computeReport(options)
   const generation = rankGeneration
   if (reportInflight?.generation === generation) return reportInflight.promise
   const promise = computeReport().finally(() => {
@@ -37,7 +38,7 @@ async function report() {
   return promise
 }
 
-async function computeReport() {
+async function computeReport(options?: { deployCash?: boolean; trimPct?: number }) {
   const state = await getMomentumState()
   const universe = await listUniverse()
   if (!state.config.active) {
@@ -69,6 +70,8 @@ async function computeReport() {
     holdings,
     locks,
     asOf: previousIstDate(new Date()),
+    deployCash: options?.deployCash,
+    trimPct: options?.trimPct,
   })
   const names = new Map(universe.map(row => [row.symbol, row.name]))
   return {
@@ -123,7 +126,7 @@ export default withSession(async (req, res) => {
         const mode = req.body.mode === "EXCLUDE" ? "EXCLUDE" : "HOLD_WEIGHT"
         await saveLock({ symbol, mode, weightPct: Number(req.body.weightPct) || 0 })
       }
-      return res.json(await report())
+      return res.json({ ok: true })
     }
     if (req.method === "POST" && req.body?.action === "pull") {
       if (req.body.config) await saveMomentumConfig(normalizeMomentumConfig(req.body.config))
@@ -156,6 +159,38 @@ export default withSession(async (req, res) => {
       const token = req.session.user.session?.access_token
       const results = await submitCashOrders({ accessToken: token, strategy: "MOMENTUM", orders })
       await markMomentumRebalance(istDate(new Date()))
+      return res.json({ results, orders })
+    }
+    if (req.method === "POST" && (req.body?.action === "deploy" || req.body?.action === "trim")) {
+      const trimming = req.body.action === "trim"
+      const trimPct = Number(req.body.trimPct)
+      if (trimming && !(trimPct > 0 && trimPct < 100)) {
+        return res.status(400).json({ error: "Trim percent must be between 0 and 100." })
+      }
+      const snapshot = await report(trimming ? { trimPct } : { deployCash: true })
+      if (!snapshot.active) return res.status(409).json({ error: "Strategy is off" })
+      if (snapshot.config.weighting !== "drift") {
+        return res.status(409).json({ error: "Weights must be Let winners run." })
+      }
+      const execute = req.body.execute === true
+      const orders = executableOrders(
+        { ranked: [], targets: snapshot.targets, orders: snapshot.orders },
+        { execution: snapshot.config.execution, executeRequested: execute, due: false }
+      )
+      if (!execute) return res.json({ preview: true, orders: snapshot.orders })
+      if (snapshot.config.execution === "report") {
+        return res.status(409).json({
+          error: "Execution is report-only. Change it to manual or auto before sending orders.",
+        })
+      }
+      const token = req.session.user.session?.access_token
+      const results = await submitCashOrders({ accessToken: token, strategy: "MOMENTUM", orders })
+      if (trimming) {
+        await saveMomentumConfig({
+          ...snapshot.config,
+          capitalInr: Math.floor(snapshot.config.capitalInr * (1 - trimPct / 100)),
+        })
+      }
       return res.json({ results, orders })
     }
     return res.status(405).json({ error: "Method not allowed" })

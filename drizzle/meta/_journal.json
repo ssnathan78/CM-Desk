@@ -169,6 +169,13 @@
       "when": 1756980000023,
       "tag": "0022_daily_trend_budget_and_mcap",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1756980000024,
+      "tag": "0023_position_strategy_book",
+      "breakpoints": true
     }
   ]
 }

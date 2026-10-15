@@ -786,8 +786,9 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
       `SELECT * FROM positions
        WHERE account_id = $1 AND exchange = $2 AND tradingsymbol = $3
          AND product = $4 AND COALESCE(job_id, '') = COALESCE($5, '')
+         AND COALESCE(strategy, '') = COALESCE($6, '')
        FOR UPDATE`,
-      [fill.account_id, fill.exchange, fill.tradingsymbol, fill.product || "", jobId]
+      [fill.account_id, fill.exchange, fill.tradingsymbol, fill.product || "", jobId, fill.strategy]
     )
     let pos = posRes.rows[0]
     if (!pos) {
@@ -1416,4 +1417,61 @@ export async function bookTestFill(input: {
     )
     .limit(1)
   return { orderId: recorded.id, fillId, positionQty: pos[0]?.quantity ?? 0 }
+}
+
+/** Book a fill onto one strategy. Used when the operator accepts a broker difference. */
+export async function recordAttributedFill(input: {
+  strategy: string
+  exchange: string
+  tradingsymbol: string
+  product: string
+  side: Side
+  quantity: number
+  price: number
+  occurredAt: Date
+  fingerprint: string
+  brokerTradeId?: string | null
+}): Promise<boolean> {
+  const recorded = await recordOrderIntent({
+    strategy: input.strategy,
+    orderTag: "reconcile",
+    purpose: input.side === "BUY" ? "ENTRY" : "EXIT",
+    side: input.side,
+    orderType: "LIMIT",
+    product: input.product,
+    exchange: input.exchange,
+    tradingsymbol: input.tradingsymbol,
+    requestedQty: input.quantity,
+    limitPrice: input.price,
+    idempotencyKey: `recon-order:${input.fingerprint}`,
+    provenance: "RECONCILED",
+  })
+  if (!recorded) return false
+  await db
+    .update(orders)
+    .set({
+      status: "FILLED",
+      filledQty: input.quantity,
+      remainingQty: 0,
+      averageFillPrice: String(input.price),
+      filledAt: input.occurredAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(orders.id, recorded.id))
+  const fillId = await insertFill({
+    orderId: recorded.id,
+    strategy: input.strategy,
+    brokerTradeId: input.brokerTradeId ?? null,
+    exchange: input.exchange,
+    tradingsymbol: input.tradingsymbol,
+    product: input.product,
+    side: input.side,
+    quantity: input.quantity,
+    price: String(input.price),
+    fingerprint: input.fingerprint,
+    occurredAt: input.occurredAt,
+    provenance: "RECONCILED",
+  })
+  if (!fillId) return false
+  return applyFillById(fillId)
 }

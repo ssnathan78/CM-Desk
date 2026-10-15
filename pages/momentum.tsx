@@ -21,7 +21,7 @@ import {
   Typography,
 } from "@mui/material"
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
@@ -77,6 +77,8 @@ export default function MomentumPage() {
   const [sortKey, setSortKey] = useState<"rank" | "symbol" | "score" | "pass" | "weight">("rank")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [busy, setBusy] = useState(false)
+  const [trimPct, setTrimPct] = useState(10)
+  const [previewOrders, setPreviewOrders] = useState<Report["orders"] | null>(null)
   const [pullWatch, setPullWatch] = useState<{
     running: boolean
     done: number
@@ -87,6 +89,18 @@ export default function MomentumPage() {
     shown: boolean
   } | null>(null)
   const config = draft ?? data?.config ?? DEFAULT_MOMENTUM_CONFIG
+  const locksRef = useRef<Report["locks"]>([])
+  const lockQueue = useRef(Promise.resolve())
+  const rankTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (data?.locks) locksRef.current = data.locks
+  }, [data?.locks])
+  useEffect(
+    () => () => {
+      if (rankTimer.current) clearTimeout(rankTimer.current)
+    },
+    []
+  )
   const rows = useMemo(() => {
     const q = query.trim().toUpperCase()
     const targets = new Set((data?.targets ?? []).map(row => row.symbol))
@@ -202,11 +216,16 @@ export default function MomentumPage() {
   async function post(body: Record<string, unknown>, ok: string) {
     setBusy(true)
     try {
-      const result = await fetchJson("/api/momentum", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      const result = await fetchJson<{ orders?: Report["orders"]; preview?: boolean }>(
+        "/api/momentum",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      )
+      if (body.execute === false && Array.isArray(result.orders)) setPreviewOrders(result.orders)
+      else setPreviewOrders(null)
       await mutate()
       showMessage(ok, "success")
       return result
@@ -220,6 +239,44 @@ export default function MomentumPage() {
 
   function patch(partial: Partial<MomentumConfig>) {
     setDraft({ ...config, ...partial })
+  }
+
+  function rememberLocks(locks: Report["locks"]) {
+    locksRef.current = locks
+    void mutate(current => (current ? { ...current, locks } : current), { revalidate: false })
+  }
+
+  function scheduleRank() {
+    if (rankTimer.current) clearTimeout(rankTimer.current)
+    rankTimer.current = setTimeout(() => {
+      void lockQueue.current.then(() => mutate())
+    }, 1500)
+  }
+
+  function changeLock(symbol: string, next: Report["locks"][number] | null) {
+    const current = locksRef.current
+    rememberLocks(
+      next
+        ? [...current.filter(row => row.symbol !== symbol), next]
+        : current.filter(row => row.symbol !== symbol)
+    )
+    lockQueue.current = lockQueue.current
+      .then(async () => {
+        await fetchJson("/api/momentum", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            next
+              ? { action: "lock", symbol, mode: next.mode, weightPct: next.weightPct }
+              : { action: "lock", symbol, clear: true }
+          ),
+        })
+      })
+      .catch(error => {
+        showMessage(error instanceof Error ? error.message : "Could not save the lock", "error")
+        void mutate()
+      })
+    scheduleRank()
   }
 
   return (
@@ -329,11 +386,47 @@ export default function MomentumPage() {
               <MenuItem value="RETURN_12M">12-month return</MenuItem>
               <MenuItem value="RETURN_12_1">12-month return, skip last month</MenuItem>
             </TextField>
+            <TextField
+              select
+              fullWidth
+              size="small"
+              label="Weights"
+              value={config.weighting}
+              helperText={
+                config.weighting === "drift"
+                  ? "Held shares stay put. A name is sold when it leaves the book, or when it grows past the trim level. New rupees buy only names you do not hold yet."
+                  : "Each rebalance resizes every name to the same slice of capital."
+              }
+              onChange={e => patch({ weighting: e.target.value as MomentumConfig["weighting"] })}
+            >
+              <MenuItem value="equal">Equal weight each rebalance</MenuItem>
+              <MenuItem value="drift">Let winners run</MenuItem>
+            </TextField>
             <Num
               label="Max weight %"
               value={config.maxWeightPct}
+              helperText={
+                config.weighting === "drift"
+                  ? "Caps a new name. It does not trim a share you already hold."
+                  : undefined
+              }
               onChange={maxWeightPct => patch({ maxWeightPct })}
             />
+            {config.weighting === "drift" ? (
+              <>
+                <Num
+                  label="Trim above % of book"
+                  value={config.trimAbovePct}
+                  onChange={trimAbovePct => patch({ trimAbovePct })}
+                />
+                <Num
+                  label="Trim down to %"
+                  value={config.trimToPct}
+                  helperText="New capital buys a new name up to one equal slice. It is not added to shares you already hold. Leftover rupees wait for the next new name."
+                  onChange={trimToPct => patch({ trimToPct })}
+                />
+              </>
+            ) : null}
             <Num
               label="Capital INR"
               value={config.capitalInr}
@@ -444,6 +537,65 @@ export default function MomentumPage() {
             >
               Send rebalance
             </Button>
+            {config.weighting === "drift" ? (
+              <>
+                <Button
+                  disabled={busy || data?.config.weighting !== "drift"}
+                  onClick={() =>
+                    void post({ action: "deploy", execute: false }, "Deploy preview refreshed")
+                  }
+                >
+                  Preview deploy
+                </Button>
+                <Button
+                  color="warning"
+                  disabled={
+                    busy || data?.config.weighting !== "drift" || config.execution === "report"
+                  }
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Buy an equal share of the spare cash for each name in today's book?"
+                      )
+                    ) {
+                      void post({ action: "deploy", execute: true }, "Deploy sent")
+                    }
+                  }}
+                >
+                  Deploy spare cash
+                </Button>
+                <Num
+                  label="Trim book %"
+                  value={trimPct}
+                  onChange={value => setTrimPct(Math.min(99, Math.max(1, Math.round(value))))}
+                />
+                <Button
+                  disabled={busy || data?.config.weighting !== "drift"}
+                  onClick={() =>
+                    void post({ action: "trim", execute: false, trimPct }, "Trim preview refreshed")
+                  }
+                >
+                  Preview trim
+                </Button>
+                <Button
+                  color="warning"
+                  disabled={
+                    busy || data?.config.weighting !== "drift" || config.execution === "report"
+                  }
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Sell ${trimPct}% of each open momentum position and reduce Capital INR by the same percent?`
+                      )
+                    ) {
+                      void post({ action: "trim", execute: true, trimPct }, "Trim sent")
+                    }
+                  }}
+                >
+                  Trim book
+                </Button>
+              </>
+            ) : null}
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
             Pull history now saves these switches, then starts the download and returns at once. You
@@ -475,13 +627,13 @@ export default function MomentumPage() {
           <Typography variant="subtitle2">Planned orders</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             Last pull {data?.lastDataPullOn ?? "never"}. Rebalance day {data?.due ? "yes" : "no"}.{" "}
-            {(data?.orders ?? []).length} orders. A sell is the open quantity. A buy is
-            floor(capital × weight / last completed close). Capital 0 lists no buys.
+            {(previewOrders ?? data?.orders ?? []).length} orders. A sell is the open quantity. A
+            buy is floor(capital × weight / last completed close). Capital 0 lists no buys.
           </Typography>
-          {(data?.orders ?? []).length === 0 ? (
+          {(previewOrders ?? data?.orders ?? []).length === 0 ? (
             <Typography variant="body2">No buy or sell in the current diff.</Typography>
           ) : (
-            (data?.orders ?? []).map(order => (
+            (previewOrders ?? data?.orders ?? []).map(order => (
               <Typography key={`${order.side}-${order.symbol}`} variant="body2">
                 {order.side} {order.symbol} {order.quantity} — {order.reason}
               </Typography>
@@ -573,46 +725,38 @@ export default function MomentumPage() {
                       {target ? `${target.weightPct.toFixed(1)}% · ${target.targetQty}` : "—"}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          void post(
-                            {
-                              action: "lock",
-                              symbol: row.symbol,
-                              mode: "HOLD_WEIGHT",
-                              weightPct: target?.weightPct ?? config.maxWeightPct,
-                            },
-                            `${row.symbol} weight held`
-                          )
-                        }
-                      >
-                        Hold
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          void post(
-                            { action: "lock", symbol: row.symbol, mode: "EXCLUDE", weightPct: 0 },
-                            `${row.symbol} excluded`
-                          )
-                        }
-                      >
-                        Exclude
-                      </Button>
                       {lock ? (
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            void post(
-                              { action: "lock", symbol: row.symbol, clear: true },
-                              "Lock cleared"
-                            )
-                          }
-                        >
-                          {lock.mode}
+                        <Button size="small" onClick={() => changeLock(row.symbol, null)}>
+                          {lock.mode === "EXCLUDE" ? "Clear exclude" : "Clear hold"}
                         </Button>
-                      ) : null}
+                      ) : (
+                        <>
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              changeLock(row.symbol, {
+                                symbol: row.symbol,
+                                mode: "HOLD_WEIGHT",
+                                weightPct: target?.weightPct ?? config.maxWeightPct,
+                              })
+                            }
+                          >
+                            Hold
+                          </Button>
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              changeLock(row.symbol, {
+                                symbol: row.symbol,
+                                mode: "EXCLUDE",
+                                weightPct: 0,
+                              })
+                            }
+                          >
+                            Exclude
+                          </Button>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 )

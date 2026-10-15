@@ -121,6 +121,140 @@ describe("momentum rank and rebalance", () => {
     expect(plan.orders.find(order => order.symbol === "AAA")).toMatchObject({ side: "SELL", quantity: 15 })
   })
 
+  it("lets a winner stay and trims only a name past the book cap", () => {
+    const drift = {
+      ...config,
+      weighting: "drift" as const,
+      capitalInr: 0,
+      trimAbovePct: 60,
+      trimToPct: 15,
+      holdingsCount: 2,
+    }
+    const plan = buildMomentumPlan({
+      config: drift,
+      holdings: [
+        { symbol: "AAA", quantity: 10 },
+        { symbol: "BBB", quantity: 90 },
+      ],
+      locks: [],
+      symbols: [passing("AAA", 3, 100), passing("BBB", 2, 100)],
+    })
+    expect(plan.orders.find(order => order.symbol === "AAA")).toBeUndefined()
+    expect(plan.targets.find(row => row.symbol === "AAA")?.targetQty).toBe(10)
+    expect(plan.orders.find(order => order.symbol === "BBB")).toMatchObject({
+      side: "SELL",
+      quantity: 75,
+      reason: "above the portfolio cap",
+    })
+  })
+
+  it("spends new capital on a name not yet held and does not add to a share already held", () => {
+    const plan = buildMomentumPlan({
+      config: {
+        ...config,
+        weighting: "drift",
+        holdingsCount: 2,
+        entryRankMax: 2,
+        worstRankHeld: 3,
+        capitalInr: 100_000,
+        maxWeightPct: 50,
+        trimAbovePct: 20,
+        trimToPct: 15,
+      },
+      holdings: [{ symbol: "AAA", quantity: 10 }],
+      locks: [],
+      symbols: [passing("AAA", 3, 100), passing("BBB", 2, 100)],
+    })
+    expect(plan.orders.find(order => order.symbol === "AAA")).toBeUndefined()
+    expect(plan.orders.find(order => order.symbol === "BBB")).toMatchObject({
+      side: "BUY",
+      quantity: 500,
+      reason: "new holding",
+    })
+  })
+
+  it("leaves extra capital unused when the book is already full", () => {
+    const plan = buildMomentumPlan({
+      config: {
+        ...config,
+        weighting: "drift",
+        holdingsCount: 2,
+        entryRankMax: 2,
+        worstRankHeld: 3,
+        capitalInr: 100_000,
+        trimAbovePct: 60,
+        trimToPct: 15,
+      },
+      holdings: [
+        { symbol: "AAA", quantity: 10 },
+        { symbol: "BBB", quantity: 10 },
+      ],
+      locks: [],
+      symbols: [passing("AAA", 3, 100), passing("BBB", 2, 100), passing("CCC", 1, 100)],
+    })
+    expect(plan.targets.map(row => row.symbol).sort()).toEqual(["AAA", "BBB"])
+    expect(plan.orders).toEqual([])
+  })
+
+  it("deploys spare cash onto names already held without selling them back to equal weight", () => {
+    const plan = buildMomentumPlan({
+      config: {
+        ...config,
+        weighting: "drift",
+        holdingsCount: 2,
+        entryRankMax: 2,
+        worstRankHeld: 3,
+        capitalInr: 100_000,
+        maxWeightPct: 50,
+        trimAbovePct: 20,
+        trimToPct: 15,
+      },
+      holdings: [
+        { symbol: "AAA", quantity: 10 },
+        { symbol: "BBB", quantity: 10 },
+      ],
+      locks: [],
+      symbols: [passing("AAA", 3, 100), passing("BBB", 2, 100)],
+      deployCash: true,
+    })
+    const buys = plan.orders.filter(order => order.side === "BUY")
+    expect(buys.map(order => order.symbol).sort()).toEqual(["AAA", "BBB"])
+    expect(buys.every(order => order.reason === "deploy cash" && order.quantity === 140)).toBe(true)
+    expect(plan.orders.find(order => order.side === "SELL")).toBeUndefined()
+  })
+
+  it("trims the same fraction of each position and keeps a 20 percent name near 20 percent", () => {
+    const plan = buildMomentumPlan({
+      config: { ...config, weighting: "drift", capitalInr: 0, trimAbovePct: 80, trimToPct: 15 },
+      holdings: [
+        { symbol: "AAA", quantity: 20 },
+        { symbol: "BBB", quantity: 80 },
+      ],
+      locks: [],
+      symbols: [passing("AAA", 3, 100), passing("BBB", 2, 100)],
+      trimPct: 10,
+    })
+    expect(plan.orders.find(order => order.symbol === "AAA")).toMatchObject({
+      side: "SELL",
+      quantity: 2,
+      reason: "trim the book",
+    })
+    expect(plan.orders.find(order => order.symbol === "BBB")).toMatchObject({
+      side: "SELL",
+      quantity: 8,
+      reason: "trim the book",
+    })
+    const leftAaa = 18 * 100
+    const leftBbb = 72 * 100
+    expect(leftAaa / (leftAaa + leftBbb)).toBeCloseTo(0.2)
+  })
+
+  it("keeps trim-down below the trim trigger", () => {
+    const next = normalizeMomentumConfig({ trimAbovePct: 15, trimToPct: 20 })
+    expect(next.trimToPct).toBeLessThan(next.trimAbovePct)
+    expect(next.weighting).toBe("equal")
+  })
+
   it("sizes from capital and never buys when capital is zero", () => {
     const plan = buildMomentumPlan({
       config: { ...config, capitalInr: 0 },

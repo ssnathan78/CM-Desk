@@ -87,7 +87,7 @@ reconciliation_events / audit_events
 | Decision | Job + strategy | none (internal) |
 | Order | Account + optional job/decision | Kite `order_id` |
 | Fill | Order | Kite `trade_id` or deterministic fingerprint |
-| Position | Account + instrument + product + **job** | none; reconciled to Kite net |
+| Position | Account + instrument + product + **job** + **strategy** | none; reconciled to Kite net |
 | Trade | Same key as position, one open at a time | none |
 | Snapshot / session | Account + IST date | none |
 
@@ -96,11 +96,19 @@ reconciliation_events / audit_events
 Jobs are the attribution unit. Every order is tagged (`order_tag` /
 Chase `"chase"`). Positions are keyed
 
-`(account, exchange, tradingsymbol, product, job_id)`
+`(account, exchange, tradingsymbol, product, job_id, strategy)`
 
-so two jobs on the same strike never share a position row. Broker
+so two jobs, or two strategies, on the same contract never share a position row. Broker
 reconciliation **sums** internal quantities per
 `(exchange, tradingsymbol, product)` and compares that to Kite `net`.
+
+Desk → Attribute broker quantity does that sum per strategy. The difference is
+`broker quantity − other strategies − this strategy`. A positive difference is a
+buy made outside the desk. A negative difference is a sale made outside the desk.
+Accept writes only the chosen strategy, for a quantity you can shrink but not
+increase past the difference. Today's Kite trade is copied when it exists. Otherwise
+the operator enters the date, quantity, and price. The next strategy's compare
+subtracts shares already accepted.
 
 Unattributed broker activity (manual Kite order, unknown tag) is stored with
 `job_id` null and `provenance = RECONCILED`.

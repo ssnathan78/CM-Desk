@@ -1,6 +1,8 @@
 export type RankingMethod = "SHARPE_12M" | "RETURN_12M" | "RETURN_12_1"
 export type RebalanceFrequency = "monthly" | "weekly" | "adhoc"
 export type MomentumExecution = "report" | "manual" | "auto"
+/** equal pulls every name back to one slice. drift leaves shares alone until the name leaves the book. */
+export type WeightingMode = "equal" | "drift"
 export type LockMode = "HOLD_WEIGHT" | "EXCLUDE"
 export type FilterMode = "off" | "strict"
 
@@ -36,8 +38,13 @@ export type MomentumConfig = {
   /** 1 = Monday … 5 = Friday. Used when rebalance is weekly. */
   weeklyDay: number
   ranking: RankingMethod
+  /** equal resizes every name to one slice. drift leaves held shares alone. */
+  weighting: WeightingMode
   maxWeightPct: number
   minWeightPct: number
+  /** In drift mode, a name at or above this share of the book is sold down to trimToPct. */
+  trimAbovePct: number
+  trimToPct: number
   capitalInr: number
   /** Buy limit sits this percent above the last price. Sell limit sits this percent below it. */
   limitBufferPercent: number
@@ -71,8 +78,11 @@ export const DEFAULT_MOMENTUM_CONFIG: MomentumConfig = {
   rebalance: "monthly",
   weeklyDay: 1,
   ranking: "SHARPE_12M",
+  weighting: "equal",
   maxWeightPct: 10,
   minWeightPct: 2,
+  trimAbovePct: 20,
+  trimToPct: 15,
   capitalInr: 0,
   limitBufferPercent: 0.15,
   exitWhenFilterBreaks: true,
@@ -94,6 +104,8 @@ export function normalizeMomentumConfig(raw: unknown): MomentumConfig {
   const filters =
     row.filters && typeof row.filters === "object" ? row.filters : DEFAULT_MOMENTUM_FILTERS
   const holdingsCount = Math.round(num(row.holdingsCount, 30, 1, 100))
+  const trimAbovePct = num(row.trimAbovePct, 20, 1, 100)
+  const trimToPct = Math.min(num(row.trimToPct, 15, 0.1, 99), Math.max(0.1, trimAbovePct - 0.1))
   return {
     active: row.active === true,
     dataRefresh: row.dataRefresh === true,
@@ -108,8 +120,11 @@ export function normalizeMomentumConfig(raw: unknown): MomentumConfig {
       ["SHARPE_12M", "RETURN_12M", "RETURN_12_1"] as const,
       "SHARPE_12M"
     ),
+    weighting: enumOf(row.weighting, ["equal", "drift"] as const, "equal"),
     maxWeightPct: num(row.maxWeightPct, 10, 0.1, 100),
     minWeightPct: num(row.minWeightPct, 2, 0, 100),
+    trimAbovePct,
+    trimToPct,
     capitalInr: num(row.capitalInr, 0, 0, 1_000_000_000),
     limitBufferPercent: num(row.limitBufferPercent, 0.15, 0, 5),
     exitWhenFilterBreaks: row.exitWhenFilterBreaks !== false,

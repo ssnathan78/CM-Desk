@@ -289,12 +289,101 @@ function limitPrice(
   return Math.round(raw * 20) / 20
 }
 
+function positivePrice(price: number | null | undefined): number | null {
+  return price != null && price > 0 ? price : null
+}
+
+/** Leave held shares in place. Sell a name that leaves the book, trim a name that has grown past the cap, and spend new rupees only on names not yet held. */
+function driftTargets(args: {
+  targetSymbols: string[]
+  entrants: string[]
+  held: Map<string, number>
+  bySymbol: Map<string, { rank: number | null; price: number | null }>
+  locks: Map<string, WeightLock>
+  config: MomentumConfig
+  deployCash?: boolean
+}): TargetLine[] {
+  const priceOf = (symbol: string) => positivePrice(args.bySymbol.get(symbol)?.price)
+  let portfolio = 0
+  for (const [symbol, qty] of args.held) {
+    const price = priceOf(symbol)
+    if (price != null && qty > 0) portfolio += qty * price
+  }
+  const above = args.config.trimAbovePct / 100
+  const downTo = args.config.trimToPct / 100
+  const base = Math.max(portfolio, args.config.capitalInr)
+  const lines = new Map<string, TargetLine>()
+  for (const symbol of args.targetSymbols) {
+    const heldQty = args.held.get(symbol) ?? 0
+    const price = priceOf(symbol)
+    let targetQty = heldQty
+    if (heldQty > 0 && price != null && base > 0 && (heldQty * price) / base >= above - 1e-9) {
+      targetQty = Math.min(heldQty, Math.floor((downTo * base) / price))
+    }
+    const lock = args.locks.get(symbol)
+    lines.set(symbol, {
+      symbol,
+      rank: args.bySymbol.get(symbol)?.rank ?? null,
+      weightPct: 0,
+      targetQty,
+      heldQty,
+      locked: lock?.mode === "HOLD_WEIGHT" && heldQty > 0,
+    })
+  }
+
+  let proceeds = 0
+  for (const [symbol, qty] of args.held) {
+    const price = priceOf(symbol)
+    if (price == null || qty <= 0) continue
+    const keep = lines.get(symbol)?.targetQty ?? 0
+    if (qty > keep) proceeds += (qty - keep) * price
+  }
+  let cash = Math.max(0, args.config.capitalInr - portfolio) + proceeds
+  const capPct = Math.min(args.config.maxWeightPct, args.config.trimToPct) / 100
+  if (args.deployCash && cash > 0 && args.config.capitalInr > 0 && args.targetSymbols.length > 0) {
+    const perName = cash / args.targetSymbols.length
+    for (const symbol of args.targetSymbols) {
+      const line = lines.get(symbol)
+      const price = priceOf(symbol)
+      if (!line || price == null) continue
+      const ceiling = capPct * base
+      const room = Math.max(0, ceiling - line.targetQty * price)
+      const qty = Math.floor(Math.min(perName, room, cash) / price)
+      if (qty <= 0) continue
+      line.targetQty += qty
+      cash -= qty * price
+    }
+  } else {
+    const slot = Math.min(100 / args.config.holdingsCount, args.config.maxWeightPct) / 100
+    for (const symbol of args.entrants) {
+      const line = lines.get(symbol)
+      if (!line || line.heldQty > 0 || cash <= 0 || args.config.capitalInr <= 0) continue
+      const price = priceOf(symbol)
+      if (price == null) continue
+      const qty = Math.floor(Math.min(args.config.capitalInr * slot, cash) / price)
+      if (qty <= 0) continue
+      line.targetQty = qty
+      cash -= qty * price
+    }
+  }
+
+  for (const line of lines.values()) {
+    const price = priceOf(line.symbol)
+    line.weightPct = base > 0 && price != null ? (line.targetQty * price * 100) / base : 0
+  }
+  return [...lines.values()]
+}
+
 export function buildMomentumPlan(args: {
   symbols: MomentumSymbol[]
   config: MomentumConfig
   holdings: HoldingQty[]
   locks: WeightLock[]
   asOf?: string
+  /** Split spare cash equally across today's book. Buys only, on top of the drift rules. */
+  deployCash?: boolean
+  /** Sell this percent of each open quantity. Ignores equal-weight and the concentration cap. */
+  trimPct?: number
 }): MomentumPlan {
   const ranked = rankSymbols(args.symbols, args.config, args.asOf)
   const bySymbol = new Map(ranked.map(row => [row.symbol, row]))
@@ -327,6 +416,60 @@ export function buildMomentumPlan(args: {
     0,
     args.config.holdingsCount
   )
+
+  const trimPct = args.trimPct ?? 0
+  if (trimPct > 0) {
+    const targets: TargetLine[] = [...held.entries()].map(([symbol, heldQty]) => {
+      const sell = Math.floor((heldQty * trimPct) / 100)
+      return {
+        symbol,
+        rank: bySymbol.get(symbol)?.rank ?? null,
+        weightPct: 0,
+        targetQty: heldQty - sell,
+        heldQty,
+        locked: false,
+      }
+    })
+    const targetQty = new Map(targets.map(row => [row.symbol, row.targetQty]))
+    return {
+      ranked,
+      targets,
+      orders: ordersFromTargets({
+        held,
+        targetQty,
+        bySymbol,
+        locks,
+        config: args.config,
+        reason: "trim the book",
+      }),
+    }
+  }
+
+  if (args.config.weighting === "drift") {
+    const targets = driftTargets({
+      targetSymbols,
+      entrants: entrants.map(row => row.symbol),
+      held,
+      bySymbol,
+      locks,
+      config: args.config,
+      deployCash: args.deployCash === true,
+    })
+    const targetQty = new Map(targets.map(row => [row.symbol, row.targetQty]))
+    return {
+      ranked,
+      targets,
+      orders: ordersFromTargets({
+        held,
+        targetQty,
+        bySymbol,
+        locks,
+        config: args.config,
+        allowTopUp: args.deployCash === true,
+        buyReason: args.deployCash ? "deploy cash" : undefined,
+      }),
+    }
+  }
 
   const slot = 100 / args.config.holdingsCount
   const draft = targetSymbols.map(symbol => {
@@ -363,12 +506,29 @@ export function buildMomentumPlan(args: {
   })
   const targetQty = new Map(targets.map(row => [row.symbol, row.targetQty]))
 
+  return {
+    ranked,
+    targets,
+    orders: ordersFromTargets({ held, targetQty, bySymbol, locks, config: args.config }),
+  }
+}
+
+function ordersFromTargets(args: {
+  held: Map<string, number>
+  targetQty: Map<string, number>
+  bySymbol: Map<string, { price: number | null }>
+  locks: Map<string, WeightLock>
+  config: MomentumConfig
+  reason?: string
+  buyReason?: string
+  allowTopUp?: boolean
+}): PlannedOrder[] {
   const orders: PlannedOrder[] = []
-  const symbols = new Set<string>([...held.keys(), ...targetQty.keys()])
+  const symbols = new Set<string>([...args.held.keys(), ...args.targetQty.keys()])
   for (const symbol of symbols) {
-    const have = held.get(symbol) ?? 0
-    const want = targetQty.get(symbol) ?? 0
-    const price = bySymbol.get(symbol)?.price ?? null
+    const have = args.held.get(symbol) ?? 0
+    const want = args.targetQty.get(symbol) ?? 0
+    const price = args.bySymbol.get(symbol)?.price ?? null
     if (have > want) {
       orders.push({
         symbol,
@@ -376,10 +536,17 @@ export function buildMomentumPlan(args: {
         quantity: have - want,
         role: "EXIT",
         limitPrice: limitPrice("SELL", price, args.config.limitBufferPercent),
-        reason: want === 0 ? "leave the book" : "weight above target",
+        reason:
+          args.reason ??
+          (want === 0
+            ? "leave the book"
+            : args.config.weighting === "drift"
+              ? "above the portfolio cap"
+              : "weight above target"),
       })
     } else if (want > have) {
-      const lock = locks.get(symbol)
+      if (args.config.weighting === "drift" && have > 0 && !args.allowTopUp) continue
+      const lock = args.locks.get(symbol)
       if (lock?.mode === "HOLD_WEIGHT") continue
       orders.push({
         symbol,
@@ -387,16 +554,11 @@ export function buildMomentumPlan(args: {
         quantity: want - have,
         role: "ENTRY",
         limitPrice: limitPrice("BUY", price, args.config.limitBufferPercent),
-        reason: have === 0 ? "new holding" : "weight below target",
+        reason: args.buyReason ?? (have === 0 ? "new holding" : "weight below target"),
       })
     }
   }
-
-  return {
-    ranked,
-    targets,
-    orders: orders.filter(order => order.quantity > 0),
-  }
+  return orders.filter(order => order.quantity > 0)
 }
 
 export function executableOrders(
