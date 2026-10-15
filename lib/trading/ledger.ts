@@ -801,7 +801,8 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
       })
       return false
     }
-    let pos = matched.action === "use" ? matched.row : undefined
+    let pos: Record<string, any> | undefined =
+      matched.action === "use" ? (matched.row as Record<string, any>) : undefined
     if (!pos) {
       const inserted = await client.query(
         `INSERT INTO positions (
@@ -820,6 +821,10 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
         ]
       )
       pos = inserted.rows[0]
+    }
+    if (!pos) {
+      await client.query("ROLLBACK")
+      return false
     }
 
     const before = {
