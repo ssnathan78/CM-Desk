@@ -36,10 +36,15 @@ export function splitChaseLedgerQty(
     tradingsymbol?: string | null
     quantity?: number | null
     provenance?: string | null
+    strategy?: string | null
   }>,
   tradingsymbol?: string | null
 ): { paperLedgerQty: number; liveLedgerQty: number } {
-  return splitLedgerQty(positions, { tradingsymbol })
+  // Another strategy on the same symbol must not change Chase size. An untagged row still counts.
+  return splitLedgerQty(
+    positions.filter(pos => !pos.strategy || pos.strategy === "CHASE"),
+    { tradingsymbol }
+  )
 }
 
 /** Active Chase book: paper/mock ledger vs Kite/live ledger. Never mix the two. */

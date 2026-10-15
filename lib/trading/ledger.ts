@@ -29,6 +29,7 @@ import {
   shouldRecordOrderStatusEvent,
   storedOrderPurpose,
 } from "./orderPurpose"
+import { matchPositionForFill, strategyForOrder } from "./positionMatch"
 import { assertOrderTransition } from "./stateMachine"
 import {
   type AuditEventType,
@@ -224,8 +225,9 @@ export async function recordOrderIntent(input: {
   metadata?: Record<string, unknown>
 }): Promise<{ id: string; created: boolean } | null> {
   await ensureDefaultAccount()
+  const hinted = strategyForOrder({ strategy: input.strategy, orderTag: input.orderTag })
   const job = input.jobId
-    ? { id: input.jobId, strategy: input.strategy ?? null }
+    ? { id: input.jobId, strategy: hinted }
     : await lookupJobByTag(input.orderTag)
   const purpose =
     storedOrderPurpose(input.purpose ?? inferPurpose({ orderType: input.orderType })) ?? "OTHER"
@@ -261,7 +263,7 @@ export async function recordOrderIntent(input: {
         accountId: DEFAULT_ACCOUNT_ID,
         jobId: job?.id ?? input.jobId ?? null,
         decisionId: input.decisionId ?? null,
-        strategy: job?.strategy ?? input.strategy ?? null,
+        strategy: job?.strategy ?? hinted,
         orderTag: input.orderTag ?? null,
         purpose,
         side: input.side,
@@ -786,11 +788,20 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
       `SELECT * FROM positions
        WHERE account_id = $1 AND exchange = $2 AND tradingsymbol = $3
          AND product = $4 AND COALESCE(job_id, '') = COALESCE($5, '')
-         AND COALESCE(strategy, '') = COALESCE($6, '')
        FOR UPDATE`,
-      [fill.account_id, fill.exchange, fill.tradingsymbol, fill.product || "", jobId, fill.strategy]
+      [fill.account_id, fill.exchange, fill.tradingsymbol, fill.product || "", jobId]
     )
-    let pos = posRes.rows[0]
+    const matched = matchPositionForFill(posRes.rows, fill.strategy as string | null)
+    if (matched.action === "refuse") {
+      await client.query("ROLLBACK")
+      logger.error("[ledger.applyFillById] refused fill", {
+        fillId,
+        tradingsymbol: fill.tradingsymbol,
+        reason: matched.reason,
+      })
+      return false
+    }
+    let pos = matched.action === "use" ? matched.row : undefined
     if (!pos) {
       const inserted = await client.query(
         `INSERT INTO positions (

@@ -88,6 +88,23 @@ describe("chaseFill", () => {
     ).toEqual({ paperLedgerQty: -100, liveLedgerQty: 65 })
   })
 
+  it("ignores another strategy on the same Chase symbol", () => {
+    expect(
+      splitChaseLedgerQty(
+        [
+          { tradingsymbol: "MIDCPNIFTY26OCTFUT", quantity: 240, provenance: "LIVE", strategy: "CHASE" },
+          {
+            tradingsymbol: "MIDCPNIFTY26OCTFUT",
+            quantity: 10,
+            provenance: "LIVE",
+            strategy: "MOMENTUM",
+          },
+        ],
+        "MIDCPNIFTY26OCTFUT"
+      )
+    ).toEqual({ paperLedgerQty: 0, liveLedgerQty: 240 })
+  })
+
   it("does not treat leftover paper as blocking a live Chase entry", () => {
     const book = chaseBookFromSources({
       paperBook: false,

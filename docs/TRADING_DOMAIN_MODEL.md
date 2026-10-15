@@ -98,7 +98,10 @@ Chase `"chase"`). Positions are keyed
 
 `(account, exchange, tradingsymbol, product, job_id, strategy)`
 
-so two jobs, or two strategies, on the same contract never share a position row. Broker
+so two jobs, or two strategies, on the same contract never share a position row. A fill
+whose strategy is blank still updates the only row for that contract and job, and a
+Chase fill still claims a single untagged row. It does not open a second book beside
+the live position. A named strategy never updates a different named strategy. Broker
 reconciliation **sums** internal quantities per
 `(exchange, tradingsymbol, product)` and compares that to Kite `net`.
 
