@@ -17,7 +17,9 @@ import type { AvailablePlansConfig } from "../types/plans"
 
 type TemplateRow = AvailablePlansConfig & { id: string }
 
-const blankState = (strategy: STRATEGIES): AvailablePlansConfig =>
+const blankState = (
+  strategy: typeof STRATEGIES.ATM_STRADDLE | typeof STRATEGIES.ATM_STRANGLE
+): AvailablePlansConfig =>
   hydratePlanConfig({
     ...STRATEGIES_DETAILS[strategy].defaultFormState,
     ...getSchedulingStateProps(strategy),
@@ -70,7 +72,9 @@ export default function TemplatesPage() {
     [templates, typeQuery]
   )
 
-  async function startNew(strategy: STRATEGIES) {
+  async function startNew(
+    strategy: typeof STRATEGIES.ATM_STRADDLE | typeof STRATEGIES.ATM_STRANGLE
+  ) {
     setError(null)
     setEditingId(null)
     try {

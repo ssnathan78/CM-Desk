@@ -19,7 +19,7 @@ export function groupTodayBooks(input: {
   closed: { strategy: string | null; netPnl: string | null }[]
   open: { strategy: string | null; unrealized: string | null }[]
 }): TodayGroupRow[] {
-  const known = new Set(TODAY_GROUPS.flatMap(group => group.strategies))
+  const known = new Set<string>(TODAY_GROUPS.flatMap(group => group.strategies))
   const rows: TodayGroupRow[] = TODAY_GROUPS.map(group => {
     const strategies = new Set<string>(group.strategies)
     return {

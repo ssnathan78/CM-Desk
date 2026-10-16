@@ -4,12 +4,13 @@ import { STRATEGIES, STRATEGIES_DETAILS } from "./constants"
 import { mapPlanFromDb, mapPlanToDb, planApiErrorMessage } from "./planMapper"
 import { coerceScheduleableExitStrategy } from "./strategyValidation"
 
-export function hydratePlanConfig(config: Record<string, unknown>): AvailablePlansConfig {
+export function hydratePlanConfig(config: object): AvailablePlansConfig {
+  const raw = config as Record<string, unknown>
   const defaults =
-    config?.strategy && STRATEGIES_DETAILS[config.strategy as STRATEGIES]?.defaultFormState
-      ? STRATEGIES_DETAILS[config.strategy as STRATEGIES].defaultFormState
+    raw.strategy && STRATEGIES_DETAILS[raw.strategy as STRATEGIES]?.defaultFormState
+      ? STRATEGIES_DETAILS[raw.strategy as STRATEGIES].defaultFormState
       : {}
-  const hydrated = { ...defaults, ...config } as AvailablePlansConfig
+  const hydrated = { ...defaults, ...raw } as AvailablePlansConfig
   if ("exitStrategy" in hydrated) {
     hydrated.exitStrategy = coerceScheduleableExitStrategy(
       (hydrated as { exitStrategy?: string }).exitStrategy

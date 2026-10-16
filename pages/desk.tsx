@@ -591,7 +591,7 @@ export default function DeskPage() {
               ] as const
             ).map(([label, value]) => (
               <Box key={label} sx={{ minWidth: 0 }}>
-                <Typography variant="caption" color="text.secondary" display="block">
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                   {label}
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
