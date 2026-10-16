@@ -40,6 +40,7 @@ const JOB_EXECUTION_INSERT_COLUMNS = new Set([
   "autoSquareOffDeletePendingOrders",
   "dayOfWeek",
   "planRef",
+  "templateId",
 ])
 
 const TIMESTAMP_COLUMNS = new Set(["squareOffTime", "expiresAt", "runAt", "autoSquareOffTime"])

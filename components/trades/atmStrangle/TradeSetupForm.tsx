@@ -163,7 +163,8 @@ const TradeSetupForm = ({
                 error={instrumentError}
                 onChange={next => {
                   setInstrumentError(null)
-                  onChange({ instruments: next })
+                  const instrument = (Object.keys(next) as INSTRUMENTS[]).find(key => next[key])
+                  onChange({ instruments: next, ...(instrument ? { instrument } : {}) })
                 }}
               />
             </Grid>

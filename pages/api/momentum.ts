@@ -1,108 +1,43 @@
 import { sendApiError } from "../../lib/apiErrors"
 import logger from "../../lib/logger"
-import {
-  firstTradingSessionOfMonth,
-  isoWeekdayIst,
-  istDate,
-  previousIstDate,
-} from "../../lib/momentum/calendar"
-import { buildMomentumPlan, executableOrders } from "../../lib/momentum/engine"
+import { istDate } from "../../lib/momentum/calendar"
+import { executableOrders } from "../../lib/momentum/engine"
 import { submitCashOrders } from "../../lib/momentum/execute"
-import { cashPullProgress, startCashHistoryPull } from "../../lib/momentum/history"
-import { rankedSymbols } from "../../lib/momentum/rankStored"
+import { cashPullProgress, progressForPage, startCashHistoryPull } from "../../lib/momentum/history"
+import {
+  acceptConstituentChange,
+  dismissConstituentChange,
+  listMomentumConstituents,
+  refreshIndexMembership,
+  settlePendingConstituents,
+} from "../../lib/momentum/membershipRefresh"
 import {
   getMomentumState,
-  holdingsFor,
-  listLocks,
-  listUniverse,
   markMomentumRebalance,
   replaceUniverse,
   saveLock,
   saveMomentumConfig,
 } from "../../lib/momentum/store"
-import { normalizeMomentumConfig, rebalanceDue } from "../../lib/momentum/types"
+import { getMomentumReport } from "../../lib/momentum/storedReport"
+import { normalizeMomentumConfig } from "../../lib/momentum/types"
 import { normalizeNseCashSymbol } from "../../lib/nseCashSymbol"
 import withSession from "../../lib/session"
-
-let rankGeneration = 0
-let reportInflight: { generation: number; promise: ReturnType<typeof computeReport> } | null = null
-
-async function report(options?: { deployCash?: boolean; trimPct?: number }) {
-  if (options?.deployCash || (options?.trimPct ?? 0) > 0) return computeReport(options)
-  const generation = rankGeneration
-  if (reportInflight?.generation === generation) return reportInflight.promise
-  const promise = computeReport().finally(() => {
-    if (reportInflight?.promise === promise) reportInflight = null
-  })
-  reportInflight = { generation, promise }
-  return promise
-}
-
-async function computeReport(options?: { deployCash?: boolean; trimPct?: number }) {
-  const state = await getMomentumState()
-  const universe = await listUniverse()
-  if (!state.config.active) {
-    return {
-      active: false,
-      config: state.config,
-      lastDataPullOn: state.lastDataPullOn,
-      lastRebalanceOn: state.lastRebalanceOn,
-      rows: universe.map(row => ({
-        symbol: row.symbol,
-        name: row.name,
-        rank: null,
-        filterPass: false,
-        filterReasons: ["strategy is off"],
-        metrics: null,
-        price: null,
-      })),
-      targets: [],
-      orders: [],
-      locks: await listLocks(),
-    }
-  }
-  const symbols = await rankedSymbols(universe, state.config, previousIstDate(new Date()))
-  const holdings = await holdingsFor("MOMENTUM")
-  const locks = await listLocks()
-  const plan = buildMomentumPlan({
-    symbols,
-    config: state.config,
-    holdings,
-    locks,
-    asOf: previousIstDate(new Date()),
-    deployCash: options?.deployCash,
-    trimPct: options?.trimPct,
-  })
-  const names = new Map(universe.map(row => [row.symbol, row.name]))
-  return {
-    active: true,
-    config: state.config,
-    lastDataPullOn: state.lastDataPullOn,
-    lastRebalanceOn: state.lastRebalanceOn,
-    due: rebalanceDue(state.config, {
-      isoWeekday: isoWeekdayIst(new Date()),
-      firstSessionOfMonth: firstTradingSessionOfMonth(new Date()),
-    }),
-    holdings,
-    locks,
-    targets: plan.targets,
-    orders: plan.orders,
-    rows: plan.ranked.map(row => ({ ...row, name: names.get(row.symbol) ?? row.symbol })),
-  }
-}
 
 export default withSession(async (req, res) => {
   if (!req.session.user) return res.status(401).send("Unauthorized")
   try {
     if (req.method === "GET" && req.query.view === "pull") {
-      return res.json(cashPullProgress())
+      return res.json(progressForPage("momentum", cashPullProgress()))
     }
     if (req.method === "GET") {
-      return res.json(await report())
+      const report = await getMomentumReport()
+      return res.json({
+        ...report,
+        constituents: await listMomentumConstituents(),
+      })
     }
     if (req.method === "PUT") {
       const config = normalizeMomentumConfig(req.body?.config ?? req.body)
-      rankGeneration += 1
       const saved = await saveMomentumConfig(config)
       return res.json(saved)
     }
@@ -138,11 +73,47 @@ export default withSession(async (req, res) => {
         })
       }
       const token = req.session.user.session?.access_token
-      rankGeneration += 1
-      return res.json(startCashHistoryPull({ accessToken: token, force: true, scope: "momentum" }))
+      return res.json(
+        startCashHistoryPull({
+          accessToken: token,
+          force: true,
+          scope: "momentum",
+          onlyMissing: req.body?.onlyMissing === true,
+        })
+      )
+    }
+    if (req.method === "POST" && req.body?.action === "refresh-constituents") {
+      const result = await refreshIndexMembership("NIFTY_TOTAL_MARKET", { force: true })
+      return res.json({
+        ...result,
+        constituents: await listMomentumConstituents(),
+        message: result.kept
+          ? "The index site did not return a file. Your rank list was left as it is."
+          : undefined,
+      })
+    }
+    if (req.method === "POST" && req.body?.action === "accept-constituent") {
+      await acceptConstituentChange(Number(req.body.id))
+      return res.json({ constituents: await listMomentumConstituents() })
+    }
+    if (req.method === "POST" && req.body?.action === "dismiss-constituent") {
+      await dismissConstituentChange(Number(req.body.id))
+      return res.json({ constituents: await listMomentumConstituents() })
+    }
+    if (
+      req.method === "POST" &&
+      (req.body?.action === "accept-constituents" || req.body?.action === "dismiss-constituents")
+    ) {
+      const side = req.body.side === "REMOVE" ? "REMOVE" : "ADD"
+      await settlePendingConstituents(
+        "NIFTY_TOTAL_MARKET",
+        side,
+        req.body.action === "accept-constituents" ? "ACCEPTED" : "DISMISSED"
+      )
+      return res.json({ constituents: await listMomentumConstituents() })
     }
     if (req.method === "POST" && req.body?.action === "rebalance") {
-      const snapshot = await report()
+      const snapshot = await getMomentumReport({ fresh: true })
       if (!snapshot.active) return res.status(409).json({ error: "Strategy is off" })
       const execute = req.body.execute === true
       const due = "due" in snapshot ? Boolean(snapshot.due) : false
@@ -167,7 +138,9 @@ export default withSession(async (req, res) => {
       if (trimming && !(trimPct > 0 && trimPct < 100)) {
         return res.status(400).json({ error: "Trim percent must be between 0 and 100." })
       }
-      const snapshot = await report(trimming ? { trimPct } : { deployCash: true })
+      const snapshot = await getMomentumReport(
+        trimming ? { fresh: true, trimPct } : { fresh: true, deployCash: true }
+      )
       if (!snapshot.active) return res.status(409).json({ error: "Strategy is off" })
       if (snapshot.config.weighting !== "drift") {
         return res.status(409).json({ error: "Weights must be Let winners run." })

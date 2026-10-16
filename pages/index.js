@@ -4,7 +4,7 @@ import useUser from "../lib/useUser"
 
 export default function Home() {
   const router = useRouter()
-  useUser({ redirectTo: "/dashboard", redirectIfFound: true })
+  useUser({ redirectTo: "/desk", redirectIfFound: true })
   const loginError = typeof router.query.loginError === "string" ? router.query.loginError : null
 
   return (

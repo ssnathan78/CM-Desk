@@ -1,31 +1,67 @@
 import type { KiteUser } from "../types/misc"
 import { CHASE_STATUS } from "./constants"
 import { updateChaseStatus } from "./drizzleDbUtils"
+import { LIVE_FLATTEN_MARKET_CLOSED } from "./flattenNotice"
 import { flattenOpenPositions } from "./flattenOpen"
 import { abortTodaysJobExecutions } from "./jobControl"
 import logger from "./logger"
 
 export type KillDeskScope = "intraday" | "all"
 
+/** Chase books whose flatten was skipped and not covered. Those stay LONG or SHORT. */
+export function chaseBooksKeptOpen(
+  books: string[],
+  skipped: Array<{ tradingsymbol?: string; reason: string }>,
+  flattenedSymbols: string[]
+): Set<string> {
+  const covered = new Set(flattenedSymbols)
+  const ordered = [...books].sort((a, b) => b.length - a.length)
+  const kept = new Set<string>()
+  for (const row of skipped) {
+    const symbol = (row.tradingsymbol || "").toUpperCase()
+    if (!symbol || covered.has(row.tradingsymbol || "") || row.reason === "already flat") continue
+    const match = ordered.find(name => symbol.startsWith(name.toUpperCase()))
+    if (match) kept.add(match)
+  }
+  return kept
+}
+
 export async function runDeskKill(scope: KillDeskScope, user: KiteUser) {
+  let flatten = {
+    flattened: [] as Array<{ tradingsymbol: string }>,
+    skipped: [] as Array<{ tradingsymbol?: string; reason: string }>,
+  }
+  let flattenFailed = false
   try {
-    await flattenOpenPositions({
+    const result = await flattenOpenPositions({
       user,
       scope: scope === "all" ? { kind: "all" } : { kind: "intraday" },
       abortOptionJobs: false,
     })
+    flatten = result
   } catch (e) {
+    flattenFailed = true
     logger.error("[runDeskKill] flatten failed", e)
   }
 
   const aborted = await abortTodaysJobExecutions(scope)
+  const liveLeftOpen = flatten.skipped.some(row => row.reason === LIVE_FLATTEN_MARKET_CLOSED)
 
   if (scope === "all") {
     try {
       const { listChaseBooks, pauseAllChaseBooks } = await import("./chaseSettings")
       await pauseAllChaseBooks()
       const books = await listChaseBooks()
+      const names = books.map(book => book.instrument)
+      const kept = flattenFailed
+        ? new Set(names)
+        : chaseBooksKeptOpen(
+            names,
+            flatten.skipped,
+            flatten.flattened.map(row => row.tradingsymbol)
+          )
       for (const book of books) {
+        if (kept.has(book.instrument)) continue
         await updateChaseStatus({
           instrument: book.instrument,
           status: CHASE_STATUS.AWAITING_SIGNAL,
@@ -51,5 +87,6 @@ export async function runDeskKill(scope: KillDeskScope, user: KiteUser) {
     scope,
     aborted: aborted.length,
     chasePaused: scope === "all",
+    liveLeftOpen,
   }
 }

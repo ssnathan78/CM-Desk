@@ -12,6 +12,7 @@ import {
   listUniverse,
   markDailyTrendPull,
   markMomentumPull,
+  symbolsWithoutBars,
   upsertBars,
 } from "./store"
 
@@ -43,6 +44,7 @@ export type CashPullProgress = {
   total: number
   symbol: string | null
   errors: number
+  scope: CashPullScope | null
   message: string | null
   shown: boolean
 }
@@ -53,8 +55,25 @@ const idlePull: CashPullProgress = {
   total: 0,
   symbol: null,
   errors: 0,
+  scope: null,
   message: null,
   shown: false,
+}
+
+/** A page shows a bar only for its own list. The hourly pass covers both. */
+export function progressForPage(
+  page: "trend" | "momentum",
+  progress: CashPullProgress
+): CashPullProgress {
+  if (!progress.running && !progress.shown) return { ...idlePull }
+  if (!progress.scope || progress.scope === "all" || progress.scope === page) return progress
+  return { ...idlePull }
+}
+
+function pullLabel(scope: CashPullScope): string {
+  if (scope === "trend") return "Daily trend"
+  if (scope === "momentum") return "Momentum"
+  return "Momentum and daily trend"
 }
 
 let pullProgress: CashPullProgress = { ...idlePull }
@@ -118,6 +137,7 @@ export function startCashHistoryPull(args: {
   accessToken?: string | null
   force?: boolean
   scope: CashPullScope
+  onlyMissing?: boolean
 }): { started: boolean; progress: CashPullProgress } {
   if (pullActive) return { started: false, progress: cashPullProgress() }
   pullProgress = {
@@ -126,7 +146,8 @@ export function startCashHistoryPull(args: {
     total: 0,
     symbol: null,
     errors: 0,
-    message: "Starting the history pull",
+    scope: args.scope,
+    message: `Starting the ${pullLabel(args.scope)} history pull`,
     shown: true,
   }
   const run = pullCashHistoryNow(args).finally(() => {
@@ -155,6 +176,7 @@ async function pullCashHistoryNow(args: {
   accessToken?: string | null
   force?: boolean
   scope?: CashPullScope
+  onlyMissing?: boolean
 }): Promise<{ skipped: boolean; reason?: string; pulled: number; errors: string[] }> {
   const momentum = await getMomentumState()
   const trend = await getDailyTrendState()
@@ -180,13 +202,17 @@ async function pullCashHistoryNow(args: {
       enabled: book.enabled,
     })),
   })
+  const names = args.onlyMissing ? await symbolsWithoutBars(planned.symbols) : planned.symbols
   const requested = args.force === true || scope === "trend" || scope === "momentum"
-  if (!planned.symbols.length) {
-    const message = emptyPullMessage({
-      scope,
-      trendActive: trend.config.active,
-      momentumActive: momentum.config.active,
-    })
+  if (!names.length) {
+    const message =
+      args.onlyMissing && planned.symbols.length
+        ? `${pullLabel(scope)}: every name already has candles.`
+        : emptyPullMessage({
+            scope,
+            trendActive: trend.config.active,
+            momentumActive: momentum.config.active,
+          })
     if (requested) {
       pullProgress = {
         running: false,
@@ -194,6 +220,7 @@ async function pullCashHistoryNow(args: {
         total: 0,
         symbol: null,
         errors: 0,
+        scope,
         message,
         shown: true,
       }
@@ -210,6 +237,7 @@ async function pullCashHistoryNow(args: {
         total: 0,
         symbol: null,
         errors: 0,
+        scope,
         message,
         shown: true,
       }
@@ -234,17 +262,18 @@ async function pullCashHistoryNow(args: {
   pullProgress = {
     running: true,
     done: 0,
-    total: planned.symbols.length,
+    total: names.length,
     symbol: null,
     errors: 0,
-    message: `Pulling 0 of ${planned.symbols.length}`,
+    scope,
+    message: `${pullLabel(scope)}: 0 of ${names.length}`,
     shown: true,
   }
-  for (const symbol of planned.symbols) {
+  for (const symbol of names) {
     pullProgress = {
       ...pullProgress,
       symbol,
-      message: `Pulling ${symbol} — ${pulled} of ${planned.symbols.length}`,
+      message: `${pullLabel(scope)}: ${symbol} — ${pulled} of ${names.length}`,
     }
     const instrumentToken = tokenBySymbol.get(symbol)
     if (!instrumentToken) {
@@ -265,25 +294,43 @@ async function pullCashHistoryNow(args: {
     pullProgress = {
       running: true,
       done: pulled,
-      total: planned.symbols.length,
+      total: names.length,
       symbol,
       errors: errors.length,
-      message: `Pulling ${symbol} — ${pulled} of ${planned.symbols.length}`,
+      scope,
+      message: `${pullLabel(scope)}: ${symbol} — ${pulled} of ${names.length}`,
       shown: true,
     }
     await sleep(350)
   }
-  if (planned.momentumDue) await markMomentumPull(today)
-  if (planned.trendDue) await markDailyTrendPull(today)
+  if (!args.onlyMissing && planned.momentumDue) await markMomentumPull(today)
+  if (!args.onlyMissing && planned.trendDue) await markDailyTrendPull(today)
   const message = errors.length
-    ? `Pulled ${pulled} of ${planned.symbols.length}. ${errors.length} failed.`
-    : `Pulled ${pulled} names`
+    ? `${pullLabel(scope)}: pulled ${pulled} of ${names.length}. ${errors.length} were not stored.`
+    : `${pullLabel(scope)}: pulled ${pulled} names`
+  if (errors.length) {
+    const { recordOperatorAlert } = await import("../trading/alerts")
+    await recordOperatorAlert({
+      code: "CASH_HISTORY",
+      severity: "WARN",
+      source: "STRATEGY",
+      eventType: "BROKER_ERROR",
+      strategy: scope === "trend" ? "DAILY_TREND" : scope === "momentum" ? "MOMENTUM" : null,
+      summary: `${message} Retry missing on that page tries only those names. A name that is not listed on NSE fails again; drop it from the list.`,
+      detail: { failures: errors },
+      idempotencyKey: `cash-history:${today}:${scope}:${errors.slice().sort().join("|")}`.slice(
+        0,
+        500
+      ),
+    })
+  }
   pullProgress = {
     running: false,
     done: pulled,
-    total: planned.symbols.length,
+    total: names.length,
     symbol: null,
     errors: errors.length,
+    scope,
     message,
     shown: true,
   }

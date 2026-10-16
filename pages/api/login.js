@@ -15,5 +15,5 @@ export default withSession(async (req, res) => {
     return res.redirect(kc.getLoginURL())
   }
 
-  return res.redirect("/dashboard")
+  return res.redirect("/desk")
 })

@@ -15,9 +15,9 @@ test.describe("Authentication", () => {
   })
 })
 
-authenticatedTest("authenticated user can open dashboard", async ({ page }) => {
-  await page.goto("/dashboard")
-  await expect(page.getByRole("tab", { name: "Today", exact: true })).toBeVisible({
+authenticatedTest("authenticated user can open desk", async ({ page }) => {
+  await page.goto("/desk")
+  await expect(page.getByText("Today", { exact: true })).toBeVisible({
     timeout: 15_000,
   })
 })

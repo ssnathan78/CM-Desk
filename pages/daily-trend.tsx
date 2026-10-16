@@ -5,6 +5,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import {
   Box,
   Button,
+  Chip,
   IconButton,
   LinearProgress,
   MenuItem,
@@ -21,6 +22,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material"
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 
@@ -45,6 +47,12 @@ type Book = {
   budgetInr: number
   close?: number | null
   closeDate?: string | null
+  storedClose?: number | null
+  storedDate?: string | null
+  ema?: number | null
+  signal?: string
+  signalBuy?: boolean
+  signalQualifies?: boolean
   entryStyle: "CLOSE_CROSS" | "BREAK_HIGH"
   status: string
   stop: number | null
@@ -59,6 +67,8 @@ type SortKey =
   | "marketCapCr"
   | "budgetInr"
   | "close"
+  | "ema"
+  | "signal"
   | "emaPeriod"
   | "bufferPercent"
   | "exitBufferPercent"
@@ -113,6 +123,7 @@ export default function DailyTrendPage() {
   const [decisions, setDecisions] = useState<Payload["decisions"]>([])
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState("")
+  const [signalView, setSignalView] = useState<"all" | "qualifies">("all")
   const [matches, setMatches] = useState<{ symbol: string; name: string }[]>([])
   const [sortKey, setSortKey] = useState<SortKey>("symbol")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
@@ -245,13 +256,14 @@ export default function DailyTrendPage() {
     if (sortKey === key) setSortDir(current => (current === "asc" ? "desc" : "asc"))
     else {
       setSortKey(key)
-      setSortDir(key === "marketCapCr" || key === "enabled" ? "desc" : "asc")
+      setSortDir(key === "marketCapCr" || key === "enabled" || key === "signal" ? "desc" : "asc")
     }
   }
 
   const books = useMemo(() => {
     const q = filter.trim().toUpperCase()
     const rows = (data?.books ?? []).filter(book => {
+      if (signalView === "qualifies" && !book.signalQualifies) return false
       if (!q) return true
       return (
         book.symbol.includes(q) ||
@@ -262,12 +274,14 @@ export default function DailyTrendPage() {
     const dir = sortDir === "asc" ? 1 : -1
     const value = (book: Book): string | number => {
       if (sortKey === "enabled") return book.enabled ? 1 : 0
+      if (sortKey === "signal") return book.signalBuy ? 2 : book.signalQualifies ? 1 : 0
       if (sortKey === "status") return book.paused ? `paused ${book.status}` : book.status
       if (
         sortKey === "marketCapCr" ||
         sortKey === "stop" ||
         sortKey === "budgetInr" ||
-        sortKey === "close"
+        sortKey === "close" ||
+        sortKey === "ema"
       )
         return book[sortKey] ?? Number.NEGATIVE_INFINITY
       if (sortKey === "name") return book.name || book.symbol
@@ -280,7 +294,7 @@ export default function DailyTrendPage() {
       if (typeof left === "number" && typeof right === "number") return (left - right) * dir
       return String(left).localeCompare(String(right)) * dir
     })
-  }, [data?.books, filter, sortDir, sortKey])
+  }, [data?.books, filter, signalView, sortDir, sortKey])
 
   useEffect(() => {
     if (!data?.pull?.running) return
@@ -290,19 +304,30 @@ export default function DailyTrendPage() {
     return () => clearInterval(timer)
   }, [data?.pull?.running, mutate])
 
-  async function pullHistory() {
+  async function pullHistory(onlyMissing = false) {
     setBusy(true)
     try {
       const result = await fetchJson<{
         started: boolean
-        progress: { running: boolean; message: string | null }
+        progress: {
+          running: boolean
+          message: string | null
+          scope?: string | null
+          done: number
+          total: number
+        }
       }>("/api/daily-trend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "pull" }),
+        body: JSON.stringify({ action: "pull", onlyMissing }),
       })
       await mutate()
-      if (!result.started && !result.progress.running) {
+      if (!result.started && result.progress.scope === "momentum") {
+        showMessage(
+          `Momentum is downloading its own list, ${result.progress.done} of ${result.progress.total}. This page starts after that finishes.`,
+          "info"
+        )
+      } else if (!result.started && !result.progress.running) {
         showMessage(result.progress.message || "History pull did not start", "info")
       }
     } catch (error) {
@@ -319,7 +344,14 @@ export default function DailyTrendPage() {
       {SnackbarAlert}
       <Stack spacing={2}>
         <Box>
-          <Typography variant="h5">Daily long-only trend</Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
+            <Typography variant="h5" sx={{ flex: 1 }}>
+              Daily long-only trend
+            </Typography>
+            <Button component={Link} href="/help/daily-trend" size="small">
+              Guide
+            </Button>
+          </Stack>
           <Typography variant="body2" color="text.secondary">
             Same idea as the Chase long side, on the cash symbol and on daily candles. There is no
             short. A buy is sent only after the close is above the EMA plus the buffer. The stop is
@@ -331,7 +363,7 @@ export default function DailyTrendPage() {
         </Box>
         <Paper sx={{ p: 2 }}>
           <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-            <Typography variant="body2">On</Typography>
+            <Typography variant="body2">Strategy on</Typography>
             <Switch
               checked={runtime.active}
               onChange={e => setConfig({ ...runtime, active: e.target.checked })}
@@ -362,6 +394,9 @@ export default function DailyTrendPage() {
             </Button>
             <Button disabled={busy || pull?.running} onClick={() => void pullHistory()}>
               {pull?.running ? `Pulling ${pull.done} of ${pull.total || "…"}` : "Pull history now"}
+            </Button>
+            <Button disabled={busy || pull?.running} onClick={() => void pullHistory(true)}>
+              Retry missing
             </Button>
             <Button
               disabled={busy}
@@ -410,7 +445,6 @@ export default function DailyTrendPage() {
               ) : null}
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 {pull.message}
-                {pull.symbol ? ` (${pull.symbol})` : ""}
               </Typography>
             </Box>
           ) : null}
@@ -600,21 +634,34 @@ export default function DailyTrendPage() {
             </Button>
           </Stack>
         </Paper>
-        <TextField
-          size="small"
-          label="Filter symbol, name, or industry"
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          sx={{ maxWidth: 360 }}
-        />
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: "center" }}>
+          <TextField
+            size="small"
+            label="Filter symbol, name, or industry"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            sx={{ maxWidth: 360 }}
+          />
+          <TextField
+            select
+            size="small"
+            label="Signal"
+            value={signalView}
+            onChange={e => setSignalView(e.target.value as "all" | "qualifies")}
+            sx={{ minWidth: 200 }}
+          >
+            <MenuItem value="all">All names</MenuItem>
+            <MenuItem value="qualifies">Qualifies</MenuItem>
+          </TextField>
+        </Stack>
         <Typography variant="caption" color="text.secondary">
           Nifty 100 is loaded off. Market cap refreshes about 20 names an hour from Screener while
-          this process is running, so the book turns over inside a day. The date next to the figure
-          is when it was stored. The signal ignores today's candle and uses the last completed daily
-          close. Buffer defaults are 1%. A buy size is floor(budget / that close). Turn a row on and
-          set a budget before it can buy. State, last close, and stop sit ahead of the settings.
-          Edit, pause, and remove are the icons on the left. The table scrolls inside the page, so
-          the horizontal bar stays with the rows.
+          this process is running, so the book turns over inside a day. Close is the last completed
+          session, the one compared with the EMA. A later stored price waits until the next session.
+          Signal Qualifies lists every name above the EMA band, including rows that are off. Sorting
+          Signal puts those names first. A budget of 0 still qualifies and buys no shares. Stop
+          stays blank until the book is long. Edit, pause, and remove are the icons on the left. The
+          table scrolls inside the page, so the horizontal bar stays with the rows.
         </Typography>
         <ScrollTable minWidth={1100} maxHeight="calc(100vh - 240px)">
           <Table stickyHeader size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
@@ -652,6 +699,20 @@ export default function DailyTrendPage() {
                 <Sortable
                   label="Close"
                   sortKey="close"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="EMA"
+                  sortKey="ema"
+                  active={sortKey}
+                  dir={sortDir}
+                  onSort={toggleSort}
+                />
+                <Sortable
+                  label="Signal"
+                  sortKey="signal"
                   active={sortKey}
                   dir={sortDir}
                   onSort={toggleSort}
@@ -776,7 +837,7 @@ export default function DailyTrendPage() {
                   </TableCell>
                   <TableCell>{book.paused ? "paused" : book.status}</TableCell>
                   <TableCell align="right">
-                    {book.close == null ? "—" : formatCr(book.close)}
+                    {book.close == null ? "—" : formatPx(book.close)}
                     {book.closeDate ? (
                       <Typography
                         variant="caption"
@@ -786,6 +847,23 @@ export default function DailyTrendPage() {
                         {book.closeDate}
                       </Typography>
                     ) : null}
+                    {book.storedClose != null && book.storedDate ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block" }}
+                      >
+                        {formatPx(book.storedClose)} on {book.storedDate} waits
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell align="right">{book.ema == null ? "—" : formatPx(book.ema)}</TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      color={book.signalBuy ? "success" : "default"}
+                      label={book.signal ?? "—"}
+                    />
                   </TableCell>
                   <TableCell>{book.stop ?? "—"}</TableCell>
                   <TableCell>{book.name || "—"}</TableCell>
@@ -827,6 +905,13 @@ export default function DailyTrendPage() {
       </Stack>
     </Layout>
   )
+}
+
+function formatPx(value: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
 }
 
 function formatCr(value: number | null | undefined): string {

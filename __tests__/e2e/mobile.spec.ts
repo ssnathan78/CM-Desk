@@ -13,10 +13,14 @@ async function pageOverflowsHorizontally(page: {
 test.describe("Mobile layout", () => {
   test.use({ viewport: PHONE })
 
-  test("dashboard shell uses the drawer and does not overflow", async ({ page }) => {
-    await page.goto("/dashboard")
+  test("desk shell uses the drawer and the session bar", async ({ page }) => {
+    await page.goto("/desk")
     await expect(page.getByRole("button", { name: /open menu/i })).toBeVisible({ timeout: 20_000 })
-    await expect(page.getByRole("tab", { name: "Today", exact: true })).toBeVisible()
+    await expect(page.getByText("Today", { exact: true })).toBeVisible()
+    const bar = page.locator(".MuiBottomNavigation-root")
+    await expect(bar.getByRole("link", { name: "Plan" })).toBeVisible()
+    await expect(bar.getByRole("link", { name: "Chase" })).toBeVisible()
+    await expect(bar.getByRole("button", { name: "More" })).toBeVisible()
     expect(await pageOverflowsHorizontally(page)).toBe(false)
   })
 

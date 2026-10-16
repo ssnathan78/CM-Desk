@@ -93,7 +93,7 @@ There is **no backtester** in this repo. There is no implied live edge from hist
 | Flash crash/rally | SL gapped; hedge may not exist | SL candle logic can miss intra-bar spike |
 | Gap up/down | Open through SL on a wing | Overnight futures gap |
 | Low liquidity / wide spread | Partial, reject, worse ATM | Futures usually OK; rolls less so |
-| Halt / holiday | `isMarketOpen` + risk `MARKET_CLOSED`; flatten/SL still allowed when halted | Chase window 09:16–15:29 IST |
+| Halt / holiday | Halt still allows flatten/SL during the session. A live square-off on a holiday or after the close is refused; the working stop stays. `MARKET_CLOSED` blocks live entries | Chase window 09:16–15:29 IST |
 | News | Same as vol spike | Same |
 
 Adversarial “make it lose fast without a software bug”: a **gap through SL** on a fat-finger lot size, **NO_SL with ASO off** (now rejected at validation), a **one-legged fill** left without rollback, or Chase long into a gap-down open. A clean one-way BankNifty/Nifty day with working per-leg stops is **not** that list.

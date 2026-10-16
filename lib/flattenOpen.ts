@@ -3,6 +3,7 @@ import type { KiteUser } from "../types/misc"
 import { resetChaseSignalState } from "./chaseReset"
 import { INTRADAY_STRATEGIES } from "./constants"
 import { db } from "./drizzle"
+import { type FlattenOpenResult, liveFlattenSessionBlock } from "./flattenNotice"
 import type { FlattenScope } from "./flattenScope"
 import { abortJobExecution } from "./jobControl"
 import {
@@ -18,17 +19,16 @@ import { jobExecutions } from "./schema"
 import { chaseInstrumentFromTradingsymbol, flattenRowPlan } from "./trading/bookSplit"
 import { getOpenPositions, recordAuditEvent } from "./trading/ledger"
 import { isSyntheticProvenance, ledgerProvenance } from "./trading/types"
-import { isMockOrder } from "./utils"
+import { isMarketOpen, isMockOrder } from "./utils"
 
+export type { FlattenOpenResult } from "./flattenNotice"
+export {
+  flattenOperatorNotice,
+  LIVE_FLATTEN_MARKET_CLOSED,
+  liveFlattenSessionBlock,
+} from "./flattenNotice"
 export type { FlattenScope } from "./flattenScope"
 export { parseFlattenScope } from "./flattenScope"
-
-export type FlattenOpenResult = {
-  flattened: Array<{ positionId: string; tradingsymbol: string; qty: number; side: string }>
-  skipped: Array<{ positionId?: string; tradingsymbol?: string; reason: string }>
-  abortedJobs: string[]
-  chaseReset: string[]
-}
 
 type OpenRow = Awaited<ReturnType<typeof getOpenPositions>>[number]
 
@@ -118,6 +118,7 @@ export async function flattenOpenPositions(input: {
   }
 
   const processMock = isMockOrder()
+  const marketOpen = isMarketOpen()
   const open = await getOpenPositions()
   const rows = await selectRows(input.scope, open)
   const result: FlattenOpenResult = {
@@ -163,6 +164,16 @@ export async function flattenOpenPositions(input: {
         positionId: row.id,
         tradingsymbol: row.tradingsymbol,
         reason: plan.reason,
+      })
+      continue
+    }
+
+    const sessionBlock = liveFlattenSessionBlock({ paperBook, marketOpen })
+    if (sessionBlock) {
+      result.skipped.push({
+        positionId: row.id,
+        tradingsymbol: row.tradingsymbol,
+        reason: sessionBlock,
       })
       continue
     }

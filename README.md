@@ -8,7 +8,7 @@ If you have never used this repo: start with **Docker on your PC** (`docs/LOCAL.
 
 - **ATM straddle / strangle** — sell (or buy, depending on your form) Nifty / BankNifty / FinNifty options around the at-the-money strike, with stop-loss and a time-based square-off.
 - **Chase** — a Nifty futures 40-EMA chase strategy.
-- **Trade plans** — save weekday templates so jobs can be scheduled without retyping every field.
+- **Templates** — named Straddle and Strangle configs, with weekday schedules. A fired job is a copy of the template.
 - **Queues** — orders are not placed inside the HTTP request. They go to **BullMQ** (Redis). You can inspect jobs at `/queues` after you log in.
 - **Two P&amp;L numbers** — rupee P&amp;L (`quantity × price`) in the UI, and **strategy points** used for max-profit / max-loss square-off. Those two numbers are supposed to be different; do not “fix” points to rupees.
 
@@ -42,7 +42,7 @@ docker compose up --build
 Wait until the `app` container is **healthy**. Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 - Health (no login): [http://127.0.0.1:3000/api/health](http://127.0.0.1:3000/api/health) must show `"postgres":"ok"` and `"redis":"ok"`.
-- Click **Continue with Kite**. After Zerodha login you should land on `/dashboard`.
+- Click **Continue with Kite**. After Zerodha login you should land on `/desk`.
 - Request tokens are **one-time**. If login fails, click Continue with Kite again (do not refresh the callback URL).
 
 Compose starts **Postgres**, **Redis**, and the **app**. On first boot the app runs SQL in `drizzle/` (creates tables, then integrity indexes). You should not need a separate “init DB” command.

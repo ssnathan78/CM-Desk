@@ -44,6 +44,30 @@ export function completedDailyBars<T extends { date: string }>(bars: T[], today:
   return bars.filter(bar => bar.date < today)
 }
 
+/**
+ * What a flat book would do on the last completed close. Same band as evaluateDailyLong.
+ * A buy still needs the page switch on and execution off Report only.
+ */
+export function dailyTrendRowSignal(input: {
+  close: number | null
+  ema: number | null
+  bufferPercent: number
+  budgetInr: number
+  entryStyle: DailyEntryStyle
+}): { label: string; buy: boolean; qualifies: boolean } {
+  if (input.close == null || input.ema == null || !(input.ema > 0) || !(input.close > 0)) {
+    return { label: "No EMA", buy: false, qualifies: false }
+  }
+  const band = input.ema * (1 + input.bufferPercent / 100)
+  if (!(input.close > band)) return { label: "Below the band", buy: false, qualifies: false }
+  if (input.entryStyle === "BREAK_HIGH") {
+    return { label: "Wait for the high", buy: false, qualifies: true }
+  }
+  const qty = sharesForBudget(input.budgetInr, input.close)
+  if (!(qty > 0)) return { label: "Above the band, budget 0", buy: false, qualifies: true }
+  return { label: `Buy ${qty}`, buy: true, qualifies: true }
+}
+
 /** Shares to buy from a rupee budget. Zero budget buys nothing. */
 export function sharesForBudget(budgetInr: number, price: number): number {
   if (!(budgetInr > 0) || !(price > 0)) return 0

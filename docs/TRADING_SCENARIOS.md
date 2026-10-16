@@ -131,7 +131,7 @@ Chase / straddle / strangle are **not** gated on daily P&L or drawdown. `portfol
 
 ## Kill switch
 
-`POST /api/kill-desk` `{ scope: "intraday" | "all" }`: abort jobs, optional Chase pause + square-off, persist halt. Desk **Halt new entries** only persists halt (does not flatten). Resume requires confirmation on `/desk`.
+`POST /api/kill-desk` `{ scope: "intraday" | "all" }`: abort jobs, try to square off, then persist halt. Kill all also pauses Chase. A live book outside the NSE session is not flattened and is not reset to `AWAITING_SIGNAL`; the working stop stays. Desk **Halt new entries** only persists halt (does not flatten). Resume requires confirmation on `/desk`.
 
 ## Conflicting strategies
 
@@ -143,7 +143,7 @@ Straddle short Nifty options and Chase long Nifty futures can offset or stack. N
 
 ## Market closed
 
-Live entries: `MARKET_CLOSED`. Mock entries allowed (paper). Chase `processUpdateSL` skips outside 09:16–15:29 IST.
+Live entries: `MARKET_CLOSED`. Mock entries allowed (paper). Live square-off is refused outside the session (`lib/flattenNotice.ts`); paper square-off still fills. Chase `processUpdateSL` skips outside 09:16–15:29 IST.
 
 ## Extreme prices
 

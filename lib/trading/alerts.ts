@@ -63,6 +63,8 @@ const CODE_EVENT_TYPE: Record<string, AuditEventType> = {
   CHASE_EMA_GAP: "JOB_FAILED",
   CHASE_INVALID_CANDLE: "JOB_FAILED",
   CHASE_NO_CANDLES: "JOB_FAILED",
+  CASH_HISTORY: "BROKER_ERROR",
+  INDEX_FILE: "BROKER_ERROR",
 }
 
 export function liveScheduleRejectReason(input: {

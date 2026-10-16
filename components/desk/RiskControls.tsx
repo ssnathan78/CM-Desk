@@ -395,7 +395,7 @@ export default function RiskControls({
                   onClick={async () => {
                     if (
                       !window.confirm(
-                        "Reset Nifty, BankNifty, FinNifty, and Midcap Nifty Chase status to AWAITING_SIGNAL? This does not flatten an open futures position. Use Square off on Chase or Desk → Positions to get out of a current book."
+                        "Reset Nifty, BankNifty, FinNifty, and Midcap Nifty Chase status to AWAITING_SIGNAL? A book that still has futures quantity is refused and that position stays. Flat books, and pending entries that never filled, return to a fresh signal. This does not send a flatten. Use Square off on Chase or Desk → Positions to get out of a current book."
                       )
                     ) {
                       return

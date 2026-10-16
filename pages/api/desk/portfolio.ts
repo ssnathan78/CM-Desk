@@ -1,7 +1,11 @@
 import { sendApiError } from "../../../lib/apiErrors"
 import logger from "../../../lib/logger"
 import withSession from "../../../lib/session"
-import { computePortfolio, listDailySessions } from "../../../lib/trading/portfolio"
+import {
+  computePortfolio,
+  listDailySessions,
+  loadTodayGroups,
+} from "../../../lib/trading/portfolio"
 import { parseTradeBook } from "../../../lib/trading/types"
 
 export default withSession(async (req, res) => {
@@ -12,11 +16,12 @@ export default withSession(async (req, res) => {
     const book = parseTradeBook(req.query.book)
     const from = typeof req.query.from === "string" ? req.query.from : undefined
     const to = typeof req.query.to === "string" ? req.query.to : undefined
-    const [portfolio, sessions] = await Promise.all([
+    const [portfolio, sessions, today] = await Promise.all([
       computePortfolio(undefined, book),
       listDailySessions({ limit: 400, from, to }),
+      loadTodayGroups(book),
     ])
-    return res.json({ portfolio, sessions, book })
+    return res.json({ portfolio, sessions, today, book })
   } catch (e) {
     return sendApiError(res, e, logger, "desk/portfolio")
   }

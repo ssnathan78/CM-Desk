@@ -57,6 +57,12 @@ export async function runCashSchedulerOnce(accessToken?: string | null) {
   const { refreshStaleMarketCaps, seedKnownMarketCaps } = await import("../dailyTrend/marketCap")
   await seedKnownMarketCaps()
   await refreshStaleMarketCaps(20).catch(error => logger.error("[marketCap]", error))
+  const { refreshStaleMembership } = await import("./membershipRefresh")
+  await refreshStaleMembership().catch(error => logger.error("[membership]", error))
+  if (state.config.active) {
+    const { getMomentumReport } = await import("./storedReport")
+    await getMomentumReport({ fresh: true }).catch(error => logger.error("[momentumReport]", error))
+  }
   return history
 }
 

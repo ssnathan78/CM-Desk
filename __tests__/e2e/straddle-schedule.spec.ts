@@ -1,58 +1,34 @@
 import { expect, authenticatedTest as test } from "./fixtures"
 
-test.describe("Straddle Schedule now", () => {
-  test("Nifty ticked + Schedule now creates a Today job", async ({ page }) => {
+test.describe("Templates", () => {
+  test("save and run now create a Today job without requiring Schedule now", async ({ page }) => {
     page.on("dialog", dialog => dialog.accept())
-    await page.goto("/strat/straddle")
-    await expect(page.getByRole("button", { name: /schedule now/i })).toBeVisible({
-      timeout: 20_000,
-    })
-    const nifty = page.getByRole("checkbox", { name: /nifty/i }).first()
-    if (await nifty.count()) {
-      await expect(nifty).toBeChecked()
-    }
-    await page.getByRole("button", { name: /schedule now/i }).click()
-    await page.waitForURL(/\/dashboard/, { timeout: 20_000 })
+    await page.goto("/templates?type=ATM_STRADDLE")
+    await page.getByRole("button", { name: "New straddle" }).click()
+    await page.getByLabel("Template name").fill(`E2E ${Date.now()}`)
+    await page.getByRole("button", { name: "Save template" }).click()
+    await expect(page.getByRole("heading", { name: /Editing template E2E/ })).toBeVisible()
+    await expect(page.getByText(/could not save|tick at least one index/i)).toHaveCount(0)
+    await page.getByRole("button", { name: "Run now" }).click()
+    await page.waitForURL(/\/desk/, { timeout: 20_000 })
     await expect(page.getByRole("tab", { name: "Today", exact: true })).toBeVisible()
-    await expect(page.getByText(/job|scheduled|straddle/i).first()).toBeVisible()
-  })
-
-  test("unticking every index stays on the form and does not POST", async ({ page }) => {
-    let posted = false
-    await page.route("**/api/trades_day", async route => {
-      if (route.request().method() === "POST") posted = true
-      await route.continue()
-    })
-    await page.goto("/strat/straddle")
-    await expect(page.getByRole("button", { name: /schedule now/i })).toBeVisible({
-      timeout: 20_000,
-    })
-    const boxes = page.getByRole("checkbox")
-    const count = await boxes.count()
-    for (let i = 0; i < count; i += 1) {
-      const box = boxes.nth(i)
-      if (await box.isChecked()) await box.uncheck()
-    }
-    await page.getByRole("button", { name: /schedule now/i }).click()
-    await expect(page).toHaveURL(/\/strat\/straddle/)
-    await expect(page.getByText(/tick at least one index/i)).toBeVisible()
-    expect(posted).toBe(false)
   })
 })
 
-test.describe("Today's plan Schedule all", () => {
-  test("past template times show an error instead of a silent no-op", async ({ page }) => {
-    const runAt = new Date()
-    runAt.setHours(8, 0, 0, 0)
-    const seed = await page.request.post("/api/plan", {
+test.describe("Schedules", () => {
+  test("Plan lists weekday schedules", async ({ page }) => {
+    await page.goto("/plan")
+    await expect(page.getByRole("heading", { name: "Schedules" })).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole("heading", { name: "MONDAY" })).toBeVisible()
+  })
+
+  test("Today can schedule a due template", async ({ page }) => {
+    const name = `Due ${Date.now()}`
+    const saved = await page.request.post("/api/templates", {
       data: {
-        dayOfWeek: new Date().toLocaleDateString("en-US", {
-          weekday: "long",
-          timeZone: "Asia/Kolkata",
-        }).toUpperCase(),
         config: {
           strategy: "ATM_STRADDLE",
-          name: "E2E past plan",
+          name,
           instrument: "NIFTY",
           lots: 1,
           volatilityType: "SHORT",
@@ -63,20 +39,25 @@ test.describe("Today's plan Schedule all", () => {
           maxSkewPercent: 10,
           thresholdSkewPercent: 20,
           isAutoSquareOffEnabled: true,
-          runAt: runAt.toISOString(),
         },
       },
     })
-    await page.goto("/dashboard?tabId=2")
-    await expect(page.getByText(/today's plan|plan|template/i).first()).toBeVisible({
-      timeout: 15_000,
+    const body = await saved.json()
+    const day = new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: "Asia/Kolkata",
+    }).toUpperCase()
+    await page.request.post("/api/schedules", {
+      data: { templateId: body.id, dayOfWeek: day, enabled: true },
     })
-    const scheduleAll = page.getByRole("button", { name: /schedule all/i })
-    if ((await scheduleAll.count()) && seed.ok()) {
-      await scheduleAll.click()
-      await expect(page.getByText(/already passed|run now|schedule now/i)).toBeVisible({
-        timeout: 10_000,
-      })
-    }
+    await page.goto("/desk?tab=today")
+    await expect(page.getByText(name)).toBeVisible({ timeout: 20_000 })
+    await page
+      .locator("div")
+      .filter({ has: page.getByText(name, { exact: false }) })
+      .getByRole("button", { name: "Schedule" })
+      .last()
+      .click()
+    await expect(page.getByText(name)).toBeHidden({ timeout: 20_000 })
   })
 })

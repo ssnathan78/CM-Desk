@@ -7,17 +7,19 @@ import {
   RadioGroup,
   Typography,
 } from "@mui/material"
-import React, { useEffect } from "react"
-import {
-  EXPIRY_TYPE,
-  EXPIRY_TYPE_HUMAN,
-  expiryTypesForInstrument,
-  type INSTRUMENTS,
-} from "../../lib/constants"
+import { useEffect } from "react"
+import useSWR from "swr"
+import { EXPIRY_TYPE, expiryTypesForInstrument, type INSTRUMENTS } from "../../lib/constants"
+import { expiryRuleLabel } from "../../lib/expiryRule"
+import fetchJson from "../../lib/fetchJson"
 
 const ExpiryTypeComponent = ({ state, onChange }) => {
   const instrument = state.instrument as INSTRUMENTS | undefined
   const expiryTypes = expiryTypesForInstrument(instrument)
+  const { data: preview } = useSWR<Record<string, string | null>>(
+    instrument ? `/api/expiry-preview?instrument=${instrument}` : null,
+    fetchJson
+  )
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the instrument's allowed expiries change
   useEffect(() => {
@@ -37,20 +39,27 @@ const ExpiryTypeComponent = ({ state, onChange }) => {
           onChange={e => onChange({ expiryType: e.target.value as EXPIRY_TYPE })}
           row
         >
-          {expiryTypes.map(expiryType => (
-            <FormControlLabel
-              key={expiryType}
-              value={expiryType}
-              control={<Radio size="small" />}
-              label={<Typography variant="body2">{EXPIRY_TYPE_HUMAN[expiryType]}</Typography>}
-            />
-          ))}
+          {expiryTypes.map(expiryType => {
+            const when = preview?.[expiryType]
+            return (
+              <FormControlLabel
+                key={expiryType}
+                value={expiryType}
+                control={<Radio size="small" />}
+                label={
+                  <Typography variant="body2">
+                    {expiryRuleLabel(instrument, expiryType)}
+                    {when ? ` · ${when}` : preview ? " · not listed" : ""}
+                  </Typography>
+                }
+              />
+            )
+          })}
         </RadioGroup>
-        {instrument && !expiryTypes.includes(EXPIRY_TYPE.MONTHLY) ? (
-          <Typography variant="caption" color="text.secondary">
-            Weekly contracts are not listed for this index (monthly expiries only).
-          </Typography>
-        ) : null}
+        <Typography variant="caption" color="text.secondary">
+          The template stores this rule. The contract date is chosen when the job fires, so the
+          template stays after this expiry.
+        </Typography>
       </FormControl>
     </Grid>
   )

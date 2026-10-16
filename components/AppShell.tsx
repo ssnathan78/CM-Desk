@@ -2,13 +2,11 @@ import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalance
 import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined"
 import AllInclusiveOutlinedIcon from "@mui/icons-material/AllInclusiveOutlined"
 import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined"
-import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined"
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined"
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined"
 import MenuIcon from "@mui/icons-material/Menu"
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined"
 import ShowChartOutlinedIcon from "@mui/icons-material/ShowChartOutlined"
-import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined"
 import ViewQuiltOutlinedIcon from "@mui/icons-material/ViewQuiltOutlined"
 import {
   AppBar,
@@ -50,8 +48,8 @@ function selected(asPath: string, href: string) {
   if (href === "/chase" || href === "/momentum" || href === "/daily-trend") {
     return pathOnly(asPath) === href
   }
-  if (href === "/plan") {
-    return pathOnly(asPath) === "/plan"
+  if (href === "/plan" || href === "/templates") {
+    return pathOnly(asPath) === href
   }
   if (href === "/help") {
     return pathOnly(asPath) === "/help" || pathOnly(asPath).startsWith("/help/")
@@ -100,18 +98,6 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
       <List dense sx={{ flex: 1, py: 0 }} subheader={<li />}>
         <ListItemButton
           component={Link}
-          href="/dashboard"
-          selected={selected(asPath, "/dashboard")}
-          onClick={close}
-          sx={{ ...itemSx, pl: 1.5 }}
-        >
-          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <DashboardOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Dashboard" />
-        </ListItemButton>
-        <ListItemButton
-          component={Link}
           href={alertCount ? "/desk?tab=alerts" : "/desk"}
           selected={selected(asPath, "/desk")}
           onClick={close}
@@ -145,8 +131,8 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListItemButton>
         <ListItemButton
           component={Link}
-          href="/strat/straddle"
-          selected={selected(asPath, "/strat/straddle")}
+          href="/templates?type=ATM_STRADDLE"
+          selected={asPath.includes("type=ATM_STRADDLE")}
           onClick={close}
           sx={itemSx}
         >
@@ -157,8 +143,8 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListItemButton>
         <ListItemButton
           component={Link}
-          href="/strat/strangle"
-          selected={selected(asPath, "/strat/strangle")}
+          href="/templates?type=ATM_STRANGLE"
+          selected={asPath.includes("type=ATM_STRANGLE")}
           onClick={close}
           sx={itemSx}
         >
@@ -397,10 +383,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
       </Box>
       <BottomNavigation
         showLabels
-        value={
-          ["/desk", "/chase", "/momentum", "/daily-trend"].find(href => selected(asPath, href)) ??
-          false
-        }
+        value={["/desk", "/templates", "/chase"].find(href => selected(asPath, href)) ?? false}
         sx={{
           display: { xs: "flex", md: "none" },
           position: "fixed",
@@ -427,6 +410,13 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           href={alertCount ? "/desk?tab=alerts" : "/desk"}
         />
         <BottomNavigationAction
+          label="Templates"
+          value="/templates"
+          icon={<ViewQuiltOutlinedIcon />}
+          component={Link}
+          href="/templates"
+        />
+        <BottomNavigationAction
           label="Chase"
           value="/chase"
           icon={<AllInclusiveOutlinedIcon />}
@@ -434,18 +424,10 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           href="/chase"
         />
         <BottomNavigationAction
-          label="Momentum"
-          value="/momentum"
-          icon={<ShowChartOutlinedIcon />}
-          component={Link}
-          href="/momentum"
-        />
-        <BottomNavigationAction
-          label="Daily trend"
-          value="/daily-trend"
-          icon={<TrendingUpOutlinedIcon />}
-          component={Link}
-          href="/daily-trend"
+          label="More"
+          value="/more"
+          icon={<MenuIcon />}
+          onClick={() => setMobileOpen(true)}
         />
       </BottomNavigation>
     </Box>

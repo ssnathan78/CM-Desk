@@ -1,7 +1,13 @@
+import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined"
+import PauseIcon from "@mui/icons-material/Pause"
+import PlayArrowIcon from "@mui/icons-material/PlayArrow"
+import RestartAltIcon from "@mui/icons-material/RestartAlt"
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined"
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Paper,
   Stack,
@@ -12,6 +18,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material"
 import Link from "next/link"
@@ -31,6 +38,7 @@ import {
 } from "../lib/chaseDefaults"
 import { normalizeChaseOpenClassify } from "../lib/chaseOpenClassify"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
+import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
 import useUser from "../lib/useUser"
 
@@ -69,9 +77,23 @@ const CHASE_COLUMN_NOTES = [
   },
   {
     term: "Save / Reset / Remove",
-    text: "Save writes the row. Reset returns this book to a fresh signal and does not flatten an open future. Remove drops the underlying and is refused while the book is open. Neither sends an order.",
+    text: "Save writes the row. The save icon turns amber when this row differs from what is stored. Reset never sends an order. If the book still has futures quantity, Reset is refused and the position stays LONG or SHORT. On a flat book, or a pending entry that never filled, Reset returns the signal to AWAITING_SIGNAL and cancels that pending entry. Remove drops the underlying and is refused while the book is open.",
   },
 ] as const
+
+function bookNeedsSave(current: ChaseBookConfig, saved: ChaseBookConfig | undefined) {
+  if (!saved) return false
+  return (
+    current.lots !== saved.lots ||
+    current.emaPeriod !== saved.emaPeriod ||
+    current.bufferPercent !== saved.bufferPercent ||
+    current.entryLimitOffset !== saved.entryLimitOffset ||
+    current.marketProtectionPercent !== saved.marketProtectionPercent ||
+    current.enabled !== saved.enabled ||
+    current.paused !== saved.paused ||
+    current.openClassify !== saved.openClassify
+  )
+}
 
 const ChasePlanPage = () => {
   useUser({ redirectTo: "/" })
@@ -126,12 +148,16 @@ const ChasePlanPage = () => {
   const squareOffChase = async () => {
     setFlattenOpen(false)
     try {
-      await fetchJson("/api/desk/flatten", {
+      const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ strategy: "CHASE" }),
       })
-      showMessage("Chase squared off. The next hourly job can take a fresh signal.", "success")
+      const notice = flattenOperatorNotice(
+        result,
+        "Chase squared off. The next hourly job can take a fresh signal."
+      )
+      showMessage(notice.text, notice.severity)
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
@@ -304,164 +330,175 @@ const ChasePlanPage = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {books.map(book => (
-                <TableRow key={book.instrument}>
-                  <TableCell>
-                    <Stack spacing={0.5}>
-                      <Typography variant="body2">{book.instrument}</Typography>
-                      <Chip
-                        size="small"
-                        color={!book.enabled ? "default" : book.paused ? "warning" : "success"}
-                        label={
-                          !book.enabled
-                            ? "Off"
-                            : book.paused
-                              ? "Paused — no new entries"
-                              : "Entries allowed"
-                        }
-                      />
-                      {rowNotice[book.instrument] ? (
-                        <Typography
-                          variant="caption"
-                          color={
-                            rowNotice[book.instrument].severity === "error"
-                              ? "error"
-                              : "success.main"
+              {books.map(book => {
+                const dirty = bookNeedsSave(
+                  book,
+                  data.books?.find(saved => saved.instrument === book.instrument)
+                )
+                return (
+                  <TableRow key={book.instrument}>
+                    <TableCell>
+                      <Stack spacing={0.5}>
+                        <Typography variant="body2">{book.instrument}</Typography>
+                        <Chip
+                          size="small"
+                          color={!book.enabled ? "default" : book.paused ? "warning" : "success"}
+                          label={
+                            !book.enabled
+                              ? "Off"
+                              : book.paused
+                                ? "Paused — no new entries"
+                                : "Entries allowed"
                           }
+                        />
+                        {rowNotice[book.instrument] ? (
+                          <Typography
+                            variant="caption"
+                            color={
+                              rowNotice[book.instrument].severity === "error"
+                                ? "error"
+                                : "success.main"
+                            }
+                          >
+                            {rowNotice[book.instrument].text}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Switch
+                        checked={book.enabled}
+                        onChange={e => patchBook(book.instrument, { enabled: e.target.checked })}
+                        slotProps={{ input: { "aria-label": `Trade ${book.instrument}` } }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={book.lots}
+                        onChange={e => patchBook(book.instrument, { lots: Number(e.target.value) })}
+                        sx={{ width: 72 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={book.emaPeriod}
+                        onChange={e =>
+                          patchBook(book.instrument, { emaPeriod: Number(e.target.value) })
+                        }
+                        sx={{ width: 72 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={book.bufferPercent}
+                        onChange={e =>
+                          patchBook(book.instrument, { bufferPercent: Number(e.target.value) })
+                        }
+                        sx={{ width: 80 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={book.marketProtectionPercent}
+                        slotProps={{ htmlInput: { step: 0.05, min: 0.25, max: 5 } }}
+                        onChange={e =>
+                          patchBook(book.instrument, {
+                            marketProtectionPercent: Number(e.target.value),
+                          })
+                        }
+                        sx={{ width: 80 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="number"
+                        size="small"
+                        value={book.entryLimitOffset}
+                        onChange={e =>
+                          patchBook(book.instrument, { entryLimitOffset: Number(e.target.value) })
+                        }
+                        sx={{ width: 80 }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        select
+                        size="small"
+                        value={book.openClassify}
+                        onChange={e =>
+                          patchBook(book.instrument, {
+                            openClassify: normalizeChaseOpenClassify(e.target.value),
+                          })
+                        }
+                        sx={{ width: 150 }}
+                      >
+                        <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF 09:16</MenuItem>
+                        <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy 60m</MenuItem>
+                      </TextField>
+                    </TableCell>
+                    <TableCell sx={{ verticalAlign: "middle", whiteSpace: "nowrap" }}>
+                      <Tooltip title={dirty ? "Save unsaved changes" : "Save this book"}>
+                        <IconButton
+                          size="small"
+                          color={dirty ? "warning" : "default"}
+                          aria-label={dirty ? "Save unsaved changes" : "Save this book"}
+                          onClick={() => saveBook(book.instrument)}
                         >
-                          {rowNotice[book.instrument].text}
-                        </Typography>
-                      ) : null}
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={book.enabled}
-                      onChange={e => patchBook(book.instrument, { enabled: e.target.checked })}
-                      slotProps={{ input: { "aria-label": `Trade ${book.instrument}` } }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      type="number"
-                      size="small"
-                      value={book.lots}
-                      onChange={e => patchBook(book.instrument, { lots: Number(e.target.value) })}
-                      sx={{ width: 72 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      type="number"
-                      size="small"
-                      value={book.emaPeriod}
-                      onChange={e =>
-                        patchBook(book.instrument, { emaPeriod: Number(e.target.value) })
-                      }
-                      sx={{ width: 72 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      type="number"
-                      size="small"
-                      value={book.bufferPercent}
-                      onChange={e =>
-                        patchBook(book.instrument, { bufferPercent: Number(e.target.value) })
-                      }
-                      sx={{ width: 80 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      type="number"
-                      size="small"
-                      value={book.marketProtectionPercent}
-                      slotProps={{ htmlInput: { step: 0.05, min: 0.25, max: 5 } }}
-                      onChange={e =>
-                        patchBook(book.instrument, {
-                          marketProtectionPercent: Number(e.target.value),
-                        })
-                      }
-                      sx={{ width: 80 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      type="number"
-                      size="small"
-                      value={book.entryLimitOffset}
-                      onChange={e =>
-                        patchBook(book.instrument, { entryLimitOffset: Number(e.target.value) })
-                      }
-                      sx={{ width: 80 }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      select
-                      size="small"
-                      value={book.openClassify}
-                      onChange={e =>
-                        patchBook(book.instrument, {
-                          openClassify: normalizeChaseOpenClassify(e.target.value),
-                        })
-                      }
-                      sx={{ width: 150 }}
-                    >
-                      <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF 09:16</MenuItem>
-                      <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy 60m</MenuItem>
-                    </TextField>
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: "middle", width: 196 }}>
-                    <Box
-                      sx={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 0.75,
-                        width: 188,
-                      }}
-                    >
-                      <Button
-                        size="small"
-                        variant="contained"
-                        onClick={() => saveBook(book.instrument)}
-                        sx={{ minWidth: 0 }}
+                          <SaveOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          book.paused
+                            ? "Resume entries"
+                            : "Pause entries. An open book still trails until flat."
+                        }
                       >
-                        Save
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        disabled={!book.enabled}
-                        title="Blocks new entries on this book only. An open position still trails until flat."
-                        onClick={() => saveBook(book.instrument, { paused: !book.paused })}
-                        sx={{ minWidth: 0 }}
-                      >
-                        {book.paused ? "Resume" : "Pause"}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="warning"
-                        variant="outlined"
-                        onClick={() => setResetInstrument(book.instrument)}
-                        sx={{ minWidth: 0 }}
-                      >
-                        Reset
-                      </Button>
-                      <Button
-                        size="small"
-                        color="warning"
-                        variant="outlined"
-                        onClick={() => setRemoveTarget(book.instrument)}
-                        sx={{ minWidth: 0 }}
-                      >
-                        Remove
-                      </Button>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        <span>
+                          <IconButton
+                            size="small"
+                            disabled={!book.enabled}
+                            aria-label={book.paused ? "Resume entries" : "Pause entries"}
+                            onClick={() => saveBook(book.instrument, { paused: !book.paused })}
+                          >
+                            {book.paused ? (
+                              <PlayArrowIcon fontSize="small" />
+                            ) : (
+                              <PauseIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Reset status. Clears LONG or SHORT on this book.">
+                        <IconButton
+                          size="small"
+                          aria-label="Reset status"
+                          onClick={() => setResetInstrument(book.instrument)}
+                        >
+                          <RestartAltIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Remove this book">
+                        <IconButton
+                          size="small"
+                          aria-label="Remove book"
+                          onClick={() => setRemoveTarget(book.instrument)}
+                        >
+                          <DeleteOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         </ScrollTable>
@@ -512,7 +549,7 @@ const ChasePlanPage = () => {
       <ConfirmDialog
         open={flattenOpen}
         title="Square off Chase?"
-        message="This flattens every Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk."
+        message="This flattens every Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk. A live book is refused while the market is closed: the position and its stop stay. Paper still flattens."
         confirmLabel="Square off"
         confirmColor="warning"
         onConfirm={() => void squareOffChase()}
@@ -530,7 +567,7 @@ const ChasePlanPage = () => {
       <ConfirmDialog
         open={Boolean(resetInstrument)}
         title={`Reset ${resetInstrument || "Chase"} to a fresh signal?`}
-        message="This sets that book back to AWAITING_SIGNAL and cancels a pending entry trigger. It does not flatten an open futures position. Use Square off when you want out of the current book."
+        message="If this book still has futures quantity, Reset is refused and the position stays. On a flat book, or a pending entry that never filled, this returns the signal to AWAITING_SIGNAL and cancels that pending entry. It does not send a flatten. Use Square off when you want out of the current book."
         confirmLabel="Reset signal"
         confirmColor="warning"
         onConfirm={() => resetInstrument && void resetSignal(resetInstrument)}

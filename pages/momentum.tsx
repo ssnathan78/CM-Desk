@@ -15,6 +15,7 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   TableSortLabel,
   TextField,
@@ -62,6 +63,7 @@ type Report = {
   orders: { symbol: string; side: string; quantity: number; reason: string }[]
   locks: { symbol: string; mode: string; weightPct: number }[]
   lastDataPullOn: string | null
+  computedAt?: string | null
 }
 
 export default function MomentumPage() {
@@ -77,6 +79,7 @@ export default function MomentumPage() {
   const [sortKey, setSortKey] = useState<"rank" | "symbol" | "score" | "pass" | "weight">("rank")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [busy, setBusy] = useState(false)
+  const [page, setPage] = useState(0)
   const [trimPct, setTrimPct] = useState(10)
   const [previewOrders, setPreviewOrders] = useState<Report["orders"] | null>(null)
   const [pullWatch, setPullWatch] = useState<{
@@ -85,6 +88,7 @@ export default function MomentumPage() {
     total: number
     symbol: string | null
     errors: number
+    scope?: "trend" | "momentum" | "all" | null
     message: string | null
     shown: boolean
   } | null>(null)
@@ -143,6 +147,8 @@ export default function MomentumPage() {
       return String(left).localeCompare(String(right)) * dir
     })
   }, [data?.orders, data?.rows, data?.targets, query, sortDir, sortKey, view])
+  const rankPage = rows.length === 0 ? 0 : Math.min(page, Math.ceil(rows.length / 50) - 1)
+  const pageRows = rows.slice(rankPage * 50, rankPage * 50 + 50)
 
   useEffect(() => {
     let cancelled = false
@@ -173,7 +179,7 @@ export default function MomentumPage() {
     return () => clearInterval(timer)
   }, [mutate, pullWatch?.running, showMessage])
 
-  async function pullHistory() {
+  async function pullHistory(onlyMissing = false) {
     setBusy(true)
     try {
       const result = await fetchJson<{
@@ -182,11 +188,18 @@ export default function MomentumPage() {
       }>("/api/momentum", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "pull", config }),
+        body: JSON.stringify({ action: "pull", config, onlyMissing }),
       })
-      setPullWatch(result.progress)
-      if (!result.started && !result.progress.running) {
-        showMessage(result.progress.message || "History pull did not start", "info")
+      if (!result.started && result.progress.scope === "trend") {
+        showMessage(
+          `Daily trend is downloading its own list, ${result.progress.done} of ${result.progress.total}. This page starts after that finishes.`,
+          "info"
+        )
+      } else {
+        setPullWatch(result.progress)
+        if (!result.started && !result.progress.running) {
+          showMessage(result.progress.message || "History pull did not start", "info")
+        }
       }
     } catch (error) {
       showMessage(error instanceof Error ? error.message : "Pull failed", "error")
@@ -216,18 +229,21 @@ export default function MomentumPage() {
   async function post(body: Record<string, unknown>, ok: string) {
     setBusy(true)
     try {
-      const result = await fetchJson<{ orders?: Report["orders"]; preview?: boolean }>(
-        "/api/momentum",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      )
+      const result = await fetchJson<{
+        orders?: Report["orders"]
+        preview?: boolean
+        message?: string
+      }>("/api/momentum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
       if (body.execute === false && Array.isArray(result.orders)) setPreviewOrders(result.orders)
-      else setPreviewOrders(null)
+      else if (body.action === "rebalance" || body.action === "deploy" || body.action === "trim") {
+        setPreviewOrders(null)
+      }
       await mutate()
-      showMessage(ok, "success")
+      showMessage(result.message || ok, result.message ? "info" : "success")
       return result
     } catch (error) {
       showMessage(error instanceof Error ? error.message : "Request failed", "error")
@@ -509,7 +525,7 @@ export default function MomentumPage() {
               </Box>
             </AccordionDetails>
           </Accordion>
-          <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+          <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
             <Button variant="contained" disabled={busy} onClick={() => void save()}>
               Save
             </Button>
@@ -517,6 +533,9 @@ export default function MomentumPage() {
               {pullWatch?.running
                 ? `Pulling ${pullWatch.done} of ${pullWatch.total || "…"}`
                 : "Pull history now"}
+            </Button>
+            <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory(true)}>
+              Retry missing
             </Button>
             <Button
               disabled={busy}
@@ -537,75 +556,88 @@ export default function MomentumPage() {
             >
               Send rebalance
             </Button>
-            {config.weighting === "drift" ? (
-              <>
-                <Button
-                  disabled={busy || data?.config.weighting !== "drift"}
-                  onClick={() =>
-                    void post({ action: "deploy", execute: false }, "Deploy preview refreshed")
-                  }
-                >
-                  Preview deploy
-                </Button>
-                <Button
-                  color="warning"
-                  disabled={
-                    busy || data?.config.weighting !== "drift" || config.execution === "report"
-                  }
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Buy an equal share of the spare cash for each name in today's book?"
-                      )
-                    ) {
-                      void post({ action: "deploy", execute: true }, "Deploy sent")
-                    }
-                  }}
-                >
-                  Deploy spare cash
-                </Button>
-                <Num
-                  label="Trim book %"
-                  value={trimPct}
-                  onChange={value => setTrimPct(Math.min(99, Math.max(1, Math.round(value))))}
-                />
-                <Button
-                  disabled={busy || data?.config.weighting !== "drift"}
-                  onClick={() =>
-                    void post({ action: "trim", execute: false, trimPct }, "Trim preview refreshed")
-                  }
-                >
-                  Preview trim
-                </Button>
-                <Button
-                  color="warning"
-                  disabled={
-                    busy || data?.config.weighting !== "drift" || config.execution === "report"
-                  }
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `Sell ${trimPct}% of each open momentum position and reduce Capital INR by the same percent?`
-                      )
-                    ) {
-                      void post({ action: "trim", execute: true, trimPct }, "Trim sent")
-                    }
-                  }}
-                >
-                  Trim book
-                </Button>
-              </>
-            ) : null}
           </Stack>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            Pull history now saves these switches, then starts the download and returns at once. You
-            can leave this page. The download keeps going, and the bar comes back when you return.
-            It needs Strategy on. Desk → Risk is a separate switch and does not start the pull.
-            Preview orders refreshes the buy and sell diff and sends nothing. Send rebalance sends
-            that diff, and only after execution is Manual or Auto. Ad hoc never sends by itself: use
-            Preview, then Send. Monthly sends on the first NSE session of the month. The rank uses
-            the last completed daily close, not today’s candle.
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+            Save writes the switches. Pull history saves them and starts the download. Preview lists
+            orders and sends nothing. Send needs Manual or Auto.
           </Typography>
+          {config.weighting === "drift" ? (
+            <Accordion sx={{ mt: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle2">Drift cash</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+                  <Button
+                    disabled={busy || data?.config.weighting !== "drift"}
+                    onClick={() =>
+                      void post({ action: "deploy", execute: false }, "Deploy preview refreshed")
+                    }
+                  >
+                    Preview deploy
+                  </Button>
+                  <Button
+                    color="warning"
+                    disabled={
+                      busy || data?.config.weighting !== "drift" || config.execution === "report"
+                    }
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Buy an equal share of the spare cash for each name in today's book?"
+                        )
+                      ) {
+                        void post({ action: "deploy", execute: true }, "Deploy sent")
+                      }
+                    }}
+                  >
+                    Deploy spare cash
+                  </Button>
+                  <Num
+                    label="Trim book %"
+                    value={trimPct}
+                    onChange={value => setTrimPct(Math.min(99, Math.max(1, Math.round(value))))}
+                  />
+                  <Button
+                    disabled={busy || data?.config.weighting !== "drift"}
+                    onClick={() =>
+                      void post(
+                        { action: "trim", execute: false, trimPct },
+                        "Trim preview refreshed"
+                      )
+                    }
+                  >
+                    Preview trim
+                  </Button>
+                  <Button
+                    color="warning"
+                    disabled={
+                      busy || data?.config.weighting !== "drift" || config.execution === "report"
+                    }
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Sell ${trimPct}% of each open momentum position and reduce Capital INR by the same percent?`
+                        )
+                      ) {
+                        void post({ action: "trim", execute: true, trimPct }, "Trim sent")
+                      }
+                    }}
+                  >
+                    Trim book
+                  </Button>
+                </Stack>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 1, display: "block" }}
+                >
+                  Deploy and trim run only when weights are Let winners run. They recompute their
+                  own orders and do not replace the stored rank.
+                </Typography>
+              </AccordionDetails>
+            </Accordion>
+          ) : null}
           {pullWatch?.running || pullWatch?.shown ? (
             <Box sx={{ mt: 1.5 }}>
               {pullWatch.running ? (
@@ -618,41 +650,33 @@ export default function MomentumPage() {
               ) : null}
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 {pullWatch.message}
-                {pullWatch.symbol ? ` (${pullWatch.symbol})` : ""}
               </Typography>
             </Box>
           ) : null}
         </Paper>
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="subtitle2">Planned orders</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Last pull {data?.lastDataPullOn ?? "never"}. Rebalance day {data?.due ? "yes" : "no"}.{" "}
-            {(previewOrders ?? data?.orders ?? []).length} orders. A sell is the open quantity. A
-            buy is floor(capital × weight / last completed close). Capital 0 lists no buys.
-          </Typography>
-          {(previewOrders ?? data?.orders ?? []).length === 0 ? (
-            <Typography variant="body2">No buy or sell in the current diff.</Typography>
-          ) : (
-            (previewOrders ?? data?.orders ?? []).map(order => (
-              <Typography key={`${order.side}-${order.symbol}`} variant="body2">
-                {order.side} {order.symbol} {order.quantity} — {order.reason}
-              </Typography>
-            ))
-          )}
-        </Paper>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+          sx={{ alignItems: { sm: "center" } }}
+        >
           <TextField
             size="small"
             label="Filter symbol or name"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => {
+              setQuery(e.target.value)
+              setPage(0)
+            }}
           />
           <TextField
             select
             size="small"
             label="Show"
             value={view}
-            onChange={e => setView(e.target.value as "all" | "pass" | "orders")}
+            onChange={e => {
+              setView(e.target.value as "all" | "pass" | "orders")
+              setPage(0)
+            }}
             sx={{ minWidth: 220 }}
           >
             <MenuItem value="all">All names</MenuItem>
@@ -661,7 +685,24 @@ export default function MomentumPage() {
           </TextField>
           <Button onClick={() => exportMomentum(rows, data)}>Export this view</Button>
         </Stack>
-        <ScrollTable minWidth={980}>
+        <Typography variant="body2" color="text.secondary">
+          {(previewOrders ?? data?.orders ?? []).length} planned. Last pull{" "}
+          {data?.lastDataPullOn ?? "never"}. Rank as of{" "}
+          {data?.computedAt
+            ? new Date(data.computedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+            : "not stored"}
+          . Rebalance day {data?.due ? "yes" : "no"}.
+        </Typography>
+        {(previewOrders ?? data?.orders ?? []).length > 0 ? (
+          <Box sx={{ maxHeight: 140, overflow: "auto" }}>
+            {(previewOrders ?? data?.orders ?? []).map(order => (
+              <Typography key={`${order.side}-${order.symbol}`} variant="body2">
+                {order.side} {order.symbol} {order.quantity} — {order.reason}
+              </Typography>
+            ))}
+          </Box>
+        ) : null}
+        <ScrollTable minWidth={720}>
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
@@ -685,17 +726,28 @@ export default function MomentumPage() {
                           setSortKey(key)
                           setSortDir(key === "rank" || key === "symbol" ? "asc" : "desc")
                         }
+                        setPage(0)
                       }}
                     >
                       {label}
                     </TableSortLabel>
                   </TableCell>
                 ))}
-                <TableCell>Lock</TableCell>
+                <TableCell
+                  sx={{
+                    position: "sticky",
+                    right: 0,
+                    zIndex: 2,
+                    bgcolor: "background.paper",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Lock
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map(row => {
+              {pageRows.map(row => {
                 const target = data?.targets.find(item => item.symbol === row.symbol)
                 const lock = data?.locks.find(item => item.symbol === row.symbol)
                 return (
@@ -714,7 +766,7 @@ export default function MomentumPage() {
                     <TableCell>
                       {row.metrics?.score == null ? "—" : row.metrics.score.toFixed(2)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ maxWidth: 280 }}>
                       {row.filterPass ? (
                         <Chip size="small" color="success" label="pass" />
                       ) : (
@@ -724,7 +776,15 @@ export default function MomentumPage() {
                     <TableCell>
                       {target ? `${target.weightPct.toFixed(1)}% · ${target.targetQty}` : "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell
+                      sx={{
+                        position: "sticky",
+                        right: 0,
+                        zIndex: 1,
+                        bgcolor: "background.paper",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {lock ? (
                         <Button size="small" onClick={() => changeLock(row.symbol, null)}>
                           {lock.mode === "EXCLUDE" ? "Clear exclude" : "Clear hold"}
@@ -764,10 +824,18 @@ export default function MomentumPage() {
             </TableBody>
           </Table>
         </ScrollTable>
+        <TablePagination
+          component="div"
+          count={rows.length}
+          page={rankPage}
+          onPageChange={(_event, next) => setPage(next)}
+          rowsPerPage={50}
+          rowsPerPageOptions={[50]}
+        />
         <Typography variant="caption" color="text.secondary">
-          Showing {rows.length} of {data?.rows.length ?? 0}. Pass the filters is the names that
-          clear every filter. In the order diff is the names with a target weight or a buy or sell.
-          Spec: docs/strategies/MOMENTUM.md
+          {rows.length} match this view, of {data?.rows.length ?? 0} names. Pass the filters is the
+          names that clear every filter. In the order diff is the names with a target weight or a
+          buy or sell.
         </Typography>
       </Stack>
     </Layout>

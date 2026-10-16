@@ -66,6 +66,44 @@ describe("killDesk runDeskKill", () => {
     const { createTestUser } = await import("../support/sessionFactory")
     const result = await runDeskKill("all", createTestUser())
     expect(result.chasePaused).toBe(true)
+    expect(result.liveLeftOpen).toBe(false)
+  })
+
+  it("all scope keeps Chase LONG or SHORT when a live flatten was refused", async () => {
+    const { flattenOpenPositions } = await import("../../lib/flattenOpen")
+    const { LIVE_FLATTEN_MARKET_CLOSED } = await import("../../lib/flattenNotice")
+    const mocked = flattenOpenPositions as jest.Mock
+    mocked.mockResolvedValueOnce({
+      flattened: [],
+      skipped: [{ tradingsymbol: "NIFTY26OCTFUT", reason: LIVE_FLATTEN_MARKET_CLOSED }],
+      abortedJobs: [],
+      chaseReset: [],
+    })
+    const { updateChaseStatus } = await import("../../lib/drizzleDbUtils")
+    const update = updateChaseStatus as jest.Mock
+    update.mockClear()
+    const { runDeskKill } = await import("../../lib/killDesk")
+    const { createTestUser } = await import("../support/sessionFactory")
+    const result = await runDeskKill("all", createTestUser())
+    expect(result.liveLeftOpen).toBe(true)
+    expect(result.chasePaused).toBe(true)
+    expect(update).not.toHaveBeenCalled()
+  })
+})
+
+describe("chaseBooksKeptOpen", () => {
+  it("keeps the open Chase book and still resets a different flat book", async () => {
+    const { chaseBooksKeptOpen } = await import("../../lib/killDesk")
+    const { LIVE_FLATTEN_MARKET_CLOSED } = await import("../../lib/flattenNotice")
+    const kept = chaseBooksKeptOpen(
+      ["NIFTY", "BANKNIFTY", "RELIANCE"],
+      [
+        { tradingsymbol: "NIFTY26OCTFUT", reason: LIVE_FLATTEN_MARKET_CLOSED },
+        { tradingsymbol: "RELIANCE26OCTFUT", reason: LIVE_FLATTEN_MARKET_CLOSED },
+      ],
+      []
+    )
+    expect([...kept].sort()).toEqual(["NIFTY", "RELIANCE"])
   })
 })
 

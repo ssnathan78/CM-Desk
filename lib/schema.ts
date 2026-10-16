@@ -102,6 +102,9 @@ export const jobExecutions = pgTable(
     dayOfWeek: dayOfWeekEnum("day_of_week"),
     trailEveryPercentageChangeValue: smallint("trail_every_percentage_change_value"),
     planRef: text("plan_ref").references(() => tradePlans.id),
+    templateId: text("template_id").references(() => strategyTemplates.id, {
+      onDelete: "set null",
+    }),
     userOverride: text("user_override"),
     liveTrailingSl: numeric("live_trailing_sl"),
     lastTrailingSlSetAt: timestamp("last_trailing_sl_set_at", { withTimezone: true }),
@@ -165,6 +168,68 @@ export const tradePlans = pgTable(
   ]
 )
 
+export const strategyTemplates = pgTable(
+  "strategy_templates",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    strategy: jobExecutionStrategyEnum("strategy").notNull(),
+    instrument: text("instrument").notNull(),
+    expiryType: text("expiry_type").notNull(),
+    productType: text("product_type").notNull(),
+    exitStrategy: text("exit_strategy"),
+    combinedExitStrategy: text("combined_exit_strategy"),
+    runAt: timestamp("run_at", { withTimezone: true }),
+    squareOffTime: timestamp("square_off_time", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    expireIfUnsuccessfulInMins: integer("expire_if_unsuccessful_in_mins"),
+    lots: integer("lots").notNull(),
+    slmPercent: smallint("slm_percent"),
+    slOrderType: text("sl_order_type"),
+    slLimitPricePercent: smallint("sl_limit_price_percent"),
+    maxProfitPoints: smallint("max_profit_points"),
+    isMaxProfitEnabled: boolean("is_max_profit_enabled").default(false),
+    maxLossPoints: smallint("max_loss_points"),
+    isMaxLossEnabled: boolean("is_max_loss_enabled").default(false),
+    thresholdSkewPercent: smallint("threshold_skew_percent"),
+    maxSkewPercent: smallint("max_skew_percent"),
+    takeTradeIrrespectiveSkew: boolean("take_trade_irrespective_skew").default(false),
+    volatilityType: text("volatility_type"),
+    trailEveryPercentageChangeValue: smallint("trail_every_percentage_change_value"),
+    trailingSlPercent: smallint("trailing_sl_percent"),
+    trailingMaxProfitPoints: smallint("trailing_max_profit_points"),
+    trailingMaxLossPoints: smallint("trailing_max_loss_points"),
+    trailingProfitPercent: numeric("trailing_profit_percent"),
+    isAutoSquareOffEnabled: boolean("is_auto_square_off_enabled").default(false),
+    autoSquareOffTime: timestamp("auto_square_off_time", { withTimezone: true }),
+    extras: jsonb("extras").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  table => [
+    uniqueIndex("strategy_templates_name_uidx").on(table.name),
+    index("idx_strategy_templates_strategy").on(table.strategy),
+  ]
+)
+
+export const strategySchedules = pgTable(
+  "strategy_schedules",
+  {
+    id: text("id").primaryKey().default(sql`gen_random_uuid()`),
+    templateId: text("template_id")
+      .notNull()
+      .references(() => strategyTemplates.id),
+    dayOfWeek: dayOfWeekEnum("day_of_week").notNull(),
+    runAt: timestamp("run_at", { withTimezone: true }),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  table => [
+    uniqueIndex("strategy_schedules_template_day_uidx").on(table.templateId, table.dayOfWeek),
+  ]
+)
+
 export const strategyDefaults = pgTable("strategy_defaults", {
   strategy: jobExecutionStrategyEnum("strategy").primaryKey(),
   config: jsonb("config").notNull().default({}),
@@ -176,6 +241,10 @@ export const momentumSettings = pgTable("momentum_settings", {
   config: jsonb("config").notNull().default({}),
   lastDataPullOn: date("last_data_pull_on"),
   lastRebalanceOn: date("last_rebalance_on"),
+  cachedReport: jsonb("cached_report"),
+  cachedAsOf: date("cached_as_of"),
+  cachedAt: timestamp("cached_at", { withTimezone: true }),
+  cachedFingerprint: text("cached_fingerprint"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -239,6 +308,30 @@ export const dailyTrendBooks = pgTable("daily_trend_books", {
   status: text("status").notNull().default("FLAT"),
   stopPrice: numeric("stop_price"),
   entryPrice: numeric("entry_price"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const indexMembership = pgTable(
+  "index_membership",
+  {
+    indexCode: text("index_code").notNull(),
+    tradingsymbol: text("tradingsymbol").notNull(),
+    companyName: text("company_name"),
+    series: text("series").notNull().default("EQ"),
+    asOf: date("as_of").notNull(),
+  },
+  table => [primaryKey({ columns: [table.indexCode, table.tradingsymbol] })]
+)
+
+export const indexMembershipChanges = pgTable("index_membership_changes", {
+  id: serial("id").primaryKey(),
+  indexCode: text("index_code").notNull(),
+  tradingsymbol: text("tradingsymbol").notNull(),
+  companyName: text("company_name"),
+  action: text("action").notNull(),
+  note: text("note").notNull().default(""),
+  status: text("status").notNull().default("PENDING"),
+  detectedOn: date("detected_on").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
 

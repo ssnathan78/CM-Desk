@@ -1,781 +1,167 @@
-import {
-  Box,
-  Button,
-  Paper,
-  Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material"
+import { Alert, Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material"
 import axios from "axios"
 import dayjs from "dayjs"
 import Link from "next/link"
-import { useRouter } from "next/router"
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Layout from "../components/Layout"
-import TradeDetails from "../components/lib/tradeDetails"
-import { useSnackbar } from "../components/lib/useSnackbar"
-import ATMStraddleTradeForm from "../components/trades/atmStraddle/TradeSetupForm"
-import ATMStrangleTradeForm from "../components/trades/atmStrangle/TradeSetupForm"
-import { getSchedulingStateProps } from "../lib/browserUtils"
-import {
-  EXPIRY_TYPE,
-  INSTRUMENTS,
-  PRODUCT_TYPE,
-  STRATEGIES,
-  STRATEGIES_DETAILS,
-} from "../lib/constants"
-import { groupPlansByDay, hydratePlanConfig } from "../lib/planClient"
+import { apiErrorMessage } from "../lib/apiClientError"
+import { STRATEGIES_DETAILS } from "../lib/constants"
+import fetchJson from "../lib/fetchJson"
 import useUser from "../lib/useUser"
-import type { DailyPlansConfig, DailyPlansDayKey } from "../types/misc"
-import type { ATM_STRADDLE_CONFIG, ATM_STRANGLE_CONFIG, AvailablePlansConfig } from "../types/plans"
-import type { SUPPORTED_TRADE_CONFIG } from "../types/trade"
 
-const getDefaultState = (strategy: STRATEGIES): AvailablePlansConfig =>
-  ({
-    ...STRATEGIES_DETAILS[strategy].defaultFormState,
-    ...getSchedulingStateProps(strategy),
-  }) as unknown as AvailablePlansConfig
+const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"]
 
-const resetDefaultStratState = (): Record<STRATEGIES, AvailablePlansConfig> => {
-  return {
-    [STRATEGIES.ATM_STRADDLE]: getDefaultState(STRATEGIES.ATM_STRADDLE),
-    [STRATEGIES.ATM_STRANGLE]: getDefaultState(STRATEGIES.ATM_STRANGLE),
-  } as Record<STRATEGIES, AvailablePlansConfig>
+type Template = {
+  id: string
+  name?: string
+  strategy?: string
+  instrument?: string
+  runAt?: string
+}
+type Schedule = {
+  id: string
+  templateId: string
+  dayOfWeek: string
+  runAt?: string | null
+  enabled: boolean
 }
 
-const DAYS: DailyPlansDayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday"]
-const PLAN_STRATEGIES = [STRATEGIES.ATM_STRADDLE, STRATEGIES.ATM_STRANGLE]
-
-const isPlanStrategy = (value: unknown): value is STRATEGIES =>
-  PLAN_STRATEGIES.includes(value as STRATEGIES)
-
-const PLAN_INDEXES = [
-  INSTRUMENTS.NIFTY,
-  INSTRUMENTS.BANKNIFTY,
-  INSTRUMENTS.FINNIFTY,
-  INSTRUMENTS.MIDCPNIFTY,
-] as const
-
-type EditingSlot = {
-  day: DailyPlansDayKey
-  strategy: STRATEGIES
-  strategyKey?: string
-}
-
-const emptyDayState = (): DailyPlansConfig => ({
-  monday: { heading: "Monday", selectedStrategy: "", strategies: {} },
-  tuesday: { heading: "Tuesday", selectedStrategy: "", strategies: {} },
-  wednesday: { heading: "Wednesday", selectedStrategy: "", strategies: {} },
-  thursday: { heading: "Thursday", selectedStrategy: "", strategies: {} },
-  friday: { heading: "Friday", selectedStrategy: "", strategies: {} },
-})
-
-const Plan = () => {
+export default function PlanPage() {
   useUser({ redirectTo: "/" })
-  const { showMessage, SnackbarAlert } = useSnackbar()
-  const router = useRouter()
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [templateId, setTemplateId] = useState("")
+  const [dayOfWeek, setDayOfWeek] = useState("MONDAY")
+  const [error, setError] = useState<string | null>(null)
 
-  const [dayState, setDayState] = useState<DailyPlansConfig>(emptyDayState)
-  const [editing, setEditing] = useState<EditingSlot | null>(null)
-  const [browse, setBrowse] = useState<"day" | "strategy">("day")
-  const [activeStrategy, setActiveStrategy] = useState<STRATEGIES>(STRATEGIES.ATM_STRADDLE)
-  const [stratState, setStratState] = useState(resetDefaultStratState)
-  const weekday = dayjs().format("dddd").toLowerCase()
-  const [activeDay, setActiveDay] = useState<DailyPlansDayKey>(
-    DAYS.includes(weekday as DailyPlansDayKey) ? (weekday as DailyPlansDayKey) : "monday"
-  )
-
-  const currentEditDay = editing?.day
-  const currentEditStrategy = editing?.strategy
-
-  const handleClose = () => {
-    setEditing(null)
+  async function load() {
+    const data = await fetchJson<{ templates: Template[]; schedules: Schedule[] }>("/api/templates")
+    setTemplates(data.templates || [])
+    setSchedules(data.schedules || [])
   }
 
-  const startAdd = (dayOfWeek: DailyPlansDayKey, selectedStrategy: STRATEGIES) => {
-    const next = resetDefaultStratState()
-    if (selectedStrategy !== STRATEGIES.CHASE) {
-      const used = new Set(
-        Object.values(dayState[dayOfWeek].strategies)
-          .filter(config => config.strategy === selectedStrategy)
-          .map(config => config.instrument)
-      )
-      const free = PLAN_INDEXES.find(index => !used.has(index)) ?? INSTRUMENTS.NIFTY
-      const current = next[selectedStrategy] as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
-      next[selectedStrategy] = {
-        ...current,
-        instruments: Object.fromEntries(
-          PLAN_INDEXES.map(index => [index, index === free])
-        ) as Record<INSTRUMENTS, boolean>,
-        instrument: free,
-      } as AvailablePlansConfig
-    }
-    setStratState(next)
-    setEditing({ day: dayOfWeek, strategy: selectedStrategy })
-  }
-
-  const stratOnChangeHandler = (
-    changedProps: Partial<AvailablePlansConfig>,
-    strategy: STRATEGIES
-  ) => {
-    if ("instruments" in changedProps && changedProps.instruments != null) {
-      setStratState({
-        ...stratState,
-        [strategy]: {
-          ...stratState[strategy],
-          instruments: {
-            ...(stratState[strategy] as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG).instruments,
-            ...(changedProps as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG).instruments,
-          },
-        },
-      })
-    } else {
-      setStratState({
-        ...stratState,
-        [strategy]: {
-          ...stratState[strategy],
-          ...changedProps,
-        },
-      })
-    }
-  }
-
-  const commonOnCancelHandler = () => {
-    handleClose()
-  }
-
-  const cleanupForRemoteSync = (props: AvailablePlansConfig) => {
-    const {
-      instruments: _instruments,
-      disableInstrumentChange: _disable,
-      lotsByInstrument: _lotsByInstrument,
-      ...rest
-    } = props as AvailablePlansConfig & {
-      instruments?: unknown
-      disableInstrumentChange?: unknown
-      lotsByInstrument?: unknown
-    }
-    return rest as AvailablePlansConfig
-  }
-
-  const commonOnSubmitHandler = async (
-    formattedStateForApiProps: AvailablePlansConfig
-  ): Promise<any> => {
-    try {
-      const selectedConfig = stratState[currentEditStrategy!]
-
-      if (currentEditStrategy === STRATEGIES.CHASE) {
-        const chaseConfig = cleanupForRemoteSync({
-          ...selectedConfig,
-          strategy: STRATEGIES.CHASE,
-          name: "Chase",
-          instrument: INSTRUMENTS.NIFTY,
-          expiryType: EXPIRY_TYPE.CURRENT,
-          productType: PRODUCT_TYPE.NRML,
-        } as any)
-
-        let chaseUpdatedConfig: Record<string, unknown>
-        if (selectedConfig.id) {
-          await axios.put("/api/plan", {
-            id: selectedConfig.id,
-            dayOfWeek: currentEditDay?.toUpperCase(),
-            config: chaseConfig,
-          })
-          chaseUpdatedConfig = { [selectedConfig.id]: { ...chaseConfig, id: selectedConfig.id } }
-        } else {
-          const { data: newConfig } = await axios.post("/api/plan", {
-            dayOfWeek: currentEditDay?.toUpperCase(),
-            config: [chaseConfig],
-          })
-          chaseUpdatedConfig = { [newConfig.id]: newConfig }
-        }
-
-        setDayState({
-          ...dayState,
-          [currentEditDay as string]: {
-            ...dayState[currentEditDay!],
-            strategies: {
-              ...dayState[currentEditDay!].strategies,
-              ...chaseUpdatedConfig,
-            },
-          },
-        })
-        handleClose()
-        return
-      }
-
-      let updatedConfig: Record<string, unknown>
-      if (selectedConfig.id) {
-        await axios.put("/api/plan", {
-          id: selectedConfig.id,
-          dayOfWeek: currentEditDay?.toUpperCase(),
-          config: cleanupForRemoteSync({
-            ...selectedConfig,
-            ...formattedStateForApiProps,
-          } as AvailablePlansConfig),
-        })
-
-        updatedConfig = { [selectedConfig.id]: selectedConfig }
-      } else {
-        const straddleOrStrangleConfig = selectedConfig as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
-        const config = Object.keys(straddleOrStrangleConfig.instruments)
-          .filter(instrument => straddleOrStrangleConfig.instruments[instrument])
-          .map(
-            (instrument): AvailablePlansConfig => ({
-              ...selectedConfig,
-              ...formattedStateForApiProps,
-              lots:
-                straddleOrStrangleConfig.lotsByInstrument?.[instrument as INSTRUMENTS] ??
-                selectedConfig.lots,
-              instrument: instrument as INSTRUMENTS,
-              strategy: currentEditStrategy as any,
-            })
-          )
-          .map(cleanupForRemoteSync)
-
-        if (config.length === 0) {
-          showMessage("Pick an index before saving.", "info")
-          return
-        }
-
-        const { data: newStrategyConfig } = await axios.post("/api/plan", {
-          dayOfWeek: currentEditDay?.toUpperCase(),
-          config,
-        })
-        const created = Array.isArray(newStrategyConfig) ? newStrategyConfig : [newStrategyConfig]
-        updatedConfig = Object.fromEntries(created.map((row: { id: string }) => [row.id, row]))
-      }
-
-      setDayState({
-        ...dayState,
-        [currentEditDay as string]: {
-          ...dayState[currentEditDay!],
-          strategies: {
-            ...dayState[currentEditDay!].strategies,
-            ...updatedConfig,
-          },
-        },
-      })
-      handleClose()
-    } catch (err: any) {
-      showMessage(err?.response?.data?.error || err.message || "Could not save template", "error")
-    }
-  }
-
-  const handleEditStrategyConfig = ({
-    dayOfWeek,
-    strategyKey,
-  }: {
-    dayOfWeek: DailyPlansDayKey
-    strategyKey: string
-  }) => {
-    const stratConfig = dayState[dayOfWeek].strategies[strategyKey]
-    const { strategy } = stratConfig
-
-    if (strategy === STRATEGIES.CHASE) {
-      setStratState({
-        ...stratState,
-        [strategy]: {
-          ...STRATEGIES_DETAILS[strategy].defaultFormState,
-          ...stratConfig,
-        },
-      })
-    } else {
-      setStratState({
-        ...stratState,
-        [strategy]: {
-          ...STRATEGIES_DETAILS[strategy].defaultFormState,
-          ...stratConfig,
-          instruments: { [stratConfig.instrument]: true } as Record<INSTRUMENTS, boolean>,
-          disableInstrumentChange: true,
-        },
-      })
-    }
-
-    setEditing({ day: dayOfWeek, strategy, strategyKey })
-  }
-
-  const handleDeleteStrategyConfig = async ({
-    dayOfWeek,
-    strategyKey,
-  }: {
-    dayOfWeek: DailyPlansDayKey
-    strategyKey: string
-  }) => {
-    const stratConfig = dayState[dayOfWeek].strategies[strategyKey]
-    try {
-      await axios.delete("/api/plan", {
-        data: {
-          dayOfWeek: dayOfWeek.toUpperCase(),
-          config: stratConfig,
-        },
-      })
-    } catch (err: any) {
-      showMessage(err?.response?.data?.error || err.message || "Could not delete template", "error")
-      return
-    }
-
-    if (editing?.strategyKey === strategyKey) {
-      handleClose()
-    }
-
-    setDayState({
-      ...dayState,
-      [dayOfWeek]: {
-        ...dayState[dayOfWeek],
-        strategies: Object.keys(dayState[dayOfWeek].strategies)
-          .filter(key => key !== strategyKey)
-          .reduce(
-            (accum, key) => ({
-              ...accum,
-              [key]: dayState[dayOfWeek].strategies[key],
-            }),
-            {}
-          ),
-      },
-    })
-    showMessage("Template deleted.", "success")
-  }
-
-  const reloadPlans = async () => {
-    const { data } = await axios("/api/plan")
-    setDayState(groupPlansByDay(data, emptyDayState()))
-  }
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: load weekday plans once on mount
   useEffect(() => {
-    reloadPlans().catch(() => undefined)
+    fetchJson<{ templates: Template[]; schedules: Schedule[] }>("/api/templates")
+      .then(data => {
+        setTemplates(data.templates || [])
+        setSchedules(data.schedules || [])
+      })
+      .catch(e => setError(apiErrorMessage(e, "Could not load schedules")))
   }, [])
 
-  useEffect(() => {
-    if (!router.isReady) return
-    const browseQuery = router.query.browse
-    const strategyQuery = router.query.strategy
-    if (browseQuery === "strategy") {
-      setBrowse("strategy")
-    }
-    if (isPlanStrategy(strategyQuery)) {
-      setActiveStrategy(strategyQuery)
-      if (browseQuery === "strategy") {
-        setBrowse("strategy")
-      }
-    }
-  }, [router.isReady, router.query.browse, router.query.strategy])
-
-  const syncUrl = (mode: "day" | "strategy", strategy: STRATEGIES) => {
-    if (mode === "day") {
-      void router.replace("/plan", undefined, { shallow: true })
-      return
-    }
-    void router.replace({ pathname: "/plan", query: { browse: "strategy", strategy } }, undefined, {
-      shallow: true,
-    })
-  }
-
-  const configsFor = (dayOfWeek: DailyPlansDayKey, strategy: STRATEGIES) =>
-    Object.entries(dayState[dayOfWeek].strategies).filter(
-      ([, config]) => config.strategy === strategy
-    )
-
-  const isAdding = (dayOfWeek: DailyPlansDayKey, strategy: STRATEGIES) =>
-    Boolean(
-      editing && !editing.strategyKey && editing.day === dayOfWeek && editing.strategy === strategy
-    )
-
-  const applyDefaultsToForm = async (strategy: STRATEGIES, keepId?: string) => {
-    const { data } = await axios.get("/api/strategy-defaults", { params: { strategy } })
-    const merged = {
-      ...getDefaultState(strategy),
-      ...data.config,
-      id: keepId,
-    } as AvailablePlansConfig
-    if (strategy !== STRATEGIES.CHASE) {
-      const row = merged as ATM_STRADDLE_CONFIG | ATM_STRANGLE_CONFIG
-      const emptyIndexes = Object.fromEntries(PLAN_INDEXES.map(index => [index, false])) as Record<
-        INSTRUMENTS,
-        boolean
-      >
-      const fromConfig = row.instrument
-        ? ({ [row.instrument]: true } as Record<INSTRUMENTS, boolean>)
-        : { ...emptyIndexes, [INSTRUMENTS.NIFTY]: true }
-      setStratState({
-        ...stratState,
-        [strategy]: { ...row, instruments: { ...emptyIndexes, ...fromConfig } },
-      })
-      return
-    }
-    setStratState({ ...stratState, [strategy]: merged })
-  }
-
-  const handleSaveAsDefaults = async (strategy: STRATEGIES) => {
-    try {
-      const raw = stratState[strategy]
-      const config = strategy === STRATEGIES.CHASE ? raw : cleanupForRemoteSync(raw)
-      await axios.put("/api/strategy-defaults", { strategy, config })
-      showMessage("Saved as master defaults for this strategy.", "success")
-    } catch (err: any) {
-      showMessage(err?.response?.data?.error || err.message || "Could not save defaults", "error")
-    }
-  }
-
-  const handleResetSaved = async (
-    dayOfWeek: DailyPlansDayKey,
-    strategy: STRATEGIES,
-    strategyKey: string
-  ) => {
-    if (!window.confirm("Replace this weekday template with the master defaults?")) return
-    const existing = dayState[dayOfWeek].strategies[strategyKey]
-    let data: { config: Record<string, unknown> }
-    try {
-      const response = await axios.get("/api/strategy-defaults", { params: { strategy } })
-      data = response.data
-    } catch (err: any) {
-      showMessage(err?.response?.data?.error || err.message || "Could not reset template", "error")
-      return
-    }
-    const config = cleanupForRemoteSync({
-      ...getDefaultState(strategy),
-      ...data.config,
-      id: existing.id,
-      name: (data.config.name as string) || existing.name,
-      instrument:
-        existing && "instrument" in existing && existing.instrument
-          ? existing.instrument
-          : INSTRUMENTS.NIFTY,
-      strategy,
-      expiryType: EXPIRY_TYPE.CURRENT,
-      productType: strategy === STRATEGIES.CHASE ? PRODUCT_TYPE.NRML : PRODUCT_TYPE.MIS,
-    } as AvailablePlansConfig)
-    try {
-      await axios.put("/api/plan", {
-        id: existing.id,
-        dayOfWeek: dayOfWeek.toUpperCase(),
-        config,
-      })
-      await reloadPlans()
-      handleClose()
-      showMessage("Template reset to the master defaults.", "success")
-    } catch (err: any) {
-      showMessage(err?.response?.data?.error || err.message || "Could not reset template", "error")
-    }
-  }
-
-  const handleCopyToOtherDays = async (
-    dayOfWeek: DailyPlansDayKey,
-    strategy: STRATEGIES,
-    strategyKey: string
-  ) => {
-    if (!window.confirm("Overwrite the other weekdays with this saved template?")) return
-    const existing = dayState[dayOfWeek].strategies[strategyKey]
-    try {
-      await axios.post("/api/plan/copy", {
-        dayOfWeek: dayOfWeek.toUpperCase(),
-        strategy,
-        id: existing.id,
-      })
-      await reloadPlans()
-      showMessage("Copied to the other weekdays.", "success")
-    } catch (err: any) {
-      showMessage(err?.response?.data?.error || err.message || "Could not copy template", "error")
-    }
-  }
-
-  const renderChaseForm = (dayOfWeek: DailyPlansDayKey) => (
-    <Box sx={{ mt: 1 }}>
-      <Typography variant="subtitle2" sx={{ mb: 2 }}>
-        Chase · {dayState[dayOfWeek].heading}
+  return (
+    <Layout>
+      <Typography variant="h5" sx={{ mb: 1 }}>
+        Schedules
       </Typography>
-      <TextField
-        label="Lots"
-        size="small"
-        type="text"
-        inputMode="numeric"
-        slotProps={{ htmlInput: { pattern: "[0-9]*" } }}
-        value={
-          (stratState[STRATEGIES.CHASE] as any)?.lots
-            ? String((stratState[STRATEGIES.CHASE] as any).lots)
-            : ""
-        }
-        onChange={e => {
-          const raw = e.target.value.replace(/[^0-9]/g, "")
-          stratOnChangeHandler(
-            { lots: raw === "" ? 0 : parseInt(raw, 10) } as any,
-            STRATEGIES.CHASE
-          )
-        }}
-        onBlur={() => {
-          const current = (stratState[STRATEGIES.CHASE] as any)?.lots ?? 0
-          if (current < 1) stratOnChangeHandler({ lots: 1 } as any, STRATEGIES.CHASE)
-        }}
-        sx={{ mb: 2, maxWidth: 200 }}
-      />
-      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
-        <Button
-          variant="contained"
-          onClick={() => commonOnSubmitHandler(stratState[STRATEGIES.CHASE]!)}
-        >
-          Save
-        </Button>
-        <Button
-          onClick={() => applyDefaultsToForm(STRATEGIES.CHASE, stratState[STRATEGIES.CHASE]?.id)}
-        >
-          Reset to default
-        </Button>
-        <Button onClick={() => handleSaveAsDefaults(STRATEGIES.CHASE)}>Save as defaults</Button>
-        <Button onClick={commonOnCancelHandler}>Cancel</Button>
-      </Stack>
-    </Box>
-  )
-
-  const renderStrategyForm = (dayOfWeek: DailyPlansDayKey, strategy: STRATEGIES) => {
-    const heading = `${STRATEGIES_DETAILS[strategy].heading} · ${dayState[dayOfWeek].heading}`
-    const toolbar =
-      strategy === STRATEGIES.CHASE ? null : (
-        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
-          <Button
+      <Typography color="text.secondary" sx={{ mb: 2 }}>
+        A schedule is a weekday clock on a template. Editing the template does not change a job that
+        already fired.
+      </Typography>
+      {error ? (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      ) : null}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+          <TextField
+            select
+            label="Template"
+            value={templateId}
+            onChange={e => setTemplateId(e.target.value)}
             size="small"
-            onClick={() => applyDefaultsToForm(strategy, stratState[strategy]?.id)}
+            sx={{ minWidth: 220 }}
           >
-            Reset to default
+            {templates.map(row => (
+              <MenuItem key={row.id} value={row.id}>
+                {row.name} · {row.instrument}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            label="Weekday"
+            value={dayOfWeek}
+            onChange={e => setDayOfWeek(e.target.value)}
+            size="small"
+          >
+            {DAYS.map(day => (
+              <MenuItem key={day} value={day}>
+                {day}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button
+            variant="contained"
+            disabled={!templateId}
+            onClick={async () => {
+              setError(null)
+              try {
+                const template = templates.find(row => row.id === templateId)
+                await axios.post("/api/schedules", {
+                  templateId,
+                  dayOfWeek,
+                  runAt: template?.runAt,
+                  enabled: true,
+                })
+                await load()
+              } catch (e) {
+                setError(apiErrorMessage(e, "Could not save schedule"))
+              }
+            }}
+          >
+            Attach
           </Button>
-          <Button size="small" onClick={() => handleSaveAsDefaults(strategy)}>
-            Save as defaults
-          </Button>
-        </Stack>
-      )
-    if (strategy === STRATEGIES.CHASE) {
-      return renderChaseForm(dayOfWeek)
-    }
-    if (strategy === STRATEGIES.ATM_STRADDLE) {
-      return (
-        <Box>
-          {toolbar}
-          <ATMStraddleTradeForm
-            embedded
-            formHeading={heading}
-            state={stratState[STRATEGIES.ATM_STRADDLE] as ATM_STRADDLE_CONFIG}
-            onChange={changedProps => stratOnChangeHandler(changedProps, STRATEGIES.ATM_STRADDLE)}
-            onSubmit={commonOnSubmitHandler}
-            onCancel={commonOnCancelHandler}
-            isRunnable={false}
-            strategy={STRATEGIES.ATM_STRADDLE}
-          />
-        </Box>
-      )
-    }
-    return (
-      <Box>
-        {toolbar}
-        <ATMStrangleTradeForm
-          embedded
-          formHeading={heading}
-          state={stratState[STRATEGIES.ATM_STRANGLE] as ATM_STRANGLE_CONFIG}
-          onChange={changedProps => stratOnChangeHandler(changedProps, STRATEGIES.ATM_STRANGLE)}
-          onSubmit={commonOnSubmitHandler}
-          onCancel={commonOnCancelHandler}
-          isRunnable={false}
-          strategy={STRATEGIES.ATM_STRANGLE}
-        />
-      </Box>
-    )
-  }
-
-  const renderStrategyBlock = (dayOfWeek: DailyPlansDayKey, strategy: STRATEGIES) => {
-    const rows = configsFor(dayOfWeek, strategy)
-    const adding = isAdding(dayOfWeek, strategy)
-    const title =
-      browse === "day" ? STRATEGIES_DETAILS[strategy].heading : dayState[dayOfWeek].heading
-
-    return (
-      <Paper key={`${dayOfWeek}_${strategy}`} sx={{ p: { xs: 2, sm: 2.5 }, mb: 2 }}>
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={1}
-          sx={{ mb: 1.5, alignItems: { sm: "center" }, justifyContent: "space-between" }}
-        >
-          <Box>
-            <Typography variant="h6">{title}</Typography>
-            <Typography variant="caption" color="text.secondary">
-              One weekday template per index. Name is only a label.
-            </Typography>
-          </Box>
-          {rows.length < PLAN_INDEXES.length ? (
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => startAdd(dayOfWeek, strategy)}
-              disabled={adding}
-            >
-              Add configuration
-            </Button>
-          ) : null}
-        </Stack>
-
-        {rows.length > PLAN_INDEXES.length ? (
-          <Typography color="warning.main" variant="body2" sx={{ mb: 1 }}>
-            Extra rows are saved for this weekday. Keep one per index and delete the extras.
-          </Typography>
-        ) : null}
-
-        {rows.length === 0 && !adding ? (
-          <Typography color="text.secondary" variant="body2">
-            Nothing saved here yet.
-          </Typography>
-        ) : null}
-
-        <Stack spacing={2}>
-          {rows.map(([strategyKey, config]) => {
-            const isThisEdit = editing?.strategyKey === strategyKey
-            if (isThisEdit) {
-              return <Box key={strategyKey}>{renderStrategyForm(dayOfWeek, strategy)}</Box>
-            }
-            return (
-              <Paper key={strategyKey} variant="outlined" sx={{ p: 2 }}>
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  spacing={1}
-                  sx={{ mb: 1, justifyContent: "space-between", alignItems: { sm: "flex-start" } }}
-                >
-                  <Typography variant="subtitle1">
-                    {config.name || STRATEGIES_DETAILS[strategy].heading}
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-                    <Button
-                      size="small"
-                      onClick={() => handleEditStrategyConfig({ dayOfWeek, strategyKey })}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="small"
-                      onClick={() => handleCopyToOtherDays(dayOfWeek, strategy, strategyKey)}
-                    >
-                      Copy to other days
-                    </Button>
-                    <Button
-                      size="small"
-                      onClick={() => handleResetSaved(dayOfWeek, strategy, strategyKey)}
-                    >
-                      Reset to default
-                    </Button>
-                    <Button
-                      size="small"
-                      color="error"
-                      onClick={() => handleDeleteStrategyConfig({ dayOfWeek, strategyKey })}
-                    >
-                      Delete
-                    </Button>
-                  </Stack>
-                </Stack>
-                <TradeDetails
-                  strategy={strategy}
-                  tradeDetails={config as unknown as SUPPORTED_TRADE_CONFIG}
-                />
-              </Paper>
-            )
-          })}
-          {adding ? renderStrategyForm(dayOfWeek, strategy) : null}
         </Stack>
       </Paper>
-    )
-  }
-
-  return (
-    <Layout title="Plan" maxWidth="xl">
-      {SnackbarAlert}
-      <Typography variant="h5" component="h1">
-        Weekday templates
-      </Typography>
-      <Typography color="text.secondary" sx={{ mb: 1, mt: 0.5 }}>
-        Weekday templates for straddle and strangle only. Chase has its own plan (one config, pause
-        and resume).
-      </Typography>
-      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
-        <Button component={Link} href="/help/plan" size="small">
-          Plan guide
-        </Button>
-        <Button component={Link} href="/chase" size="small">
-          Chase plan
-        </Button>
-      </Stack>
-
-      <ToggleButtonGroup
-        exclusive
-        value={browse}
-        onChange={(_e, next: "day" | "strategy" | null) => {
-          if (!next) return
-          setBrowse(next)
-          setEditing(null)
-          syncUrl(next, activeStrategy)
-        }}
-        sx={{ mb: 2, flexWrap: "wrap" }}
-      >
-        <ToggleButton value="day">By day</ToggleButton>
-        <ToggleButton value="strategy">By strategy</ToggleButton>
-      </ToggleButtonGroup>
-
-      {browse === "day" ? (
-        <>
-          <ToggleButtonGroup
-            exclusive
-            value={activeDay}
-            onChange={(_e, next) => {
-              if (!next) return
-              setActiveDay(next)
-              setEditing(null)
-            }}
-            sx={{ mb: 3, flexWrap: "wrap" }}
-          >
-            {DAYS.map(dayOfWeek => {
-              const count = Object.keys(dayState[dayOfWeek].strategies).length
-              return (
-                <ToggleButton key={dayOfWeek} value={dayOfWeek} sx={{ px: 2 }}>
-                  {dayState[dayOfWeek].heading}
-                  {count ? ` · ${count}` : ""}
-                </ToggleButton>
-              )
-            })}
-          </ToggleButtonGroup>
-
-          <Typography variant="overline" color="text.secondary">
-            Intraday · same session
-          </Typography>
-          <Typography variant="overline" color="text.secondary">
-            Intraday · straddle and strangle
-          </Typography>
-          {PLAN_STRATEGIES.map(strategy => renderStrategyBlock(activeDay, strategy))}
-        </>
-      ) : (
-        <>
-          <ToggleButtonGroup
-            exclusive
-            value={activeStrategy}
-            onChange={(_e, next: STRATEGIES | null) => {
-              if (!next) return
-              setActiveStrategy(next)
-              setEditing(null)
-              syncUrl("strategy", next)
-            }}
-            sx={{ mb: 3, flexWrap: "wrap" }}
-          >
-            {PLAN_STRATEGIES.map(strategy => (
-              <ToggleButton key={strategy} value={strategy} sx={{ px: 2 }}>
-                {STRATEGIES_DETAILS[strategy].heading}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            One weekday template per strategy. Chase is not here — open Chase plan. Use Copy to
-            other days after you save.
-          </Typography>
-          {DAYS.map(dayOfWeek => renderStrategyBlock(dayOfWeek, activeStrategy))}
-        </>
-      )}
+      {DAYS.map(day => {
+        const rows = schedules.filter(row => row.dayOfWeek === day)
+        return (
+          <Paper key={day} sx={{ p: 2, mb: 1 }}>
+            <Typography variant="subtitle1">{day}</Typography>
+            {rows.length === 0 ? (
+              <Typography color="text.secondary">Nothing scheduled.</Typography>
+            ) : (
+              rows.map(row => {
+                const template = templates.find(item => item.id === row.templateId)
+                const heading = template?.strategy
+                  ? STRATEGIES_DETAILS[template.strategy]?.heading
+                  : ""
+                return (
+                  <Stack
+                    key={row.id}
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: "center", mt: 1 }}
+                  >
+                    <Typography sx={{ flex: 1 }}>
+                      {template?.name || row.templateId}
+                      {heading ? ` · ${heading}` : ""}
+                      {template?.instrument ? ` · ${template.instrument}` : ""}
+                      {row.runAt ? ` · ${dayjs(row.runAt).format("HH:mm")}` : ""}
+                      {row.enabled ? "" : " · paused"}
+                    </Typography>
+                    <Button component={Link} href={`/templates?id=${row.templateId}`} size="small">
+                      Template
+                    </Button>
+                    <Button
+                      size="small"
+                      color="warning"
+                      onClick={async () => {
+                        await axios.delete("/api/schedules", { data: { id: row.id } })
+                        await load()
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </Stack>
+                )
+              })
+            )}
+          </Paper>
+        )
+      })}
     </Layout>
   )
 }
-
-export default Plan
-export { getServerSideProps } from "../lib/ssrPage"

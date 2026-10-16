@@ -8,14 +8,14 @@ test.describe("Adversarial flows", () => {
   })
 
   test("browser back from straddle returns to prior page", async ({ page }) => {
-    await page.goto("/dashboard")
+    await page.goto("/desk")
     await page.goto("/strat/straddle")
     await page.goBack()
-    await expect(page).toHaveURL(/dashboard/)
+    await expect(page).toHaveURL(/desk/)
   })
 
-  test("refresh on dashboard keeps session", async ({ page }) => {
-    await page.goto("/dashboard")
+  test("refresh on desk keeps session", async ({ page }) => {
+    await page.goto("/desk")
     await page.reload()
     await expect(page.getByText(/today/i).first()).toBeVisible()
   })

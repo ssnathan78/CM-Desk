@@ -35,16 +35,17 @@ If you run only `next start`, you lose that glue.
 | Route | File | Purpose |
 |-------|------|---------|
 | `/` | `pages/index.js` | Login landing |
-| `/dashboard` | `pages/dashboard.js` | Today's jobs, new trade links, weekday plan runner |
-| `/plan` | `pages/plan.tsx` | Weekday straddle/strangle templates |
+| `/dashboard` | `pages/dashboard.js` | Redirects to `/desk` |
+| `/desk` | `pages/desk.tsx` | Home. Opens on Positions. Today shows jobs and due schedules |
+| `/plan` | `pages/plan.tsx` | Weekday clocks for Straddle and Strangle templates |
+| `/templates` | `pages/templates.tsx` | Named Straddle and Strangle templates |
 | `/chase` | `pages/chase.tsx` | Single Chase config (not weekday-based) |
 | `/momentum` | `pages/momentum.tsx` | Cash momentum rank and rebalance |
 | `/daily-trend` | `pages/daily-trend.tsx` | Long-only cash trend on daily candles |
-| `/strat/straddle` | `pages/strat/[strategy].js` | Punch-now ATM straddle |
-| `/strat/strangle` | `pages/strat/[strategy].js` | Punch-now ATM strangle |
+| `/strat/straddle` | `pages/strat/[strategy].tsx` | Redirects to Templates filtered to Straddle |
+| `/strat/strangle` | `pages/strat/[strategy].tsx` | Redirects to Templates filtered to Strangle |
 | `/profile` | `pages/profile.tsx` | Read-only broker profile |
-| `/help`, `/help/[topic]` | `pages/help/*` | In-app guides |
-| `/desk` | `pages/desk.tsx` | Ledger + risk halt/resume |
+| `/help`, `/help/[topic]` | `pages/help/*` | In-app guides, including Daily trend |
 | `/queues` | Express (`server.js`) | Bull Board (session required) |
 
 ## Authentication
@@ -57,11 +58,11 @@ If you run only `next start`, you lose that glue.
 
 ### Login flow
 
-1. `GET /api/login` → Kite OAuth or `/dashboard` if session exists
+1. `GET /api/login` → Kite OAuth or `/desk` if session exists
 2. Kite → `/api/redirect_url_kite?request_token=...`
 3. `generateSession` → encrypted cookie (small payload; token not exposed on `/api/user`)
 4. First token of IST day → `accesstoken` row + ancillary/chase/square-off scheduling (failures must not block login)
-5. Redirect `/dashboard`
+5. Redirect `/desk`
 
 ## API catalog
 
@@ -132,7 +133,7 @@ Workers: `lib/queue-processor/`. Stale jobs (scheduled date ≠ today) are disca
 |---------|------|
 | `slmWatcher` | Re-exit if exchange cancels SL-M |
 | `sllWatcher` | Convert stuck SL-L to market after 30s |
-| Cash scheduler | `lib/momentum/scheduler.ts`. In-process, not a BullMQ queue. First pass 20s after boot, then every hour. Pulls NSE day candles at most once per IST day, then evaluates momentum (rebalance day only) and daily trend (same stored day bar). |
+| Cash scheduler | `lib/momentum/scheduler.ts`. In-process, not a BullMQ queue. First pass 20s after boot, then every hour. Pulls NSE day candles at most once per IST day, then evaluates momentum (rebalance day only) and daily trend (same stored day bar). When momentum is on, that pass stores a fresh rank for the page. When the index snapshot is 7 days old, it refreshes Nifty 100 and Nifty Total Market membership. |
 
 ## Database
 
@@ -140,13 +141,17 @@ Postgres via Drizzle (`lib/schema.ts`). Migrations in `drizzle/`.
 
 | Table | Purpose |
 |-------|---------|
-| `trade_plans` | Weekday templates; unique `(day_of_week, strategy, instrument)` |
+| `trade_plans` | Previous weekday rows. Still in the database. New saves go to `strategy_templates` |
+| `strategy_templates` | Named Straddle or Strangle config. No weekday. Unique name |
+| `strategy_schedules` | Template plus weekday clock. Unique on template and weekday |
 | `chase_settings` | One Chase book per index (`instrument` PK) |
 | `strategy_defaults` | Master JSON per strategy |
 | `job_executions` | Scheduled/live jobs (audit; not daily-deleted) |
 | `transactions` | Completed orders (`order_id` unique) |
-| `momentum_settings` | One momentum config row, last pull day, last rebalance day |
+| `momentum_settings` | One momentum config row, last pull day, last rebalance day, stored rank (`cached_report`) |
 | `momentum_universe` | Stored NSE symbols for the rank |
+| `index_membership` | Latest Nifty 100 and Nifty Total Market snapshot |
+| `index_membership_changes` | Pending constituent adds and removals. Accept all and Dismiss all settle one side. A Total Market name on the rank list but missing from the snapshot is queued once; a dismissed row is not queued again. |
 | `momentum_weight_locks` | Hold-weight or exclude for one symbol |
 | `equity_daily_bars` | Day candles, primary key `(tradingsymbol, session_date)` |
 | `daily_trend_settings` | One daily-trend runtime row and last pull day |

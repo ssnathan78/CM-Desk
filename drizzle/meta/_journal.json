@@ -176,6 +176,20 @@
       "when": 1756980000024,
       "tag": "0023_position_strategy_book",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1756980000025,
+      "tag": "0024_momentum_cache_and_membership",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1756980000026,
+      "tag": "0025_strategy_templates",
+      "breakpoints": true
     }
   ]
 }

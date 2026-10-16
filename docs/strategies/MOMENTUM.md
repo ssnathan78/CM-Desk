@@ -16,7 +16,11 @@ Capital INR is rupees for the whole book. With equal weight, share count is that
 
 Hold on a row, in equal weight, keeps that name at its current weight and does not buy it back up to an equal slice. Exclude sells the open quantity and does not buy the name again. The row changes at once and shows Clear hold or Clear exclude. The rank runs once after the clicks stop.
 
-Save writes the form. Pull history now writes the same form and starts the download. Preview orders and Send rebalance use the last saved settings. The symbol filter, sort, and Show menu are only for this visit.
+Save writes the form. Pull history now writes the same form and starts the download. The page shows the stored rank. It rebuilds when the IST date, config, locks, holdings, or universe change, and when you press Preview. Send, deploy, and trim rebuild before an order is placed. The hourly pass stores a fresh rank while the strategy is on. The symbol filter, sort, and Show menu are only for this visit.
+
+Save, Pull history, Preview, and Send sit on one row under the switches. Drift cash (deploy and trim) stays folded, and only when weights are let winners run.
+
+Constituents, on this page, is the Nifty Total Market file from niftyindices.com (`ind_niftytotalmarket_list.csv`). Constituent adds and drops are on Desk → Lists, not on this page. A weekly check (or Refresh constituents) writes a diff. Names already on the rank list but absent from the stored file are queued as drops the first time the page loads after a snapshot exists. A dismissed drop is not asked again. Accept all adds puts those names into `momentum_universe` and does not buy. Accept all drops removes them from that list and does not sell now. The next rebalance sells the open quantity if the name is gone. Dismiss leaves the list alone. An empty download does not replace the snapshot. A failed download keeps the bundled copy for the first seed only. Refresh does not overwrite a stored file with that copy, and it does not put accepted names back on the list. The CSV in `data/universe/` is the bootstrap when the download fails. Planned orders are one line above the rank table. The table pages 50 names at a time so Hold and Exclude stay on the row.
 
 In the order diff lists the target book plus any name that is only being sold. One extra row means a name is leaving so the book can return to Holdings. It is not an extra holding.
 
@@ -95,7 +99,7 @@ A held name that fails a filter (`exitWhenFilterBreaks`, default on), falls past
 | Button | What it does |
 |---|---|
 | **Save** | Writes the switches on this page. Strategy on here is not Desk → Risk. |
-| **Pull history now** | Saves the switches, starts the momentum-universe download, and returns immediately. A bar shows which name is in progress. Leaving the page does not stop the download. The bar is shown again when you come back. It needs Strategy on. Desk → Risk does not start this pull. |
+| **Pull history now** | Saves the switches, starts the momentum-universe download, and returns immediately. The bar names Momentum and the count is this list. Daily trend does not show that bar. One download runs at a time. Leaving the page does not stop the download. The bar is shown again when you come back. It needs Strategy on. Desk → Risk does not start this pull. |
 | **Preview orders** | Rebuilds the buy and sell diff from the stored candles and sends nothing. |
 | **Send rebalance** | Sends that diff. Disabled while execution is Report only. Manual sends on click. Auto also sends on the rebalance day without this click. |
 | **Preview deploy** / **Deploy spare cash** | Shown when Weights is Let winners run. Splits spare cash in equal rupees across today's book. Sends only after you confirm, and only when execution is Manual or Auto. |

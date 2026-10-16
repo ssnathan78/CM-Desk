@@ -101,6 +101,40 @@ export async function markMomentumRebalance(day: string): Promise<void> {
     .where(eq(momentumSettings.id, 1))
 }
 
+export async function readMomentumReportCache(): Promise<{
+  fingerprint: string
+  report: Record<string, unknown>
+  computedAt: string | null
+  asOf: string | null
+} | null> {
+  const [row] = await db.select().from(momentumSettings).where(eq(momentumSettings.id, 1)).limit(1)
+  if (!row?.cachedFingerprint || !row.cachedReport || typeof row.cachedReport !== "object") {
+    return null
+  }
+  return {
+    fingerprint: row.cachedFingerprint,
+    report: row.cachedReport as Record<string, unknown>,
+    computedAt: row.cachedAt ? row.cachedAt.toISOString() : null,
+    asOf: asDate(row.cachedAsOf),
+  }
+}
+
+export async function saveMomentumReportCache(input: {
+  fingerprint: string
+  report: Record<string, unknown>
+  asOf: string
+}): Promise<void> {
+  await db
+    .update(momentumSettings)
+    .set({
+      cachedFingerprint: input.fingerprint,
+      cachedReport: input.report,
+      cachedAsOf: input.asOf,
+      cachedAt: new Date(),
+    })
+    .where(eq(momentumSettings.id, 1))
+}
+
 export async function listUniverse(): Promise<{ symbol: string; name: string; series: string }[]> {
   const rows = await db.select().from(momentumUniverse)
   const bundled = loadBundledUniverse()
@@ -154,6 +188,34 @@ export async function replaceUniverse(
     }))
   )
   return rows.length
+}
+
+export async function addUniverseRows(
+  rows: { symbol: string; name?: string; series?: string }[]
+): Promise<void> {
+  if (!rows.length) return
+  await db
+    .insert(momentumUniverse)
+    .values(
+      rows.map(row => ({
+        tradingsymbol: row.symbol.toUpperCase(),
+        companyName: row.name ?? row.symbol,
+        series: row.series ?? "EQ",
+      }))
+    )
+    .onConflictDoNothing()
+}
+
+export async function removeUniverseSymbol(symbol: string): Promise<void> {
+  await removeUniverseSymbols([symbol])
+}
+
+export async function removeUniverseSymbols(symbols: string[]): Promise<void> {
+  const names = [...new Set(symbols.map(symbol => symbol.toUpperCase()).filter(Boolean))]
+  for (let i = 0; i < names.length; i += 500) {
+    const chunk = names.slice(i, i + 500)
+    await db.delete(momentumUniverse).where(inArray(momentumUniverse.tradingsymbol, chunk))
+  }
 }
 
 export async function listLocks(): Promise<WeightLock[]> {
@@ -246,6 +308,47 @@ export async function loadBars(symbols: string[]): Promise<Map<string, DailyBar[
       volume: Number(row.volume),
     })
     out.set(row.tradingsymbol, list)
+  }
+  return out
+}
+
+export async function symbolsWithoutBars(symbols: string[]): Promise<string[]> {
+  if (!symbols.length) return []
+  const rows = await db
+    .selectDistinct({ tradingsymbol: equityDailyBars.tradingsymbol })
+    .from(equityDailyBars)
+    .where(inArray(equityDailyBars.tradingsymbol, symbols))
+  const present = new Set(rows.map(row => row.tradingsymbol))
+  return symbols.filter(symbol => !present.has(symbol))
+}
+
+export async function listTailCloses(
+  symbols: string[],
+  limit: number
+): Promise<Map<string, { date: string; close: number }[]>> {
+  const out = new Map<string, { date: string; close: number }[]>()
+  if (!symbols.length || limit < 1) return out
+  const result = await db.execute(sql`
+    select tradingsymbol, session_date::text as session_date, close::float8 as close
+    from (
+      select tradingsymbol, session_date, close,
+        row_number() over (partition by tradingsymbol order by session_date desc) as n
+      from equity_daily_bars
+      where tradingsymbol in (${sql.join(
+        symbols.map(symbol => sql`${symbol}`),
+        sql`, `
+      )})
+    ) bars
+    where n <= ${limit}
+    order by tradingsymbol, session_date
+  `)
+  const raw = result as { rows?: Record<string, unknown>[] } | Record<string, unknown>[]
+  const rows = Array.isArray(raw) ? raw : (raw.rows ?? [])
+  for (const row of rows) {
+    const symbol = String(row.tradingsymbol)
+    const list = out.get(symbol) ?? []
+    list.push({ date: String(row.session_date).slice(0, 10), close: Number(row.close) })
+    out.set(symbol, list)
   }
   return out
 }
@@ -443,6 +546,29 @@ export async function applyDailyTrendBulkToBooks(patch: DailyTrendBulkPatch): Pr
 
 export async function removeDailyTrendBook(symbol: string): Promise<void> {
   await db.delete(dailyTrendBooks).where(eq(dailyTrendBooks.tradingsymbol, symbol.toUpperCase()))
+}
+
+export async function insertDailyTrendBooksOff(rows: { symbol: string }[]): Promise<number> {
+  if (!rows.length) return 0
+  const inserted = await db
+    .insert(dailyTrendBooks)
+    .values(
+      rows.map(row => ({
+        tradingsymbol: row.symbol.toUpperCase(),
+        enabled: false,
+        paused: false,
+        emaPeriod: 40,
+        bufferPercent: "1",
+        exitBufferPercent: "1",
+        quantity: 1,
+        budgetInr: "0",
+        entryStyle: "CLOSE_CROSS",
+        status: "FLAT",
+      }))
+    )
+    .onConflictDoNothing()
+    .returning({ tradingsymbol: dailyTrendBooks.tradingsymbol })
+  return inserted.length
 }
 
 export type MarketCapRow = {

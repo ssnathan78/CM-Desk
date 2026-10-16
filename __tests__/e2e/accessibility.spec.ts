@@ -4,7 +4,7 @@ import { expect, authenticatedTest as test } from "./fixtures"
 
 test.describe("Accessibility", () => {
   test("dashboard has no critical axe violations", async ({ page }) => {
-    await page.goto("/dashboard")
+    await page.goto("/desk")
     const results = await new AxeBuilder({ page }).analyze()
     const critical = results.violations.filter(v => v.impact === "critical")
     expect(critical).toEqual([])

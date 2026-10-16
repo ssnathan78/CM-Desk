@@ -114,7 +114,9 @@ Desk → Risk still caps lots, open positions, notional, and live vs paper. Stra
 
 ## 7. Scheduling
 
-Identical to straddle: weekday `/plan` or punch `/strat/strangle`. Default `runAt` 12:20 IST.
+The saved configuration is a [template](./TEMPLATES.md). Exit rules below are unchanged.
+
+Identical to straddle for the clock: weekday `/plan` or Templates. Default `runAt` 12:20 IST.
 
 ---
 

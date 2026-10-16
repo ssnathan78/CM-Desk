@@ -36,7 +36,7 @@ const HelpTopicPage = () => {
       <Typography color="text.secondary" sx={{ mt: 0.5, mb: 3 }}>
         {page.summary}
       </Typography>
-      <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: "wrap" }}>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ mb: 3, flexWrap: "wrap" }}>
         {HELP_TOPICS.map(key => (
           <Button
             key={key}

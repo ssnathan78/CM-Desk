@@ -83,7 +83,7 @@ export default withSession(async (req, res) => {
       logger.error("[redirect_url_kite] post-login jobs failed (login still succeeds)", queueError)
     }
 
-    res.redirect("/dashboard")
+    res.redirect("/desk")
   } catch (error: unknown) {
     const message =
       error instanceof Error && error.message.includes("not authorized")

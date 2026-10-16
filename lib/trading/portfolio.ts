@@ -10,8 +10,8 @@ import {
   or,
   type SQL,
 } from "drizzle-orm"
-
 import { db, pool } from "../drizzle"
+import { istToday } from "../drizzleIst"
 import {
   auditEvents,
   dailySessions,
@@ -30,6 +30,7 @@ import {
   unrealizedPnl,
 } from "./accounting"
 import { type Money, moneyAdd, moneyFromUnknown, moneyToString, moneyZero } from "./money"
+import { groupTodayBooks, type TodayGroupRow } from "./todayGroups"
 import {
   DEFAULT_ACCOUNT_ID,
   type PositionView,
@@ -144,6 +145,35 @@ export async function computePortfolio(
       unrealized: moneyToString(v.unrealized),
     })),
   }
+}
+
+export async function loadTodayGroups(book: TradeBookFilter = "ALL"): Promise<TodayGroupRow[]> {
+  const closedRows = await db
+    .select({
+      strategy: trades.strategy,
+      netPnl: trades.netPnl,
+      provenance: trades.provenance,
+    })
+    .from(trades)
+    .where(and(eq(trades.status, "CLOSED"), istToday(trades.exitAt)))
+  const positionRows = await db.select().from(positions)
+  const closed = closedRows
+    .filter(row => book === "ALL" || provenanceInBook(row.provenance, book))
+    .map(row => ({ strategy: row.strategy, netPnl: row.netPnl }))
+  const open = positionRows
+    .filter(row => book === "ALL" || provenanceInBook(row.provenance, book))
+    .filter(row => signedQty(row.quantity) !== 0)
+    .map(row => {
+      const qty = signedQty(row.quantity)
+      const mark = row.markPrice ?? row.averageEntryPrice ?? "0"
+      return {
+        strategy: row.strategy,
+        unrealized: moneyToString(
+          unrealizedPnl(qty, moneyFromUnknown(row.averageEntryPrice), moneyFromUnknown(mark))
+        ),
+      }
+    })
+  return groupTodayBooks({ closed, open })
 }
 
 /** Open ledger rows for one strategy — used to avoid stacking another entry, not as a P&L brake. */

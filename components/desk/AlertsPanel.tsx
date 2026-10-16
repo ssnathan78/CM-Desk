@@ -122,8 +122,8 @@ export default function AlertsPanel({
         <Typography sx={{ p: 2 }} color="text.secondary">
           No operator alerts. A rejected “Schedule now” on a Sunday or a live punch that never
           reached Kite will show up here, not under Orders. Today’s job cards stay on{" "}
-          <MuiLink component={NextLink} href="/dashboard?tabId=0">
-            Dashboard
+          <MuiLink component={NextLink} href="/desk?tab=today">
+            Desk → Today
           </MuiLink>
           .
         </Typography>

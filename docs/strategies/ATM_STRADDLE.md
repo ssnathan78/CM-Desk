@@ -119,7 +119,8 @@ Stops are **per fill**, not per structure. Hitting the CE stop does **not** canc
 | `NO_SL` | Allowed only with auto square-off | Time exit only; this is **not** the 9:20 leftover-wing case |
 | Max loss / max profit | Combined structure points | `lib/targetPnL.ts` — do **not** rewrite these as rupees |
 | Auto square-off | Clock IST | Default 15:20. Flattens **whatever is still open**, including a leftover wing |
-| Kill intraday | Dashboard | Flattens today’s straddles/strangles; does **not** pause Chase |
+| Kill intraday | Desk → Today | Tries to flatten today’s straddles/strangles and halts the desk. Does **not** pause Chase. A live book after the close is left open with its stop |
+| Kill all | Desk → Today | Same live-session refusal. Still pauses every Chase book and halts. An open Chase book keeps LONG/SHORT |
 
 Points vs rupees: the UI shows both on purpose. Strategy targets stay in option points.
 
@@ -133,8 +134,9 @@ Points vs rupees: the UI shows both on purpose. Strategy targets stay in option 
 
 | Path | Behaviour |
 |---|---|
-| Weekday plan `/plan` | One template per weekday; Dashboard “Today’s plan” enqueues `tradingQueue` at `runAt` |
-| Punch now `/strat/straddle` | Immediate or delayed job; no weekday row required |
+| Weekday schedule `/plan` | A clock on a named template. Schedule today copies that template into a job |
+| Templates `/templates` | The saved configuration. Run now creates a job and does not save unless Save is clicked |
+| `/strat/straddle` | Opens Templates filtered to Straddle |
 | Live closed market | Schedule/punch is rejected (Desk → Alerts). Mock may still place |
 
 Kill scope `intraday` includes this strategy.

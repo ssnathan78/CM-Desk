@@ -2,7 +2,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   FormControl,
   InputLabel,
   MenuItem,
@@ -21,18 +20,22 @@ import {
 } from "@mui/material"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import useSWR from "swr"
+import DueSchedules from "../components/DueSchedules"
 import AlertsPanel from "../components/desk/AlertsPanel"
 import ContractsPanel from "../components/desk/ContractsPanel"
 import HistoryPeriod from "../components/desk/HistoryPeriod"
+import IndexLists from "../components/desk/IndexLists"
 import RiskControls from "../components/desk/RiskControls"
 import SignalsPanel from "../components/desk/SignalsPanel"
 import StrategyReconcile from "../components/desk/StrategyReconcile"
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import ScrollTable from "../components/lib/ScrollTable"
+import TradesForDay from "../components/TradesForDay"
 import fetchJson from "../lib/fetchJson"
+import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import type { FeedClearMode } from "../lib/trading/feedWindow"
 import { type HistoryPreset, historyRange } from "../lib/trading/historyRange"
 import { DEFAULT_RISK_SETTINGS } from "../lib/trading/riskEngine"
@@ -44,6 +47,12 @@ function money(value: string | number | null | undefined) {
   const n = Number(value)
   if (!Number.isFinite(n)) return String(value)
   return n.toLocaleString("en-IN", { maximumFractionDigits: 2 })
+}
+
+function pnlColor(value: string | null | undefined) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n === 0) return "text.secondary"
+  return n > 0 ? "success.main" : "error.main"
 }
 
 function orderPriceLabel(row: Record<string, unknown>) {
@@ -68,15 +77,18 @@ function when(value: string | Date | null | undefined) {
 }
 
 const DESK_TABS = [
+  "today",
   "positions",
   "orders",
   "trades",
   "alerts",
   "signals",
+  "lists",
   "decisions",
   "activity",
   "sessions",
   "contracts",
+  "broker",
   "risk",
 ] as const
 type DeskTab = (typeof DESK_TABS)[number]
@@ -90,6 +102,9 @@ export default function DeskPage() {
   const { user } = useUser({ redirectTo: "/" })
   const router = useRouter()
   const tab = deskTabFromQuery(router.query.tab)
+  useEffect(() => {
+    if (router.query.tab === "plan") router.replace("/plan")
+  }, [router.query.tab, router.replace])
   const setTab = (next: DeskTab) => {
     router.replace({ pathname: "/desk", query: { ...router.query, tab: next } }, undefined, {
       shallow: true,
@@ -171,6 +186,8 @@ export default function DeskPage() {
   }
 
   const p = portfolioData?.portfolio
+  const todayRows = portfolioData?.today ?? []
+  const todayOpen = todayRows.reduce((count, row) => count + row.open, 0)
   const sessions = portfolioData?.sessions ?? []
   const positions = positionData?.positions ?? []
   const orders = orderData?.orders ?? []
@@ -249,38 +266,7 @@ export default function DeskPage() {
             </span>
           </Tooltip>
         )}
-        <Button
-          variant="outlined"
-          disabled={reconciling}
-          sx={{ width: { xs: "100%", md: "auto" } }}
-          onClick={async () => {
-            setReconciling(true)
-            setReconMsg(null)
-            try {
-              const result = await fetchJson<{
-                appliedFills: number
-                brokerOrdersSeen: number
-                mismatches: number
-              }>("/api/desk/reconcile", { method: "POST" })
-              setReconMsg(
-                `Reconciled: ${result.appliedFills} fills applied, ${result.brokerOrdersSeen} broker orders, ${result.mismatches} mismatches`
-              )
-              await mutatePortfolio()
-            } catch (e) {
-              setReconMsg(e instanceof Error ? e.message : "Reconcile failed")
-            } finally {
-              setReconciling(false)
-            }
-          }}
-        >
-          {reconciling ? "Reconciling…" : "Reconcile with broker"}
-        </Button>
       </Stack>
-      <StrategyReconcile
-        onChanged={async () => {
-          await Promise.all([mutatePortfolio(), mutatePositions(), mutateOrders(), mutateTrades()])
-        }}
-      />
       {reconMsg ? (
         <Alert severity="info" sx={{ mb: 2 }} onClose={() => setReconMsg(null)}>
           {reconMsg}
@@ -362,7 +348,7 @@ export default function DeskPage() {
         title="Square off this position?"
         message={
           flattenRow
-            ? `This sends a flatten for ${flattenRow.symbol} qty ${flattenRow.qty} (${flattenRow.book}${flattenRow.strategy ? ` · ${flattenRow.strategy}` : ""}). Chase can still take the next signal. The desk is not halted. Use Clear phantom only if the broker is already flat and the ledger is leftover.`
+            ? `This sends a flatten for ${flattenRow.symbol} qty ${flattenRow.qty} (${flattenRow.book}${flattenRow.strategy ? ` · ${flattenRow.strategy}` : ""}). Chase can still take the next signal. The desk is not halted. A live book is refused while the market is closed. The position and its stop stay. Use Clear phantom only if the broker is already flat and the ledger is leftover.`
             : ""
         }
         confirmLabel="Square off"
@@ -371,12 +357,13 @@ export default function DeskPage() {
         onConfirm={async () => {
           if (!flattenRow) return
           try {
-            await fetchJson("/api/desk/flatten", {
+            const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ positionId: flattenRow.id }),
             })
-            setReconMsg(`Squared off ${flattenRow.symbol}`)
+            const notice = flattenOperatorNotice(result, `Squared off ${flattenRow.symbol}`)
+            setReconMsg(notice.text)
             await mutatePositions()
             await mutatePortfolio()
           } catch (e) {
@@ -444,57 +431,211 @@ export default function DeskPage() {
         }}
       />
 
-      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
-        <Chip
-          label={deskHalted ? `Halted: ${risk?.haltReason || "desk stopped"}` : "Risk engine armed"}
-          color={deskHalted ? "error" : "success"}
-          variant={deskHalted ? "filled" : "outlined"}
-        />
-        <Chip
-          label={`${tradeBook === "ALL" ? "Portfolio" : tradeBook === "PAPER" ? "Paper portfolio" : "Live portfolio"} ${money(p?.portfolioValue)}`}
-          color="primary"
-          variant="outlined"
-        />
-        <Chip label={`Cash ${money(p?.availableCash)}`} variant="outlined" />
-        <Chip label={`Realized ${money(p?.realizedPnl)}`} variant="outlined" />
-        <Chip label={`Unrealized ${money(p?.unrealizedPnl)}`} variant="outlined" />
-        <Chip label={`Gross exposure ${money(p?.grossExposure)}`} variant="outlined" />
-        <Chip label={`Drawdown ${money(p?.drawdown)}`} variant="outlined" />
-        <Chip label={`Open ${p?.openPositionCount ?? 0}`} variant="outlined" />
-        <Chip
-          label={
-            alertErrors + alertWarns
-              ? `${alertErrors + alertWarns} alert${alertErrors + alertWarns === 1 ? "" : "s"}`
-              : "No alerts"
-          }
-          color={alertErrors ? "error" : alertWarns ? "warning" : "default"}
-          variant={alertErrors || alertWarns ? "filled" : "outlined"}
-          onClick={() => setTab("alerts")}
-        />
-      </Stack>
-
-      <Paper sx={{ mb: 2 }}>
-        <Tabs
-          value={DESK_TABS.indexOf(tab)}
-          onChange={(_, v) => setTab(DESK_TABS[v] ?? "positions")}
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
+      <Box
+        sx={{
+          position: "sticky",
+          top: { xs: 56, sm: 64 },
+          zIndex: theme => theme.zIndex.appBar - 1,
+          bgcolor: "background.default",
+          pb: 1,
+          mb: 1,
+        }}
+      >
+        <Box sx={{ display: "flex", gap: 1, mb: 1, alignItems: "center" }}>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setTab("risk")}
+            title={
+              deskHalted ? risk?.haltReason || "New entries are stopped" : "New entries allowed"
+            }
+            aria-label={
+              deskHalted ? "Halted. New entries are stopped." : "Armed. New entries allowed."
+            }
+            sx={{
+              font: "inherit",
+              color: deskHalted ? "error.main" : "success.main",
+              border: 1,
+              borderColor: deskHalted ? "error.main" : "success.main",
+              bgcolor: "background.paper",
+              borderRadius: 1,
+              px: 1,
+              py: 0.25,
+              cursor: "pointer",
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+              {deskHalted ? "Halted" : "Armed"}
+            </Typography>
+          </Box>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setTab("alerts")}
+            aria-label={
+              alertErrors + alertWarns
+                ? `${alertErrors + alertWarns} open alerts`
+                : "No open alerts"
+            }
+            sx={{
+              font: "inherit",
+              color: alertErrors ? "error.main" : alertWarns ? "warning.main" : "text.secondary",
+              border: 1,
+              borderColor: alertErrors ? "error.main" : alertWarns ? "warning.main" : "divider",
+              bgcolor: "background.paper",
+              borderRadius: 1,
+              px: 1,
+              py: 0.25,
+              cursor: "pointer",
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+              {alertErrors + alertWarns ? `Alerts ${alertErrors + alertWarns}` : "Alerts"}
+            </Typography>
+          </Box>
+        </Box>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+            gap: 1,
+            mb: 1,
+          }}
         >
-          <Tab label="Positions" />
-          <Tab label="Orders" />
-          <Tab label="Trades" />
-          <Tab
-            label={alertErrors + alertWarns > 0 ? `Alerts (${alertErrors + alertWarns})` : "Alerts"}
-          />
-          <Tab label={signals.length ? `Signals (${signals.length})` : "Signals"} />
-          <Tab label="Decisions" />
-          <Tab label="Activity" />
-          <Tab label="Sessions" />
-          <Tab label="Contracts" />
-          <Tab label="Risk" />
-        </Tabs>
-      </Paper>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setTab("sessions")}
+            title="Closed is round-trips finished today. Mark is from the entry price, so an overnight Chase book includes earlier days."
+            aria-label="Today by strategy. Closed is round-trips finished today. Open mark is from the entry price."
+            sx={{
+              textAlign: "left",
+              font: "inherit",
+              color: "inherit",
+              border: 1,
+              borderColor: "divider",
+              bgcolor: "background.paper",
+              borderRadius: 1,
+              px: 1.25,
+              py: 0.75,
+              cursor: "pointer",
+              minWidth: 0,
+            }}
+          >
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto",
+                columnGap: 1.5,
+                alignItems: "baseline",
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Today · {todayOpen} open
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                closed
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                mark
+              </Typography>
+              {todayRows.map(row => (
+                <Box key={row.id} sx={{ display: "contents" }}>
+                  <Typography variant="body2" noWrap>
+                    {row.label}
+                    <Typography component="span" variant="caption" color="text.secondary">
+                      {" "}
+                      {row.open}
+                    </Typography>
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: pnlColor(row.closedToday) }}>
+                    {money(row.closedToday)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: pnlColor(row.openMark) }}>
+                    {money(row.openMark)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setTab("positions")}
+            aria-label={`Cash ${money(p?.availableCash)}. Realized ${money(p?.realizedPnl)}. Unrealized ${money(p?.unrealizedPnl)}. Portfolio ${money(p?.portfolioValue)}. Gross exposure ${money(p?.grossExposure)}. Drawdown ${money(p?.drawdown)}.`}
+            sx={{
+              textAlign: "left",
+              font: "inherit",
+              color: "inherit",
+              border: 1,
+              borderColor: "divider",
+              bgcolor: "background.paper",
+              borderRadius: 1,
+              px: 1.25,
+              py: 0.75,
+              cursor: "pointer",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              columnGap: 2,
+              rowGap: 0.25,
+            }}
+          >
+            {(
+              [
+                ["Cash", money(p?.availableCash)],
+                ["Portfolio", money(p?.portfolioValue)],
+                ["Realized", money(p?.realizedPnl)],
+                ["Gross exposure", money(p?.grossExposure)],
+                ["Unrealized", money(p?.unrealizedPnl)],
+                ["Drawdown", money(p?.drawdown)],
+              ] as const
+            ).map(([label, value]) => (
+              <Box key={label} sx={{ minWidth: 0 }}>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  {label}
+                </Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                  {value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+        <Paper>
+          <Tabs
+            value={DESK_TABS.indexOf(tab)}
+            onChange={(_, v) => setTab(DESK_TABS[v] ?? "positions")}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+          >
+            <Tab label="Today" />
+            <Tab label="Positions" />
+            <Tab label="Orders" />
+            <Tab label="Trades" />
+            <Tab
+              label={
+                alertErrors + alertWarns > 0 ? `Alerts (${alertErrors + alertWarns})` : "Alerts"
+              }
+            />
+            <Tab label={signals.length ? `Signals (${signals.length})` : "Signals"} />
+            <Tab label="Lists" />
+            <Tab label="Decisions" />
+            <Tab label="Activity" />
+            <Tab label="Sessions" />
+            <Tab label="Contracts" />
+            <Tab label="Broker" />
+            <Tab label="Risk" />
+          </Tabs>
+        </Paper>
+      </Box>
+
+      {tab === "today" ? (
+        <>
+          <DueSchedules />
+          <TradesForDay />
+        </>
+      ) : null}
 
       {tab === "positions" || tab === "orders" || tab === "trades" || tab === "decisions" ? (
         <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ mb: 1.5 }}>
@@ -758,6 +899,8 @@ export default function DeskPage() {
         />
       ) : null}
 
+      {tab === "lists" ? <IndexLists /> : null}
+
       {tab === "signals" ? (
         <SignalsPanel
           signals={signals}
@@ -932,6 +1075,54 @@ export default function DeskPage() {
       ) : null}
 
       {tab === "contracts" ? <ContractsPanel data={instrumentData} /> : null}
+
+      {tab === "broker" ? (
+        <Stack spacing={2}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2">Reconcile with broker</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              Pulls Kite orders into the ledger and applies fills the desk already knows. This
+              covers every strategy. A new order is tagged Chase only when its Kite tag is chase.
+              Quantity gaps are recorded and are not assigned to a strategy here.
+            </Typography>
+            <Button
+              variant="outlined"
+              disabled={reconciling}
+              onClick={async () => {
+                setReconciling(true)
+                setReconMsg(null)
+                try {
+                  const result = await fetchJson<{
+                    appliedFills: number
+                    brokerOrdersSeen: number
+                    mismatches: number
+                  }>("/api/desk/reconcile", { method: "POST" })
+                  setReconMsg(
+                    `Reconciled: ${result.appliedFills} fills applied, ${result.brokerOrdersSeen} broker orders, ${result.mismatches} mismatches`
+                  )
+                  await mutatePortfolio()
+                } catch (e) {
+                  setReconMsg(e instanceof Error ? e.message : "Reconcile failed")
+                } finally {
+                  setReconciling(false)
+                }
+              }}
+            >
+              {reconciling ? "Reconciling…" : "Reconcile with broker"}
+            </Button>
+          </Paper>
+          <StrategyReconcile
+            onChanged={async () => {
+              await Promise.all([
+                mutatePortfolio(),
+                mutatePositions(),
+                mutateOrders(),
+                mutateTrades(),
+              ])
+            }}
+          />
+        </Stack>
+      ) : null}
 
       {tab === "risk" ? (
         <Paper>

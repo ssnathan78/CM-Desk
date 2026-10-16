@@ -45,8 +45,8 @@ Chase page **Trade this book** / **Pause entries** are not Desk → Risk. Trade 
 | | |
 |--|--|
 | Protects | Runaway entries, operator emergency |
-| Enforced | `runDeskKill` aborts jobs, optional Chase pause + square-off, then `haltDesk`. Desk UI Halt / Resume. Workers read `desk_halted` on every `placeOrder` |
-| Trigger | New **entries** rejected (`DESK_HALTED`). Flatten still allowed |
+| Enforced | `runDeskKill` aborts jobs, pauses Chase on Kill all, tries to square off, then `haltDesk`. A live square-off outside the NSE session is refused before the working stop is cancelled. Kill still halts, and Kill all still pauses, but that open book keeps LONG/SHORT. Desk UI Halt / Resume. Workers read `desk_halted` on every `placeOrder` |
+| Trigger | New **entries** rejected (`DESK_HALTED`). Flatten still allowed while the session is open |
 | Config | Halt reason string; resume is explicit POST `action:resume` |
 | Tests | `desk.test.ts` halt/resume; existing `kill-desk.test.ts` |
 
@@ -80,7 +80,7 @@ Open-position count is an **execution cap** (do not open another book when this 
 | | |
 |--|--|
 | Protects | After-hours punches; trading on frozen quotes |
-| Enforced | `requireMarketHours` + `isMarketOpen` for live entries; optional `ltp`/`ltpAt` age (`stalePriceMaxAgeSec` 30s); Chase candles invalid/stale (>180s) fail closed |
+| Enforced | `requireMarketHours` + `isMarketOpen` for live entries. Live square-off (Chase, Today, Positions, Kill) is also refused outside the session: the working stop is not cancelled and no regular market cover is sent. Paper still flattens. Optional `ltp`/`ltpAt` age (`stalePriceMaxAgeSec` 30s); Chase candles invalid/stale (>180s) fail closed |
 | Trigger | `MARKET_CLOSED` / `STALE_DATA` / `INVALID_PRICE` / Chase skip |
 | Config | `risk_settings`; Chase 180s is code |
 | Tests | `riskEngine.test.ts`; Chase path is scenario-documented |

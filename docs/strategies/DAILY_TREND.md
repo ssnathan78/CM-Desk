@@ -4,6 +4,12 @@ A cash version of the Chase **long** side. It reads **daily** candles on an NSE 
 
 This is not Chase and not the 9:20 short-vol book. A correct run of a losing trend is still a losing trend.
 
+The same explanation is on Guide → Daily long-only trend (`/help/daily-trend`). Constituent adds and drops are on Desk → Lists.
+
+## Constituents
+
+`daily_trend_books` is the operator book, not the index. The first seed copies Nifty 100 in as off. A weekly check (or Refresh constituents) compares the Nifty 100 file from niftyindices.com (`ind_nifty100list.csv`) with `index_membership`. A new name with no book is inserted off. A removal stays pending until Accept, which deletes that book and does not sell. Accept all does the same for every pending removal. If the book still has open quantity, the stop stops with the book. Dismiss leaves the book. An empty download does not replace the snapshot. A failed download uses the bundled file only when nothing is stored yet. Refresh leaves an existing snapshot in place. The page does not treat extra books (an ETF you added, for example) as index removals.
+
 ## What the hour loop is
 
 The process wakes about 20 seconds after boot, then every hour (`lib/momentum/scheduler.ts`). That wake-up is shared with cash momentum. It is not an hourly signal.
@@ -19,7 +25,7 @@ Later hours the same day do not fetch a new candle. They look at the stored day 
 |---|---|
 | Page **On** | Off skips evaluation and history for this strategy. |
 | **Pull data daily** | Off skips the scheduled Kite pull. **Pull history now** still runs while On is enabled. |
-| **Pull history now** | Starts a download for every name on this page, including names that are off, and returns immediately. A bar shows which name is in progress. It does not download the momentum universe. |
+| **Pull history now** | Starts a download for every name on this page, including names that are off, and returns immediately. The bar is only this list. A momentum download does not paint its count here. One download runs at a time. |
 | Execution `report` | Evaluate shows the decision and sends nothing. Default. |
 | Execution `manual` | **Evaluate and send** places the orders. Nothing is retried on its own. |
 | Execution `auto` | The hourly pass evaluates and sends. It does not also require the market-session check that momentum uses. |
@@ -38,7 +44,7 @@ The database check allows `A`–`Z`, digits, `&`, and `-`, and requires a letter
 
 Search on the page looks up the NSE cash dump by symbol or company name, the same way Chase searches futures, and adds the name **off**. Names already on the book are omitted from the search results. The filter box on the table searches the rows you already have, including the company name and industry shown under the symbol.
 
-The table keeps On, the icon actions (edit, pause, remove), symbol, state, last stored close, and stop on the left of the settings. Company name, industry, market cap, budget, EMA, buffers, and entry style follow. The grid scrolls inside the page so the horizontal bar stays next to the rows. State, close, and stop are the columns to watch while a book is on.
+The table keeps On, the icon actions (edit, pause, remove), symbol, state, the completed close, EMA, and a signal on the left of the settings. Close is the last bar dated before today. A newer stored price is shown underneath and waits until the next session. The signal is that same close against the band, including rows that are off: Below the band, Above the band when the budget buys nothing, or Buy and the share count. Signal → Qualifies hides the names under the band. Sorting the Signal column puts the names above the band first. State stays FLAT until a fill. Stop stays blank until the book is long. Row On and a budget do not send an order while the page Strategy on switch is off or Execution is Report only. Company name, industry, market cap, budget, EMA, buffers, and entry style follow. The grid scrolls inside the page so the horizontal bar stays next to the rows. State, close, and stop are the columns to watch while a book is on.
 
 ## Nifty 100
 

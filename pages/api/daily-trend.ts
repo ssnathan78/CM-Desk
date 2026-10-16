@@ -1,8 +1,22 @@
 import { sendApiError } from "../../lib/apiErrors"
-import { normalizeDailyTrendConfig, parseDailyTrendBulkPatch } from "../../lib/dailyTrend/engine"
+import {
+  completedDailyBars,
+  dailyTrendRowSignal,
+  emaFromCloses,
+  normalizeDailyTrendConfig,
+  parseDailyTrendBulkPatch,
+} from "../../lib/dailyTrend/engine"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import logger from "../../lib/logger"
-import { cashPullProgress, startCashHistoryPull } from "../../lib/momentum/history"
+import { istDate } from "../../lib/momentum/calendar"
+import { cashPullProgress, progressForPage, startCashHistoryPull } from "../../lib/momentum/history"
+import {
+  acceptConstituentChange,
+  dismissConstituentChange,
+  listPendingConstituents,
+  refreshIndexMembership,
+  settlePendingConstituents,
+} from "../../lib/momentum/membershipRefresh"
 import {
   applyDailyTrendBulkToBooks,
   type DailyTrendBookRow,
@@ -11,6 +25,7 @@ import {
   listDailyTrendBooks,
   listLatestCloses,
   listMarketCaps,
+  listTailCloses,
   removeDailyTrendBook,
   saveDailyTrendBook,
   saveDailyTrendRuntime,
@@ -56,16 +71,33 @@ export default withSession(async (req, res) => {
         listDailyTrendBooks(),
         listMarketCaps(),
       ])
-      const closes = await listLatestCloses(books.map(book => book.symbol))
+      const symbols = books.map(book => book.symbol)
+      const closes = await listLatestCloses(symbols)
+      const tails = await listTailCloses(symbols, 420)
+      const today = istDate(new Date())
       const profile = new Map(caps.map(row => [row.symbol, row]))
       const seeded = new Map(loadNifty100().map(row => [row.symbol, row]))
       return res.json({
         ...state,
-        pull: cashPullProgress(),
+        pull: progressForPage("trend", cashPullProgress()),
+        constituents: await listPendingConstituents("NIFTY100"),
         books: books.map(book => {
           const known = profile.get(book.symbol)
           const listed = seeded.get(book.symbol)
           const close = closes.get(book.symbol)
+          const completed = completedDailyBars(tails.get(book.symbol) ?? [], today)
+          const ema = emaFromCloses(
+            completed.map(row => row.close),
+            book.emaPeriod
+          )
+          const signalClose = completed.at(-1)?.close ?? null
+          const signal = dailyTrendRowSignal({
+            close: signalClose,
+            ema,
+            bufferPercent: book.bufferPercent,
+            budgetInr: book.budgetInr,
+            entryStyle: book.entryStyle,
+          })
           return {
             ...book,
             name:
@@ -75,8 +107,14 @@ export default withSession(async (req, res) => {
             industry: known?.industry || listed?.industry || "",
             marketCapCr: known?.marketCapCr ?? listed?.marketCapCr ?? null,
             marketCapAsOf: known?.asOf ?? null,
-            close: close?.close ?? null,
-            closeDate: close?.date ?? null,
+            close: signalClose,
+            closeDate: completed.at(-1)?.date ?? null,
+            storedClose: close?.date && close.date !== completed.at(-1)?.date ? close.close : null,
+            storedDate: close?.date && close.date !== completed.at(-1)?.date ? close.date : null,
+            ema,
+            signal: signal.label,
+            signalBuy: signal.buy,
+            signalQualifies: signal.qualifies,
           }
         }),
       })
@@ -120,8 +158,46 @@ export default withSession(async (req, res) => {
           accessToken: req.session.user.session?.access_token,
           force: true,
           scope: "trend",
+          onlyMissing: req.body?.onlyMissing === true,
         })
       )
+    }
+    if (req.method === "POST" && req.body?.action === "refresh-constituents") {
+      const result = await refreshIndexMembership("NIFTY100", { force: true })
+      return res.json({
+        ...result,
+        constituents: await listPendingConstituents("NIFTY100"),
+        books: await listDailyTrendBooks(),
+        message: result.kept
+          ? "The index site did not return a file. The stored list was left as it is."
+          : undefined,
+      })
+    }
+    if (req.method === "POST" && req.body?.action === "accept-constituent") {
+      await acceptConstituentChange(Number(req.body.id))
+      return res.json({
+        constituents: await listPendingConstituents("NIFTY100"),
+        books: await listDailyTrendBooks(),
+      })
+    }
+    if (req.method === "POST" && req.body?.action === "dismiss-constituent") {
+      await dismissConstituentChange(Number(req.body.id))
+      return res.json({ constituents: await listPendingConstituents("NIFTY100") })
+    }
+    if (
+      req.method === "POST" &&
+      (req.body?.action === "accept-constituents" || req.body?.action === "dismiss-constituents")
+    ) {
+      const side = req.body.side === "REMOVE" ? "REMOVE" : "ADD"
+      await settlePendingConstituents(
+        "NIFTY100",
+        side,
+        req.body.action === "accept-constituents" ? "ACCEPTED" : "DISMISSED"
+      )
+      return res.json({
+        constituents: await listPendingConstituents("NIFTY100"),
+        books: await listDailyTrendBooks(),
+      })
     }
     if (req.method === "POST" && req.body?.action === "evaluate") {
       const result = await evaluateDailyTrend({

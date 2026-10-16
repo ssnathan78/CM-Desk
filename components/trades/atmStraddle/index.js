@@ -78,7 +78,7 @@ const AtmStraddle = ({
         })
       )
       setState(getDefaultState())
-      router.push("/dashboard?tabId=0")
+      router.push("/desk?tab=today")
     } catch (e) {
       console.error(e)
       setSubmitError(apiErrorMessage(e, "Could not schedule this trade"))
@@ -105,7 +105,7 @@ const AtmStraddle = ({
         onChange={onChange}
         onSubmit={onSubmit}
         onRunNow={handleRunNow}
-        onCancel={() => router.push("/dashboard")}
+        onCancel={() => router.push("/desk")}
         formHeading={heading}
         enabledInstruments={enabledInstruments}
         exitStrategies={exitStrategies}

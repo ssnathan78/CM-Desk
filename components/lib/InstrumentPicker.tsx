@@ -39,7 +39,7 @@ export default function InstrumentPicker({
         {error ??
           hint ??
           (single
-            ? "The weekday template is for one index. Name above is only a label in the plan list."
+            ? "This template trades one index. The name is unique across templates."
             : "Tick every index you want to punch now. Each tick becomes its own order. Name above is only a label.")}
       </FormHelperText>
       {single ? (

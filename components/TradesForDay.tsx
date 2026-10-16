@@ -1,4 +1,4 @@
-import { DeleteForever, Stop } from "@mui/icons-material"
+import { Stop } from "@mui/icons-material"
 import { Box, Button, Paper, Typography } from "@mui/material"
 import router from "next/router"
 import type React from "react"
@@ -8,6 +8,8 @@ import useSWR, { mutate } from "swr"
 import { STRATEGIES_DETAILS } from "../lib/constants"
 import { dashboardJobActions, isJobAborted } from "../lib/dashboardJobActions"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
+import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
+import { operatorJobError } from "../lib/operatorJobError"
 import BrokerOrders from "./lib/brokerOrders"
 import ConfirmDialog from "./lib/ConfirmDialog"
 import PnLComponent from "./lib/pnlComponent"
@@ -28,6 +30,7 @@ type TradeJob = {
   strategy: string
   status?: string
   name?: string
+  instrument?: string
   orderTag?: string
   status_message?: string
   userOverride?: string | null
@@ -40,6 +43,7 @@ const WrapperComponent = (props: TradeJob) => {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [flattenOpen, setFlattenOpen] = useState(false)
   const [flattenLoading, setFlattenLoading] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const { showMessage, SnackbarAlert } = useSnackbar()
 
   const isChase = props.strategy === "CHASE"
@@ -69,17 +73,25 @@ const WrapperComponent = (props: TradeJob) => {
     }
 
     if (!jobWasQueued) {
-      if (typeof props.status_message === "string") {
-        return <HeadingWithError error={props.status_message} heading={strategyDetails?.heading} />
-      }
-      return <HeadingWithError error="Unknown Error" heading={strategyDetails?.heading} />
+      const message = operatorJobError(
+        typeof props.status_message === "string" ? props.status_message : "Unknown error"
+      )
+      return (
+        <HeadingWithError
+          error={message || "Unknown error"}
+          heading={props.name || strategyDetails?.heading}
+        />
+      )
     }
 
     if (jobWasQueued && (jobDetails as { current_state?: string })?.current_state === "failed") {
+      const message = operatorJobError(
+        (jobDetails as { job?: { failedReason?: string } })?.job?.failedReason || "Failed"
+      )
       return (
         <HeadingWithError
-          error={(jobDetails as { job?: { failedReason?: string } })?.job?.failedReason || "Failed"}
-          heading={strategyDetails?.heading}
+          error={message || "Failed"}
+          heading={props.name || strategyDetails?.heading}
         />
       )
     }
@@ -111,19 +123,20 @@ const WrapperComponent = (props: TradeJob) => {
   const handleSquareOff = async () => {
     setFlattenLoading(true)
     try {
-      await fetchJson("/api/desk/flatten", {
+      const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(isChase ? { strategy: "CHASE" } : { jobId: props.id }),
       })
       setFlattenOpen(false)
       await mutate("/api/trades_day")
-      showMessage(
+      const notice = flattenOperatorNotice(
+        result,
         isChase
           ? "Chase squared off. The next signal can still be taken unless you pause or halt."
-          : "Position squared off.",
-        "success"
+          : "Position squared off."
       )
+      showMessage(notice.text, notice.severity)
     } catch (e) {
       const err = e as FetchJsonError
       showMessage(
@@ -145,25 +158,32 @@ const WrapperComponent = (props: TradeJob) => {
   })
 
   return (
-    <Paper sx={{ mb: 2.5, p: 2.5 }}>
+    <Paper sx={{ mb: 1, px: 1.5, py: 1 }}>
       {SnackbarAlert}
       <Box
         sx={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "flex-start",
-          mb: 2,
-          minHeight: 36,
+          alignItems: "center",
           gap: 1,
           flexWrap: "wrap",
         }}
       >
-        <Typography sx={{ mr: 1 }}>
-          <Heading />
-        </Typography>
-        <Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2">
+            <Heading />
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {[props.instrument, props.status, strategyDetails?.heading].filter(Boolean).join(" · ")}
+          </Typography>
+        </Box>
+        <Box sx={{ display: "flex", gap: 0.5, flexShrink: 0 }}>
+          <Button size="small" onClick={() => setExpanded(open => !open)}>
+            {expanded ? "Hide" : "Details"}
+          </Button>
           {showDelete ? (
             <Button
+              size="small"
               variant="outlined"
               loading={deleteLoading}
               onClick={async () => {
@@ -171,20 +191,19 @@ const WrapperComponent = (props: TradeJob) => {
                 await handleDeleteTrade(props.id)
                 setDeleteLoading(false)
               }}
-              sx={{ mr: 1 }}
             >
-              <DeleteForever />
               Delete
             </Button>
           ) : null}
           {showSquareOff ? (
             <Button
+              size="small"
               variant="outlined"
               color="warning"
               loading={flattenLoading}
               onClick={() => setFlattenOpen(true)}
             >
-              <Stop /> Square off
+              Square off
             </Button>
           ) : null}
         </Box>
@@ -204,9 +223,11 @@ const WrapperComponent = (props: TradeJob) => {
         onCancel={() => setFlattenOpen(false)}
       />
 
-      <Box sx={{ mb: 2 }}>{props.detailsComponent(props.strategy, jobDetails)}</Box>
+      {expanded ? (
+        <Box sx={{ mt: 1 }}>{props.detailsComponent(props.strategy, jobDetails)}</Box>
+      ) : null}
 
-      {jobWasQueued && !isChase ? (
+      {expanded && jobWasQueued && !isChase ? (
         <Box sx={{ mb: 1 }}>
           <Box
             sx={{
@@ -233,7 +254,7 @@ const WrapperComponent = (props: TradeJob) => {
         </Box>
       ) : null}
 
-      {Array.isArray(jobOrders) && jobOrders.length ? (
+      {expanded && Array.isArray(jobOrders) && jobOrders.length ? (
         <BrokerOrders orders={jobOrders as never[]} />
       ) : null}
     </Paper>
@@ -242,10 +263,10 @@ const WrapperComponent = (props: TradeJob) => {
 
 const KILL_MESSAGES = {
   flatten:
-    "Flatten every currently open book (straddle, strangle, and Chase). Chase can take the next signal. The desk is not halted.",
+    "Flatten every currently open book (straddle, strangle, and Chase). Chase can take the next signal. The desk is not halted. A live book is refused while the market is closed. The position and its stop stay. Paper still flattens.",
   intraday:
-    "Emergency: flatten today's straddles and strangles, abort those jobs, and halt the desk. Chase stays running.",
-  all: "Emergency: flatten every open book, pause Chase, and halt the desk. Use this only if the hedge should come off too.",
+    "Emergency: flatten today's straddles and strangles, abort those jobs, and halt the desk. Chase stays running. A live book is refused while the market is closed. Those positions and their stops stay. The halt still happens.",
+  all: "Emergency: flatten every open book, pause Chase, and halt the desk. Use this only if the hedge should come off too. A live book is refused while the market is closed. Those positions and their stops stay, and Chase stays LONG or SHORT. Pause and halt still happen.",
 } as const
 
 const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
@@ -258,17 +279,30 @@ const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
     setLoading(true)
     try {
       if (pendingScope === "flatten") {
-        await fetchJson("/api/desk/flatten", {
+        const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ all: true }),
         })
+        const notice = flattenOperatorNotice(result, "Open books squared off.")
+        if (notice.severity === "error") showMessage(notice.text, "error")
       } else {
-        await fetchJson("/api/kill-desk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scope: pendingScope }),
-        })
+        const result = await fetchJson<{ liveLeftOpen?: boolean; scope?: string }>(
+          "/api/kill-desk",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: pendingScope }),
+          }
+        )
+        if (result.liveLeftOpen) {
+          showMessage(
+            pendingScope === "all"
+              ? "Market is closed. Live books were left open with their stops. Chase is paused and the desk is halted."
+              : "Market is closed. Live intraday books were left open with their stops. The desk is halted. Chase was not paused.",
+            "error"
+          )
+        }
       }
       setPendingScope(null)
       await onDone()
@@ -303,12 +337,10 @@ const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
       />
       <Box
         sx={{
-          textAlign: "center",
-          mt: 4,
           display: "flex",
           gap: 1,
-          justifyContent: "center",
           flexWrap: "wrap",
+          mb: 1.5,
         }}
       >
         <Button
@@ -363,11 +395,11 @@ const TradesForDay = () => {
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Run a weekday template or open a new structure. Chase may still be running.
           </Typography>
-          <Button sx={{ mr: 1 }} onClick={() => router.push("/dashboard?tabId=2")}>
-            Today&apos;s plan
+          <Button sx={{ mr: 1 }} onClick={() => router.push("/plan")}>
+            Schedules
           </Button>
-          <Button variant="contained" onClick={() => router.push("/dashboard?tabId=1")}>
-            New trade
+          <Button variant="contained" onClick={() => router.push("/templates")}>
+            New template
           </Button>
         </Paper>
         <KillDeskButtons onDone={() => reloadTrades()} />
@@ -377,7 +409,8 @@ const TradesForDay = () => {
 
   return (
     <>
-      <Box sx={{ mb: 6 }}>
+      <KillDeskButtons onDone={() => reloadTrades()} />
+      <Box>
         {trades.map((trade: TradeJob) => (
           <WrapperComponent
             key={trade.id}
@@ -392,8 +425,6 @@ const TradesForDay = () => {
           />
         ))}
       </Box>
-
-      <KillDeskButtons onDone={() => reloadTrades()} />
     </>
   )
 }

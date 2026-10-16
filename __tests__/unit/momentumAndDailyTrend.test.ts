@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 import {
   applyDailyTrendBulk,
   completedDailyBars,
+  dailyTrendRowSignal,
   emaFromCloses,
   evaluateDailyLong,
   parseDailyTrendBulkPatch,
@@ -12,7 +13,7 @@ import {
 import { parseScreenerMarketCapCr } from "../../lib/dailyTrend/marketCap"
 import { loadNifty100 } from "../../lib/dailyTrend/nifty100"
 import { buildMomentumPlan, executableOrders, metricsFromBars, symbolFromBars } from "../../lib/momentum/engine"
-import { emptyPullMessage, symbolsForCashPull } from "../../lib/momentum/history"
+import { emptyPullMessage, progressForPage, symbolsForCashPull } from "../../lib/momentum/history"
 import { firstTradingSessionOfMonth } from "../../lib/momentum/calendar"
 import {
   DEFAULT_MOMENTUM_CONFIG,
@@ -408,6 +409,19 @@ describe("momentum switches", () => {
     expect(emptyPullMessage({ scope: "all", trendActive: true, momentumActive: true })).toMatch(
       /No download is due/
     )
+    const momentumPull = {
+      running: true,
+      done: 572,
+      total: 755,
+      symbol: "SANSERA",
+      errors: 0,
+      scope: "momentum" as const,
+      message: "Momentum: SANSERA — 572 of 755",
+      shown: true,
+    }
+    expect(progressForPage("momentum", momentumPull).total).toBe(755)
+    expect(progressForPage("trend", momentumPull).shown).toBe(false)
+    expect(progressForPage("trend", { ...momentumPull, scope: "all" }).shown).toBe(true)
   })
 
   it("loads the bundled universe and knows the first session of a month", () => {
@@ -422,6 +436,34 @@ describe("momentum switches", () => {
 })
 
 describe("daily long-only trend", () => {
+  it("marks a flat book buy only when the close clears the EMA band and the budget buys a share", () => {
+    const below = dailyTrendRowSignal({
+      close: 1354.2,
+      ema: 1392.18,
+      bufferPercent: 1,
+      budgetInr: 10000,
+      entryStyle: "CLOSE_CROSS",
+    })
+    expect(below).toEqual({ label: "Below the band", buy: false, qualifies: false })
+    const buy = dailyTrendRowSignal({
+      close: 110,
+      ema: 100,
+      bufferPercent: 1,
+      budgetInr: 10000,
+      entryStyle: "CLOSE_CROSS",
+    })
+    expect(buy).toEqual({ label: "Buy 90", buy: true, qualifies: true })
+    expect(
+      dailyTrendRowSignal({
+        close: 110,
+        ema: 100,
+        bufferPercent: 1,
+        budgetInr: 0,
+        entryStyle: "CLOSE_CROSS",
+      })
+    ).toEqual({ label: "Above the band, budget 0", buy: false, qualifies: true })
+  })
+
   it("applies only the filled settings and leaves a long book's stop alone", () => {
     const book = {
       symbol: "ABB",
