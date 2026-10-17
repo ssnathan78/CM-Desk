@@ -1,4 +1,5 @@
 import { STRATEGIES } from "../../lib/constants"
+import { KILL_ALL_CONFIRM, KILL_INTRADAY_CONFIRM } from "../../lib/operatorConfirm"
 import killDeskHandler from "../../pages/api/kill-desk"
 import strategyDefaultsHandler from "../../pages/api/strategy-defaults"
 import { invokeApi } from "../support/apiTestClient"
@@ -28,11 +29,21 @@ describe("/api/kill-desk", () => {
     expect(result.status).toBe(400)
   })
 
-  it("POST intraday returns aborted count (mock orders skip kite)", async () => {
+  it("POST intraday without the confirm phrase is refused", async () => {
     const result = await invokeApi(killDeskHandler, {
       method: "POST",
       user: createTestUser(),
       body: { scope: "intraday" },
+    })
+    expect(result.status).toBe(409)
+    expect((result.body as { error: string }).error).toContain(KILL_INTRADAY_CONFIRM)
+  })
+
+  it("POST intraday returns aborted count (mock orders skip kite)", async () => {
+    const result = await invokeApi(killDeskHandler, {
+      method: "POST",
+      user: createTestUser(),
+      body: { scope: "intraday", confirm: KILL_INTRADAY_CONFIRM },
     })
     expect(result.status).toBe(200)
     const body = result.body as { scope: string; aborted: number; chasePaused?: boolean }
@@ -45,7 +56,7 @@ describe("/api/kill-desk", () => {
     const result = await invokeApi(killDeskHandler, {
       method: "POST",
       user: createTestUser(),
-      body: { scope: "all" },
+      body: { scope: "all", confirm: KILL_ALL_CONFIRM },
     })
     expect(result.status).toBe(200)
     const body = result.body as { chasePaused: boolean }

@@ -16,6 +16,11 @@ export function strategyQuantityDifference(input: {
   return input.brokerQty - input.otherQty - input.strategyQty
 }
 
+/** A fill can be attributed only when this strategy already has size or a prior order in the symbol. */
+export function reconcileTargetTied(input: { strategyQty: number; priorTouches: number }): boolean {
+  return input.strategyQty !== 0 || input.priorTouches > 0
+}
+
 /** Same sign as the difference, and no larger. Zero and a flipped sign are refused. */
 export function acceptedQuantity(difference: number, requested: number): number | null {
   if (!Number.isInteger(difference) || !Number.isInteger(requested)) return null

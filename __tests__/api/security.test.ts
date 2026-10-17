@@ -2,9 +2,13 @@ import { assertAllowedKiteUser } from "../../lib/authPolicy"
 import { validateChaseSettings } from "../../lib/chaseValidation"
 import { JOB_EXECUTION_STATUS, STRATEGIES, USER_OVERRIDE } from "../../lib/constants"
 import { mapJobExecutionInsert } from "../../lib/jobExecutionMapper"
+import { ALLOW_LIVE_CONFIRM, ATTRIBUTE_FILL_CONFIRM } from "../../lib/operatorConfirm"
 import chaseSettingsHandler from "../../pages/api/chase-settings"
 import deleteJobHandler from "../../pages/api/delete_job"
+import reconcileStrategyHandler from "../../pages/api/desk/reconcile-strategy"
+import riskHandler from "../../pages/api/desk/risk"
 import healthHandler from "../../pages/api/health"
+import templatesHandler from "../../pages/api/templates"
 import tradesDayHandler from "../../pages/api/trades_day"
 import { invokeApi } from "../support/apiTestClient"
 import { createTestPool, deleteJobExecutionsByTags, describeDb } from "../support/dbHelpers"
@@ -149,6 +153,82 @@ describeDb("security API routes", () => {
       user,
     })
     expect(result.status).toBe(404)
+  })
+
+  it("edit-job cannot retarget strategy or lots", async () => {
+    const created = await invokeApi(tradesDayHandler, {
+      method: "POST",
+      user,
+      body: baseStraddleJob({ runNow: true, name: "Frozen identity" }),
+    })
+    expect([200, 409]).toContain(created.status)
+    const { id, orderTag } = created.body as { id: string; orderTag: string }
+    jobIds.push(id)
+    orderTags.push(orderTag)
+    await pool.query(`UPDATE job_executions SET status = 'PENDING' WHERE id = $1`, [id])
+
+    const changed = await invokeApi(templatesHandler, {
+      method: "POST",
+      user,
+      body: {
+        action: "edit-job",
+        jobId: id,
+        config: { strategy: STRATEGIES.ATM_STRANGLE, lots: 20, productType: "NRML" },
+      },
+    })
+    expect(changed.status).toBe(409)
+
+    const { rows } = await pool.query(
+      `SELECT strategy, lots, product_type FROM job_executions WHERE id = $1`,
+      [id]
+    )
+    expect(rows[0]?.strategy).toBe(STRATEGIES.ATM_STRADDLE)
+    expect(Number(rows[0]?.lots)).toBe(1)
+    expect(rows[0]?.product_type).toBe("MIS")
+  })
+
+  it("PUT risk refuses Allow live orders without the phrase", async () => {
+    const off = await invokeApi(riskHandler, {
+      method: "PUT",
+      user,
+      body: { settings: { allowLiveOrders: false } },
+    })
+    expect(off.status).toBe(200)
+
+    const denied = await invokeApi(riskHandler, {
+      method: "PUT",
+      user,
+      body: { settings: { allowLiveOrders: true } },
+    })
+    expect(denied.status).toBe(409)
+    expect((denied.body as { error: string }).error).toContain(ALLOW_LIVE_CONFIRM)
+
+    const armed = await invokeApi(riskHandler, {
+      method: "PUT",
+      user,
+      body: { settings: { allowLiveOrders: true }, confirmLive: ALLOW_LIVE_CONFIRM },
+    })
+    expect(armed.status).toBe(200)
+    expect(
+      (armed.body as { settings?: { allowLiveOrders?: boolean } }).settings?.allowLiveOrders
+    ).toBe(true)
+
+    const restored = await invokeApi(riskHandler, {
+      method: "PUT",
+      user,
+      body: { settings: { allowLiveOrders: false } },
+    })
+    expect(restored.status).toBe(200)
+  })
+
+  it("reconcile refuses attribution without the phrase", async () => {
+    const result = await invokeApi(reconcileStrategyHandler, {
+      method: "POST",
+      user,
+      body: { strategy: "MOMENTUM", tradingsymbol: "INFY", quantity: 1 },
+    })
+    expect(result.status).toBe(409)
+    expect((result.body as { error: string }).error).toContain(ATTRIBUTE_FILL_CONFIRM)
   })
 
   it("chase-settings rejects lots above cap", async () => {

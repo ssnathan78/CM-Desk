@@ -7,11 +7,13 @@ import logger from "../logger"
 import { jobExecutions, orders } from "../schema"
 import { isMarketOpen, isMockOrder } from "../utils"
 import { recordAuditEvent } from "./ledger"
+import { lotSizeForInstrument } from "./notional"
 import { countOpenStrategyPositions } from "./portfolio"
 import {
   evaluateOrder,
   inferOrderRole,
   isPaperStrategy,
+  lotsForRiskCheck,
   type OrderRole,
   type RiskIntent,
   RiskRejectedError,
@@ -190,6 +192,7 @@ export async function assertOrderAllowed(input: {
             userOverride: jobExecutions.userOverride,
             lots: jobExecutions.lots,
             strategy: jobExecutions.strategy,
+            instrument: jobExecutions.instrument,
           })
           .from(jobExecutions)
           .where(eq(jobExecutions.orderTag, input.tag))
@@ -198,7 +201,11 @@ export async function assertOrderAllowed(input: {
   ])
 
   const job = jobRows[0]
-  if (intent.lots == null && job?.lots != null) intent.lots = Number(job.lots)
+  intent.lots = lotsForRiskCheck(intent.lots, job?.lots != null ? Number(job.lots) : null)
+  if (job?.instrument) {
+    const lotSize = lotSizeForInstrument(String(job.instrument))
+    if (lotSize > 0) intent.lotSize = lotSize
+  }
   if (!intent.strategy && job?.strategy) intent.strategy = job.strategy
   if (!intent.strategy && input.tag === "chase") intent.strategy = "CHASE"
 

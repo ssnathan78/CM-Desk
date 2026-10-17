@@ -107,6 +107,8 @@ export type RiskIntent = {
   ltpAt?: Date | null
   strategy?: string | null
   lots?: number | null
+  /** Contract size for the job's instrument. Set from the stored job, not from the request. */
+  lotSize?: number | null
 }
 
 export type RiskContext = {
@@ -139,6 +141,16 @@ function fail(code: string, message: string): RiskDecision {
 
 function isEntry(role: OrderRole) {
   return role === "ENTRY"
+}
+
+/** The job row's lots win. A caller-supplied lots value cannot shrink the check. */
+export function lotsForRiskCheck(
+  callerLots: number | null | undefined,
+  storedLots: number | null | undefined
+): number | null {
+  if (storedLots != null && Number.isFinite(Number(storedLots))) return Number(storedLots)
+  if (callerLots != null && Number.isFinite(Number(callerLots))) return Number(callerLots)
+  return null
 }
 
 export function inferOrderRole(args: {
@@ -230,6 +242,19 @@ export function evaluateOrder(intent: RiskIntent, ctx: RiskContext): RiskDecisio
     return fail(
       "MAX_LOTS",
       `Lots ${intent.lots} exceed ${intent.strategy || "strategy"} max ${strat.maxLots}`
+    )
+  }
+
+  if (
+    isEntry(intent.role) &&
+    intent.lots != null &&
+    intent.lotSize != null &&
+    intent.lotSize > 0 &&
+    qty > intent.lots * intent.lotSize
+  ) {
+    return fail(
+      "JOB_LOTS",
+      `Quantity ${qty} is larger than the ${intent.lots} lot(s) stored for this job`
     )
   }
 

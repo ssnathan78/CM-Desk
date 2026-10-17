@@ -284,7 +284,6 @@ export async function flattenOpenPositions(input: {
       const reset = await resetChaseSignalState({
         instrument,
         accessToken,
-        force: false,
       })
       if (reset.ok) result.chaseReset.push(instrument)
       else {

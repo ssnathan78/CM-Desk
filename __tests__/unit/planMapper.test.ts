@@ -148,6 +148,12 @@ describe("planApiErrorMessage", () => {
         cause: { code: "23502", column: "lots" },
       })
     ).toBe("Lots must be at least 1.")
+    expect(
+      planApiErrorMessage({
+        message: 'Failed query: insert into "trade_plans" ("name") values ($1)\nparams: secret',
+        cause: { detail: 'Failing row contains (secret).' },
+      })
+    ).toBe("Could not save template")
   })
 })
 

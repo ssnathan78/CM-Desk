@@ -17,6 +17,7 @@ import {
 import { useState } from "react"
 
 import fetchJson from "../../lib/fetchJson"
+import { ATTRIBUTE_FILL_CONFIRM } from "../../lib/operatorConfirm"
 import { RISK_STRATEGY_KEYS } from "../../lib/trading/riskEngine"
 import type { StrategyGap } from "../../lib/trading/strategyReconcile"
 
@@ -84,6 +85,7 @@ export default function StrategyReconcile(props: { onChanged: () => Promise<unkn
           tradingsymbol: row.tradingsymbol,
           product: row.product,
           quantity: requested,
+          confirm: ATTRIBUTE_FILL_CONFIRM,
           manual: manualBody,
         }),
       })
@@ -115,7 +117,8 @@ export default function StrategyReconcile(props: { onChanged: () => Promise<unkn
       <Typography variant="subtitle2">Attribute broker quantity</Typography>
       <Typography variant="body2" color="text.secondary">
         Compares Kite with this strategy after subtracting every other strategy. A positive number
-        is shares to add. A negative number is shares to remove. Accept writes only this strategy.
+        is shares to add. A negative number is shares to remove. Accept writes this strategy only
+        when it already has a position or an order in that symbol.
       </Typography>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
         <TextField

@@ -68,7 +68,7 @@ describeDb("templates and schedules", () => {
     expect(other.status).toBe(200)
   })
 
-  it("keeps the job snapshot after a template edit and refuses a filled job", async () => {
+  it("refreshes exits from a template and keeps lots on the queued job", async () => {
     const created = await createNamed(`Snap ${Date.now()}`)
     const templateId = (created.body as { id: string }).id
     const inserted = await pool.query(
@@ -90,6 +90,7 @@ describeDb("templates and schedules", () => {
           id: templateId,
           name: (created.body as { name: string }).name,
           lots: 3,
+          slmPercent: 15,
         },
       },
     })
@@ -102,8 +103,12 @@ describeDb("templates and schedules", () => {
       body: { action: "update-job", jobId },
     })
     expect(copied.status).toBe(200)
-    const after = await pool.query(`SELECT lots FROM job_executions WHERE id = $1`, [jobId])
-    expect(after.rows[0].lots).toBe(3)
+    const after = await pool.query(
+      `SELECT lots, slm_percent FROM job_executions WHERE id = $1`,
+      [jobId]
+    )
+    expect(Number(after.rows[0].lots)).toBe(1)
+    expect(Number(after.rows[0].slm_percent)).toBe(15)
 
     await pool.query(
       `INSERT INTO trading_accounts (id) VALUES ('default') ON CONFLICT (id) DO NOTHING`

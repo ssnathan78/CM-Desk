@@ -22,6 +22,7 @@ import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNot
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
 import { useDeskStatus } from "../lib/hooks/useDeskStatus"
 import { type ActionOutcome, chaseSquareOffCopy } from "../lib/operatorActionCopy"
+import { SQUARE_OFF_CONFIRM } from "../lib/operatorConfirm"
 import {
   defaultVisibleIds,
   readVisibleColumns,
@@ -104,7 +105,9 @@ const ChasePlanPage = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          instrument ? { strategy: "CHASE", instrument } : { strategy: "CHASE" }
+          instrument
+            ? { strategy: "CHASE", instrument, confirm: SQUARE_OFF_CONFIRM }
+            : { strategy: "CHASE", confirm: SQUARE_OFF_CONFIRM }
         ),
       })
       const notice = flattenOperatorNotice(

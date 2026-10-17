@@ -1,5 +1,6 @@
 import { sendApiError } from "../../../lib/apiErrors"
 import logger from "../../../lib/logger"
+import { allowLiveArm } from "../../../lib/operatorConfirm"
 import withSession from "../../../lib/session"
 import {
   DEFAULT_STRATEGY_LIMITS,
@@ -105,6 +106,12 @@ export default withSession(async (req, res) => {
     if (req.method === "PUT") {
       const current = await getRiskSettings()
       const patch = sanitizePatch(req.body?.settings || req.body || {})
+      const arm = allowLiveArm({
+        current: current.allowLiveOrders,
+        requested: patch.allowLiveOrders,
+        confirm: req.body?.confirmLive,
+      })
+      if (!arm.ok) return res.status(409).json({ error: arm.error })
       const { getOpenPositions } = await import("../../../lib/trading/ledger")
       const { splitLedgerQty, executionModeSwitchBlocked } = await import(
         "../../../lib/trading/bookSplit"

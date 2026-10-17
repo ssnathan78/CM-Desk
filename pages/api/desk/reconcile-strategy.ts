@@ -1,16 +1,18 @@
-import { eq, like, or } from "drizzle-orm"
+import { and, eq, like, or } from "drizzle-orm"
 
 import { sendApiError } from "../../../lib/apiErrors"
 import { db } from "../../../lib/drizzle"
 import { syncGetKiteInstance } from "../../../lib/kiteUtils"
 import logger from "../../../lib/logger"
-import { fills, positions } from "../../../lib/schema"
+import { ATTRIBUTE_FILL_CONFIRM, confirmationError, confirmed } from "../../../lib/operatorConfirm"
+import { fills, orders, positions } from "../../../lib/schema"
 import withSession from "../../../lib/session"
 import { recordAttributedFill } from "../../../lib/trading/ledger"
 import { RISK_STRATEGY_KEYS, type RiskStrategyKey } from "../../../lib/trading/riskEngine"
 import {
   acceptedQuantity,
   allocateBrokerTrades,
+  reconcileTargetTied,
   type StrategyGap,
   strategyQuantityDifference,
   type TradeSlice,
@@ -97,12 +99,34 @@ async function usedTradeQty(tradeId: string): Promise<number> {
   return rows.reduce((sum, row) => sum + row.quantity, 0)
 }
 
+async function priorStrategyTouches(strategy: string, tradingsymbol: string): Promise<number> {
+  const [orderRows, fillRows] = await Promise.all([
+    db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(and(eq(orders.strategy, strategy), eq(orders.tradingsymbol, tradingsymbol)))
+      .limit(1),
+    db
+      .select({ id: fills.id })
+      .from(fills)
+      .where(and(eq(fills.strategy, strategy), eq(fills.tradingsymbol, tradingsymbol)))
+      .limit(1),
+  ])
+  return orderRows.length + fillRows.length
+}
+
 export default withSession(async (req, res) => {
   const user = req.session.user
   if (!user) return res.status(401).end()
   try {
     const strategy = String(req.query.strategy || req.body?.strategy || "")
     if (!isStrategy(strategy)) return res.status(400).json({ error: "Pick a strategy." })
+    if (req.method !== "GET" && req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" })
+    }
+    if (req.method === "POST" && !confirmed(req.body?.confirm, ATTRIBUTE_FILL_CONFIRM)) {
+      return res.status(409).json({ error: confirmationError(ATTRIBUTE_FILL_CONFIRM) })
+    }
     if (isMockOrder() || !user.session?.access_token) {
       return res.status(409).json({ error: "A live Kite session is required." })
     }
@@ -116,7 +140,6 @@ export default withSession(async (req, res) => {
     if (req.method === "GET") {
       return res.json({ strategy, rows: await gapsFor(strategy, broker) })
     }
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" })
 
     const exchange = String(req.body?.exchange || "")
     const tradingsymbol = String(req.body?.tradingsymbol || "").toUpperCase()
@@ -127,6 +150,15 @@ export default withSession(async (req, res) => {
         row.exchange === exchange && row.tradingsymbol === tradingsymbol && row.product === product
     )
     if (!gap) return res.status(404).json({ error: "That symbol has no difference." })
+    const tied = reconcileTargetTied({
+      strategyQty: Number(gap.strategyQty),
+      priorTouches: await priorStrategyTouches(strategy, tradingsymbol),
+    })
+    if (!tied) {
+      return res.status(409).json({
+        error: "This strategy has no position or order in that symbol.",
+      })
+    }
     const quantity = acceptedQuantity(gap.difference, Number(req.body?.quantity))
     if (quantity == null) {
       return res.status(400).json({ error: "Quantity must stay within the difference." })

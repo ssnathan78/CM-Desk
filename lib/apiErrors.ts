@@ -34,15 +34,22 @@ export function redactForLog(value: unknown): unknown {
   return value
 }
 
+const UNSAFE_CLIENT_MESSAGE =
+  /failed query:|\bparams:|syntax error|password|access_token|refresh_token|api_secret|secret_cookie|\bat\s+\S+\(/i
+
+/** Query text, bound parameters, stacks, and credentials stay in the server log. */
+export function messageLooksUnsafe(message: string): boolean {
+  return message.includes("\n") || UNSAFE_CLIENT_MESSAGE.test(message)
+}
+
 export function safeErrorMessage(err: unknown, fallback = "Internal server error"): string {
-  if (process.env.NODE_ENV !== "production") {
-    if (err instanceof Error) return err.message
-    return String(err)
+  if (!(err instanceof Error) || !err.message) {
+    return process.env.NODE_ENV === "production" ? fallback : String(err)
   }
-  if (err instanceof Error && err.message && !err.message.includes(" at ")) {
-    return err.message
-  }
-  return fallback
+  if (messageLooksUnsafe(err.message)) return fallback
+  if (process.env.NODE_ENV !== "production") return err.message
+  if (err.message.length > 300) return fallback
+  return err.message
 }
 
 export function sendApiError(

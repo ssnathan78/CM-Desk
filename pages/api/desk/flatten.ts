@@ -1,6 +1,7 @@
 import { sendApiError } from "../../../lib/apiErrors"
 import { flattenOpenPositions, parseFlattenScope } from "../../../lib/flattenOpen"
 import logger from "../../../lib/logger"
+import { confirmationError, confirmed, SQUARE_OFF_CONFIRM } from "../../../lib/operatorConfirm"
 import withSession from "../../../lib/session"
 
 export default withSession(async (req, res) => {
@@ -11,6 +12,9 @@ export default withSession(async (req, res) => {
   }
   const parsed = parseFlattenScope(req.body)
   if (!parsed.ok) return res.status(400).json({ error: parsed.error })
+  if (!confirmed(req.body?.confirm, SQUARE_OFF_CONFIRM)) {
+    return res.status(409).json({ error: confirmationError(SQUARE_OFF_CONFIRM) })
+  }
   try {
     const result = await flattenOpenPositions({ user, scope: parsed.scope })
     logger.info("[api/desk/flatten]", {

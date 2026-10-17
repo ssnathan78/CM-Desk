@@ -34,6 +34,7 @@ import {
 } from "../../lib/forms/riskSchema"
 import { previewSetupNotional } from "../../lib/forms/riskWhatIf"
 import { useDeskStatus } from "../../lib/hooks/useDeskStatus"
+import { ALLOW_LIVE_CONFIRM } from "../../lib/operatorConfirm"
 import { formatInr } from "../../lib/trading/notional"
 import {
   RISK_STRATEGY_KEYS,
@@ -89,9 +90,7 @@ function buildSaveGuards(
     const liveNames = RISK_STRATEGY_KEYS.filter(
       k => next.strategies[k].executionMode === "LIVE"
     ).map(k => STRATEGY_ROW_LABEL[k])
-    if (liveNames.length) {
-      guards.push({ kind: "allowLive", strategyLabels: liveNames })
-    }
+    guards.push({ kind: "allowLive", strategyLabels: liveNames })
   }
   return guards
 }
@@ -145,10 +144,14 @@ export default function RiskControls({
       setSaving(true)
       setSaveError(null)
       try {
+        const turningLiveOn = !baselineRef.current.allowLiveOrders && values.allowLiveOrders
         await fetchJson("/api/desk/risk", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ settings: values }),
+          body: JSON.stringify({
+            settings: values,
+            ...(turningLiveOn ? { confirmLive: ALLOW_LIVE_CONFIRM } : {}),
+          }),
         })
         baselineRef.current = values as RiskSettings
         reset(values)
@@ -272,7 +275,11 @@ export default function RiskControls({
         open
         tone="attention"
         title="Allow live orders?"
-        message={`Live orders can reach Kite for strategies set to LIVE: ${activeGuard.strategyLabels.join(", ")}.`}
+        message={
+          activeGuard.strategyLabels.length
+            ? `Live orders can reach Kite for strategies set to Live: ${activeGuard.strategyLabels.join(", ")}.`
+            : "Allow live orders will be on. A strategy still has to be set to Live before an entry can reach Kite."
+        }
         confirmLabel="Allow live"
         onCancel={cancelGuards}
         onConfirm={advanceGuard}

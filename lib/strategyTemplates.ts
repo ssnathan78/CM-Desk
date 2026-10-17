@@ -1,6 +1,10 @@
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { db } from "./drizzle"
-import { mapJobExecutionInsert } from "./jobExecutionMapper"
+import {
+  mapJobExecutionInsert,
+  omitFrozenPendingJobFields,
+  pendingJobFieldChange,
+} from "./jobExecutionMapper"
 import { mapPlanFromDb, mapPlanToDb } from "./planMapper"
 import { jobExecutions, orders, strategySchedules, strategyTemplates } from "./schema"
 import {
@@ -177,7 +181,9 @@ export async function editPendingJob(jobId: string, config: Record<string, unkno
   const filledQty = Number(filled[0]?.qty ?? 0)
   const gate = canUpdateJobFromTemplate({ status: job.status, filledQty })
   if (!gate.ok) return { ok: false as const, status: 409, error: gate.error }
-  const body = mapJobExecutionInsert(config)
+  const frozen = pendingJobFieldChange(job as unknown as Record<string, unknown>, config)
+  if (frozen) return { ok: false as const, status: 409, error: frozen }
+  const body = omitFrozenPendingJobFields(mapJobExecutionInsert(config))
   delete body.templateId
   delete body.planRef
   const [updated] = await db
@@ -206,8 +212,8 @@ export async function updateJobFromTemplate(jobId: string) {
     .from(strategyTemplates)
     .where(eq(strategyTemplates.id, job.templateId))
   if (!template) return { ok: false as const, status: 404, error: "Template not found" }
-  const body = mapJobExecutionInsert(
-    templateToJobBody(mapPlanFromDb(template) as Record<string, unknown>, {})
+  const body = omitFrozenPendingJobFields(
+    mapJobExecutionInsert(templateToJobBody(mapPlanFromDb(template) as Record<string, unknown>, {}))
   )
   delete body.templateId
   const [updated] = await db

@@ -12,31 +12,58 @@ export type ChaseResetResult =
   | { ok: false; error: string; instrument: string; previousStatus: string | null }
 
 /**
+ * Refuse a reset while the book is open or the quantity cannot be proved flat.
+ * There is no force flag. An open futures book keeps LONG/SHORT and its stop.
+ */
+export function chaseResetRefusal(input: {
+  status: string | null
+  netQty: number | null
+  qtyKnown: boolean
+}): string | null {
+  if (input.status !== CHASE_STATUS.LONG && input.status !== CHASE_STATUS.SHORT) return null
+  if (!input.qtyKnown || input.netQty == null) {
+    return "Could not prove this book is flat, so it was not reset."
+  }
+  if (chaseStatusHasPosition(input.status, input.netQty)) {
+    return "Chase still has an open book. Square off that position first (Today, Chase plan, or Desk → Positions). Reset only clears a stuck signal."
+  }
+  return null
+}
+
+/**
  * Drop a phantom LONG/SHORT (or a stuck pending entry) back to AWAITING_SIGNAL
  * so the next hourly job can evaluate a fresh signal.
  *
- * Refuses when the Chase book actually has size, unless `force` is set.
+ * Refuses when the Chase book has size, and when that size cannot be read.
  * Does not flatten Kite — use Square off on Today / Chase / Desk → Positions for that.
  */
 export async function resetChaseSignalState(input: {
   instrument?: string
   accessToken?: string
-  force?: boolean
 }): Promise<ChaseResetResult> {
   const instrument = input.instrument || "NIFTY"
   const row = await getChaseStatus(instrument)
   const previousStatus = row?.status ?? null
   const tradingsymbol = row?.tradingsymbol ?? null
 
-  if (!input.force && tradingsymbol && (previousStatus === "LONG" || previousStatus === "SHORT")) {
-    const book = await resolveChaseBookBreakdown(tradingsymbol, input.accessToken || "")
-    if (chaseStatusHasPosition(previousStatus, book.netQty)) {
+  if (tradingsymbol && (previousStatus === "LONG" || previousStatus === "SHORT")) {
+    try {
+      const book = await resolveChaseBookBreakdown(tradingsymbol, input.accessToken || "")
+      const refusal = chaseResetRefusal({
+        status: previousStatus,
+        netQty: book.kiteQtyKnown ? book.netQty : null,
+        qtyKnown: book.kiteQtyKnown,
+      })
+      if (refusal) {
+        return { ok: false, instrument, previousStatus, error: refusal }
+      }
+    } catch (e) {
+      logger.warn("[resetChaseSignalState] quantity unknown", e)
       return {
         ok: false,
         instrument,
         previousStatus,
-        error:
-          "Chase still has an open book. Square off that position first (Today, Chase plan, or Desk → Positions). Reset only clears a stuck signal.",
+        error: "Could not prove this book is flat, so it was not reset.",
       }
     }
   }
@@ -106,22 +133,19 @@ async function probeChaseReset(instrument: string, accessToken?: string): Promis
 
 export async function resetAllChaseSignalState(input: {
   accessToken?: string
-  force?: boolean
 }): Promise<
   | { ok: true; results: ChaseResetResult[] }
   | { ok: false; error: string; results: ChaseResetResult[]; unchanged?: boolean }
 > {
   const { listChaseBooks } = await import("./chaseSettings")
   const books = await listChaseBooks()
-  if (!input.force) {
-    const probes: ChaseResetProbe[] = []
-    for (const book of books) {
-      probes.push(await probeChaseReset(book.instrument, input.accessToken))
-    }
-    const plan = planChaseSignalReset(probes)
-    if (!plan.ok) {
-      return { ok: false, error: plan.error, results: [], unchanged: true }
-    }
+  const probes: ChaseResetProbe[] = []
+  for (const book of books) {
+    probes.push(await probeChaseReset(book.instrument, input.accessToken))
+  }
+  const plan = planChaseSignalReset(probes)
+  if (!plan.ok) {
+    return { ok: false, error: plan.error, results: [], unchanged: true }
   }
   const results: ChaseResetResult[] = []
   for (const book of books) {
@@ -129,7 +153,6 @@ export async function resetAllChaseSignalState(input: {
       await resetChaseSignalState({
         instrument: book.instrument,
         accessToken: input.accessToken,
-        force: input.force,
       })
     )
   }

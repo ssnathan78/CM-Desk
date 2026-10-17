@@ -4,6 +4,7 @@ import {
   executionProvenance,
   inferOrderRole,
   isPaperStrategy,
+  lotsForRiskCheck,
   type RiskContext,
   type RiskIntent,
 } from "../../../lib/trading/riskEngine"
@@ -406,5 +407,35 @@ describe("executionProvenance", () => {
     expect(executionProvenance({ processMock: false, settings, strategy: "ATM_STRADDLE" })).toBe(
       "PAPER"
     )
+  })
+})
+
+describe("stored job lots", () => {
+  it("uses the lots stored on the job when the caller sends a smaller number", () => {
+    expect(lotsForRiskCheck(1, 2)).toBe(2)
+    expect(lotsForRiskCheck(null, 1)).toBe(1)
+    expect(lotsForRiskCheck(3, null)).toBe(3)
+  })
+
+  it("rejects an entry whose quantity is larger than the stored lots", () => {
+    const decision = evaluateOrder(
+      intent({ quantity: 130, lots: 1, lotSize: 65, ltp: 10 }),
+      ctx()
+    )
+    expect(decision.ok).toBe(false)
+    if (!decision.ok) expect(decision.code).toBe("JOB_LOTS")
+  })
+
+  it("allows a flatten larger than the stored lots", () => {
+    const decision = evaluateOrder(
+      intent({ role: "FLATTEN", quantity: 130, lots: 1, lotSize: 65, ltp: 10 }),
+      ctx()
+    )
+    expect(decision.ok).toBe(true)
+  })
+
+  it("allows an entry at the stored lot size", () => {
+    const decision = evaluateOrder(intent({ quantity: 65, lots: 1, lotSize: 65, ltp: 10 }), ctx())
+    expect(decision.ok).toBe(true)
   })
 })

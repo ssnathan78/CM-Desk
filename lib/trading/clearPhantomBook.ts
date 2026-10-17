@@ -134,7 +134,6 @@ export async function clearPhantomPosition(input: {
           await resetChaseSignalState({
             instrument: underlying,
             accessToken: input.accessToken,
-            force: true,
           })
         }
       } catch (e) {

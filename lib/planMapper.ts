@@ -52,17 +52,24 @@ const EXTRA_PLAN_KEYS = [
   "hedgeDistance",
 ] as const
 
+function planExtraValue(value: unknown): unknown {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === "number" && !Number.isFinite(value)) return undefined
+  return value
+}
+
+/** Only hedge and strike-selection fields. A nested object cannot carry lots, strategy, or product. */
 export function collectPlanExtras(planConfig: Record<string, any> = {}): Record<string, unknown> {
-  const extras: Record<string, unknown> = {
-    ...((planConfig.extras && typeof planConfig.extras === "object"
-      ? planConfig.extras
-      : {}) as Record<string, unknown>),
-  }
+  const nested =
+    planConfig.extras && typeof planConfig.extras === "object"
+      ? (planConfig.extras as Record<string, unknown>)
+      : {}
+  const extras: Record<string, unknown> = {}
   for (const key of EXTRA_PLAN_KEYS) {
-    const value = planConfig[key]
-    if (value === undefined || value === null) continue
-    if (typeof value === "number" && !Number.isFinite(value)) continue
-    extras[key] = value
+    const top = planExtraValue(planConfig[key])
+    const fromNested = planExtraValue(nested[key])
+    const value = top !== undefined ? top : fromNested
+    if (value !== undefined) extras[key] = value
   }
   return extras
 }
@@ -145,5 +152,5 @@ export function planApiErrorMessage(err: any): string {
   if (code === "23505") {
     return "This weekday already has a template for that strategy and index. Edit the existing one."
   }
-  return err?.cause?.detail || err?.message || "Could not save template"
+  return "Could not save template"
 }

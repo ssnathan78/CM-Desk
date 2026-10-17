@@ -54,7 +54,7 @@ export async function prepareStrategyGoLive(input: {
   if (input.strategy === "CHASE") {
     try {
       const { resetAllChaseSignalState } = await import("../chaseReset")
-      const reset = await resetAllChaseSignalState({ force: true })
+      const reset = await resetAllChaseSignalState({})
       if (!reset.ok) {
         return { ok: false, error: reset.error }
       }

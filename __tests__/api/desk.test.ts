@@ -2,6 +2,7 @@ import alertsHandler from "../../pages/api/desk/alerts"
 import instrumentsHandler from "../../pages/api/desk/instruments"
 import ordersHandler from "../../pages/api/desk/orders"
 import portfolioHandler from "../../pages/api/desk/portfolio"
+import { SQUARE_OFF_CONFIRM } from "../../lib/operatorConfirm"
 import flattenHandler from "../../pages/api/desk/flatten"
 import positionsHandler from "../../pages/api/desk/positions"
 import reconcileHandler from "../../pages/api/desk/reconcile"
@@ -426,10 +427,18 @@ describeDb("desk API session", () => {
       (beforeRisk.body as { settings?: { deskHalted?: boolean } }).settings?.deskHalted
     )
 
-    const flattened = await invokeApi(flattenHandler, {
+    const missingConfirm = await invokeApi(flattenHandler, {
       method: "POST",
       user,
       body: { positionId },
+    })
+    expect(missingConfirm.status).toBe(409)
+    expect((missingConfirm.body as { error: string }).error).toContain(SQUARE_OFF_CONFIRM)
+
+    const flattened = await invokeApi(flattenHandler, {
+      method: "POST",
+      user,
+      body: { positionId, confirm: SQUARE_OFF_CONFIRM },
     })
     expect(flattened.status).toBe(200)
     expect((flattened.body as { flattened?: unknown[] }).flattened?.length).toBe(1)

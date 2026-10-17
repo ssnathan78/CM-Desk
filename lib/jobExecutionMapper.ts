@@ -84,7 +84,35 @@ export function mapJobExecutionInsert(body: Record<string, unknown> = {}): Recor
   return mapped
 }
 
-/** Safe payload for BullMQ workers — DB-mapped fields plus strategy extras. */
+/** Identity of a queued job. A later edit or a nested extras object cannot replace these. */
+export const FROZEN_PENDING_JOB_FIELDS = [
+  "strategy",
+  "lots",
+  "productType",
+  "instrument",
+  "volatilityType",
+] as const
+
+export function pendingJobFieldChange(
+  current: Record<string, unknown>,
+  patch: Record<string, unknown>
+): string | null {
+  for (const key of FROZEN_PENDING_JOB_FIELDS) {
+    if (!(key in patch) || patch[key] === undefined || patch[key] === null) continue
+    if (String(patch[key]) !== String(current[key] ?? "")) {
+      return `${key} is fixed on a queued job. Create a new job to change it.`
+    }
+  }
+  return null
+}
+
+export function omitFrozenPendingJobFields(body: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...body }
+  for (const key of FROZEN_PENDING_JOB_FIELDS) delete next[key]
+  return next
+}
+
+/** Worker payload. Stored lots, strategy, product, instrument, and direction win over the request. */
 export function mapJobExecutionQueuePayload(
   body: Record<string, unknown>,
   dbRow: Record<string, unknown>,
@@ -100,6 +128,11 @@ export function mapJobExecutionQueuePayload(
     ...queueOnly,
     ...extras,
     orderTag,
+    lots: dbRow.lots,
+    strategy: dbRow.strategy,
+    productType: dbRow.productType,
+    instrument: dbRow.instrument,
+    volatilityType: dbRow.volatilityType,
   }
 }
 

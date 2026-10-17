@@ -9,6 +9,7 @@ import { dashboardJobActions, isJobAborted } from "../lib/dashboardJobActions"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { type ActionOutcome, chaseSquareOffCopy } from "../lib/operatorActionCopy"
+import { SQUARE_OFF_CONFIRM } from "../lib/operatorConfirm"
 import { operatorJobError } from "../lib/operatorJobError"
 import BrokerOrders from "./lib/brokerOrders"
 import ConfirmAction from "./lib/ConfirmAction"
@@ -127,7 +128,11 @@ const WrapperComponent = (props: TradeJob) => {
       const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isChase ? { strategy: "CHASE" } : { jobId: props.id }),
+        body: JSON.stringify(
+          isChase
+            ? { strategy: "CHASE", confirm: SQUARE_OFF_CONFIRM }
+            : { jobId: props.id, confirm: SQUARE_OFF_CONFIRM }
+        ),
       })
       await mutate("/api/trades_day")
       const notice = flattenOperatorNotice(

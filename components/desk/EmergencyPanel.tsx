@@ -8,6 +8,11 @@ import fetchJson, { type FetchJsonError } from "../../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../../lib/flattenNotice"
 import { killDialogNotice } from "../../lib/killNotice"
 import type { ActionOutcome } from "../../lib/operatorActionCopy"
+import {
+  KILL_ALL_CONFIRM,
+  KILL_INTRADAY_CONFIRM,
+  SQUARE_OFF_CONFIRM,
+} from "../../lib/operatorConfirm"
 import { color } from "../../src/tokens"
 import ConfirmAction from "../lib/ConfirmAction"
 
@@ -49,7 +54,7 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
         const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ all: true }),
+          body: JSON.stringify({ all: true, confirm: SQUARE_OFF_CONFIRM }),
         })
         const notice = flattenOperatorNotice(result, "Open books squared off.")
         setOutcome(notice)
@@ -62,7 +67,10 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
         }>("/api/kill-desk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scope: pendingScope }),
+          body: JSON.stringify({
+            scope: pendingScope,
+            confirm: pendingScope === "all" ? KILL_ALL_CONFIRM : KILL_INTRADAY_CONFIRM,
+          }),
         })
         setOutcome(
           killDialogNotice({

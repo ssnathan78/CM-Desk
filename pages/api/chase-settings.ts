@@ -179,11 +179,9 @@ export default withSession(async (req, res) => {
         ? await resetChaseSignalState({
             instrument,
             accessToken: user.session?.access_token,
-            force: Boolean(req.body?.force),
           })
         : await resetAllChaseSignalState({
             accessToken: user.session?.access_token,
-            force: Boolean(req.body?.force),
           })
       if (!result.ok) {
         return res.status(409).json(result)

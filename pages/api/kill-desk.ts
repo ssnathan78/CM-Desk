@@ -3,6 +3,7 @@ import { jobMatchesKillScope } from "../../lib/dashboardJobActions"
 import { type KillDeskScope, runDeskKill } from "../../lib/killDesk"
 import { killOperatorNotice, killResponseStatus } from "../../lib/killNotice"
 import logger from "../../lib/logger"
+import { confirmationError, confirmed, killConfirmPhrase } from "../../lib/operatorConfirm"
 import withSession from "../../lib/session"
 
 export default withSession(async (req, res) => {
@@ -17,6 +18,10 @@ export default withSession(async (req, res) => {
   const scope = req.body?.scope as KillDeskScope
   if (scope !== "intraday" && scope !== "all") {
     return res.status(400).json({ error: "scope must be intraday or all" })
+  }
+  const phrase = killConfirmPhrase(scope)
+  if (!confirmed(req.body?.confirm, phrase)) {
+    return res.status(409).json({ error: confirmationError(phrase) })
   }
 
   try {

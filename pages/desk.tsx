@@ -36,6 +36,7 @@ import fetchJson from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { formatIstDateTime } from "../lib/format"
 import { type ActionOutcome, chaseSquareOffCopy } from "../lib/operatorActionCopy"
+import { SQUARE_OFF_CONFIRM } from "../lib/operatorConfirm"
 import type { FeedClearMode } from "../lib/trading/feedWindow"
 import { type HistoryPreset, historyRange } from "../lib/trading/historyRange"
 import { groupStrategyRealized } from "../lib/trading/todayGroups"
@@ -354,7 +355,7 @@ export default function DeskPage() {
             const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ positionId: flattenRow.id }),
+              body: JSON.stringify({ positionId: flattenRow.id, confirm: SQUARE_OFF_CONFIRM }),
             })
             const notice = flattenOperatorNotice(result, `Squared off ${flattenRow.symbol}`)
             setActionOutcome(notice)
@@ -426,7 +427,11 @@ export default function DeskPage() {
             const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ strategy: "CHASE", instrument: chaseFlatten }),
+              body: JSON.stringify({
+                strategy: "CHASE",
+                instrument: chaseFlatten,
+                confirm: SQUARE_OFF_CONFIRM,
+              }),
             })
             const notice = flattenOperatorNotice(
               result,
