@@ -68,11 +68,11 @@ export default function PositionDetailDrawer({
           </Typography>
         ) : null}
         {open ? (
-          <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
+          <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ pt: 1 }}>
             <ActionButton actionVariant="order" size="small" onClick={onSquareOff}>
               Square off {qty}…
             </ActionButton>
-            <Button size="small" onClick={onClearPhantom}>
+            <Button size="small" onClick={onClearPhantom} sx={{ whiteSpace: "nowrap" }}>
               Clear phantom row…
             </Button>
           </Stack>

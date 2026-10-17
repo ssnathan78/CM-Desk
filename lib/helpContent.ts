@@ -215,7 +215,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "instruments",
         title: "Underlyings",
         body: [
-          "Each underlying has its own status, signals, EMA series, and futures contract. Search adds a Kite NFO name such as RELIANCE or INFY. The front-month future is chosen when the job runs. A new book is saved with Trade this book off.",
+          "Each underlying has its own status, signals, EMA series, and futures contract. The Books table lists configuration (EMA, buffer, protect, offset, open classify) beside runtime state so you can compare indexes without opening each drawer. Amber cells differ from the first enabled book in index order. Search adds a Kite NFO name such as RELIANCE or INFY. The front-month future is chosen when the job runs. A new book is saved with Trade this book off.",
           "Off and flat means no hourly candles and no signals. The minute job still runs when that book is LONG, SHORT, or waiting on an entry. The NFO instrument list is one cached download, not a Kite call per symbol.",
         ],
       },

@@ -1,5 +1,12 @@
-import { Box, Button, Stack, TextField, Typography, useMediaQuery } from "@mui/material"
-import { useTheme } from "@mui/material/styles"
+import {
+  Box,
+  Button,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from "@mui/material"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import ChaseBookDrawer from "../components/chase/ChaseBookDrawer"
@@ -19,8 +26,7 @@ import useUser from "../lib/useUser"
 
 const ChasePlanPage = () => {
   useUser({ redirectTo: "/" })
-  const theme = useTheme()
-  const showPriceCols = useMediaQuery(theme.breakpoints.up("lg"))
+  const [showPrices, setShowPrices] = useState(false)
   const { data: deskStatus } = useDeskStatus()
   const { data, error, mutate } = useChaseSettings()
   const [books, setBooks] = useState<ChaseBookConfig[]>(
@@ -247,14 +253,28 @@ const ChasePlanPage = () => {
 
         <PageSection
           title="Books"
-          description="Row click or pencil opens the drawer. Engine and pause save immediately."
+          description="Configuration and runtime in one grid. Row click or ⋮ → Edit opens the drawer. Engine and pause save immediately."
           flush
+          actions={
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={showPrices ? "prices" : "core"}
+              onChange={(_, value) => {
+                if (value) setShowPrices(value === "prices")
+              }}
+              aria-label="Books table columns"
+            >
+              <ToggleButton value="core">Config + runtime</ToggleButton>
+              <ToggleButton value="prices">+ Prices</ToggleButton>
+            </ToggleButtonGroup>
+          }
         >
           <ChaseBooksTable
             books={books}
             statuses={data.statuses ?? []}
             executionMode={executionMode}
-            showPriceCols={showPriceCols}
+            showPriceCols={showPrices}
             rowNotice={rowNotice}
             onRowClick={instrument => setEditInstrument(instrument)}
             onEngineChange={(instrument, enabled) => {

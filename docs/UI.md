@@ -20,7 +20,7 @@ Operator-facing surfaces for the personal Kite desk (2026 layout). Behaviour rul
 | `/risk` | Risk | Limits matrix, execution mode, new entries, sticky save |
 | `/templates` | Templates | Master–detail editor; `?type=` and `?id=` optional |
 | `/plan` | Schedules | Weekday grid; attach template to clock |
-| `/chase` | Chase | Read-first books table, drawer editor, `status` from API |
+| `/chase` | Chase | Books grid: config + runtime columns, diff vs first enabled book; drawer editor; `status` from API |
 | `/momentum`, `/daily-trend` | Same as page | Permission line from desk status + page config |
 | `/help`, `/help/[topic]` | Guide | Operator help (revamp vocabulary) |
 | `/strat/straddle`, `/strat/strangle` | — | Redirect to `/templates?type=…` |
@@ -60,6 +60,7 @@ E2E and unit tests that open templates should use `/templates` (optional `?type=
 | Signal explainability | Why → Signals (`signalExplain`, labels) |
 | Momentum at scale | `/momentum` column menu, rebalance preview diff |
 | Daily trend inline edit | `/daily-trend` row select + inline budget/EMA/buffer |
+| Chase books config at a glance | `/chase` Books table (EMA, buffer, protect, offset, open classify); amber = differs from primary enabled index |
 | Chase spark chart | Chase drawer, `GET /api/chase-settings/chart` |
 | Mobile operator sheet | Bottom nav **More** on small viewports |
 | Sessions → trades drill | Books → Sessions row click |

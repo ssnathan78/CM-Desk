@@ -30,6 +30,15 @@ type Props<T> = {
   getRowId?: (row: T) => string
 }
 
+function isInteractiveRowClickTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false
+  return Boolean(
+    target.closest(
+      "button, a, input, select, textarea, [role='menu'], [role='menuitem'], [role='button'], [data-stop-row-click]"
+    )
+  )
+}
+
 export default function RecordTable<T>({
   columns,
   data,
@@ -114,7 +123,14 @@ export default function RecordTable<T>({
               <TableRow
                 key={row.id}
                 hover={Boolean(onRowClick)}
-                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                onClick={
+                  onRowClick
+                    ? e => {
+                        if (isInteractiveRowClickTarget(e.target)) return
+                        onRowClick(row.original)
+                      }
+                    : undefined
+                }
                 sx={{ height: 32, cursor: onRowClick ? "pointer" : undefined }}
               >
                 {row.getVisibleCells().map(cell => (
