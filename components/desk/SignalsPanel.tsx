@@ -159,7 +159,7 @@ export default function SignalsPanel({
               }
               label="Group repeats"
             />
-            <FeedClearMenu label="Clear signals" onClear={onClear} />
+            <FeedClearMenu kind="signals" onClear={onClear} />
             <FormControl
               size="small"
               sx={{ minWidth: { xs: "100%", md: 160 }, width: { xs: "100%", md: "auto" } }}

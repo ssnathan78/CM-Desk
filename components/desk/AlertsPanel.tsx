@@ -74,7 +74,7 @@ export default function AlertsPanel({
         onFrom={onFrom}
         onTo={onTo}
         onClear={onClear}
-        extra={<FeedClearMenu label="Hide alerts" onClear={onClear} />}
+        extra={<FeedClearMenu kind="alerts" onClear={onClear} />}
       />
       {errorCount + warnCount > 0 ? (
         <Alert severity={errorCount ? "error" : "warning"} sx={{ mx: 2, mt: 1.5 }}>

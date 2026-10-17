@@ -1,47 +1,46 @@
-import MoreHorizIcon from "@mui/icons-material/MoreHoriz"
-import { IconButton, Menu, MenuItem } from "@mui/material"
+import { Button, Menu, MenuItem, Typography } from "@mui/material"
 import { useState } from "react"
 
+import { feedClearMenuCopy } from "../../lib/operatorActionCopy"
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
 
 export default function FeedClearMenu({
-  label,
+  kind,
   onClear,
 }: {
-  label: string
+  kind: "alerts" | "signals"
   onClear: (period: FeedPeriod) => void
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const copy = feedClearMenuCopy(kind)
   return (
     <>
-      <IconButton size="small" aria-label={label} onClick={e => setAnchor(e.currentTarget)}>
-        <MoreHorizIcon fontSize="small" />
-      </IconButton>
+      <Button
+        size="small"
+        aria-haspopup="menu"
+        aria-expanded={Boolean(anchor)}
+        aria-label={copy.button}
+        onClick={e => setAnchor(e.currentTarget)}
+      >
+        {copy.button}
+      </Button>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
-        <MenuItem
-          onClick={() => {
-            setAnchor(null)
-            onClear("today")
-          }}
-        >
-          Today…
+        <MenuItem disabled sx={{ opacity: 1, whiteSpace: "normal", maxWidth: 280 }}>
+          <Typography variant="caption" color="text.secondary">
+            {copy.note}
+          </Typography>
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setAnchor(null)
-            onClear("before_today")
-          }}
-        >
-          Before today…
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setAnchor(null)
-            onClear("all")
-          }}
-        >
-          All…
-        </MenuItem>
+        {copy.items.map(item => (
+          <MenuItem
+            key={item.period}
+            onClick={() => {
+              setAnchor(null)
+              onClear(item.period)
+            }}
+          >
+            {item.label}
+          </MenuItem>
+        ))}
       </Menu>
     </>
   )

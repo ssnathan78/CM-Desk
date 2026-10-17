@@ -1,6 +1,7 @@
 import { killDialogNotice } from "../../lib/killNotice"
 import {
   cashSubmitNotice,
+  feedClearMenuCopy,
   chaseResetConfirm,
   chaseSquareOffCopy,
   constituentDropConfirm,
@@ -220,6 +221,24 @@ describe("planChaseSignalReset", () => {
 
   it("allows a reset when every book is clear", () => {
     expect(planChaseSignalReset([{ instrument: "NIFTY", state: "clear" }]).ok).toBe(true)
+  })
+})
+
+describe("feedClearMenuCopy", () => {
+  it("says hide for alerts and names the window", () => {
+    const copy = feedClearMenuCopy("alerts")
+    expect(copy.button).toMatch(/Hide alerts/)
+    expect(copy.note).toMatch(/Ledger/)
+    expect(copy.items.map(item => item.label).join(" ")).toMatch(/Hide today/)
+    expect(copy.items.map(item => item.label).join(" ")).toMatch(/Hide before today/)
+    expect(copy.items.map(item => item.label).join(" ")).toMatch(/Hide all/)
+  })
+
+  it("says clear for signals and that the rows are deleted", () => {
+    const copy = feedClearMenuCopy("signals")
+    expect(copy.button).toMatch(/Clear signals/)
+    expect(copy.note).toMatch(/Deletes stored signal rows/)
+    expect(copy.items.every(item => item.label.startsWith("Clear"))).toBe(true)
   })
 })
 

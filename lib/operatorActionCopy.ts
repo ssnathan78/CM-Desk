@@ -12,6 +12,33 @@ export type ActionOutcome = {
   text: string
 }
 
+export function feedClearMenuCopy(kind: "alerts" | "signals"): {
+  button: string
+  note: string
+  items: Array<{ period: "today" | "before_today" | "all"; label: string }>
+} {
+  if (kind === "alerts") {
+    return {
+      button: "Hide alerts…",
+      note: "Hides these rows from this list. Ledger, jobs, and orders stay.",
+      items: [
+        { period: "today", label: "Hide today…" },
+        { period: "before_today", label: "Hide before today…" },
+        { period: "all", label: "Hide all…" },
+      ],
+    }
+  }
+  return {
+    button: "Clear signals…",
+    note: "Deletes stored signal rows in that window. New evaluations still appear.",
+    items: [
+      { period: "today", label: "Clear today…" },
+      { period: "before_today", label: "Clear before today…" },
+      { period: "all", label: "Clear all…" },
+    ],
+  }
+}
+
 export function executionLabel(execution: string): string {
   if (execution === "report") return "Report only"
   if (execution === "manual") return "Manual send"
