@@ -12,7 +12,7 @@ import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNot
 import { operatorJobError } from "../lib/operatorJobError"
 import BrokerOrders from "./lib/brokerOrders"
 import ConfirmDialog from "./lib/ConfirmDialog"
-import PnLComponent from "./lib/pnlComponent"
+import PnLComponent from "./lib/PnLComponent"
 import TradeDetails from "./lib/tradeDetails"
 import { useSnackbar } from "./lib/useSnackbar"
 

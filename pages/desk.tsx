@@ -42,6 +42,11 @@ import { DEFAULT_RISK_SETTINGS } from "../lib/trading/riskEngine"
 import { groupStrategyRealized } from "../lib/trading/todayGroups"
 import type { PositionView } from "../lib/trading/types"
 import useUser from "../lib/useUser"
+import Figure from "../components/figures/Figure"
+import {
+  formatInr,
+  formatIstDateTime,
+} from "../lib/format"
 
 const deskTileSx = {
   textAlign: "left" as const,
@@ -57,27 +62,14 @@ const deskTileSx = {
   minWidth: 0,
 }
 
-function money(value: string | number | null | undefined) {
-  if (value == null || value === "") return "—"
-  const n = Number(value)
-  if (!Number.isFinite(n)) return String(value)
-  return n.toLocaleString("en-IN", { maximumFractionDigits: 2 })
-}
-
-function pnlColor(value: string | null | undefined) {
-  const n = Number(value)
-  if (!Number.isFinite(n) || n === 0) return "text.secondary"
-  return n > 0 ? "success.main" : "error.main"
-}
-
 function orderPriceLabel(row: Record<string, unknown>) {
   const bits: string[] = []
   const avg = Number(row.averageFillPrice)
   const stop = Number(row.stopPrice)
   const limit = Number(row.limitPrice)
-  if (Number.isFinite(avg) && avg > 0) bits.push(`Avg ${money(row.averageFillPrice as string)}`)
-  if (Number.isFinite(stop) && stop > 0) bits.push(`SL ${money(row.stopPrice as string)}`)
-  if (Number.isFinite(limit) && limit > 0) bits.push(`Lmt ${money(row.limitPrice as string)}`)
+  if (Number.isFinite(avg) && avg > 0) bits.push(`Avg ${formatInr(row.averageFillPrice as string)}`)
+  if (Number.isFinite(stop) && stop > 0) bits.push(`SL ${formatInr(row.stopPrice as string)}`)
+  if (Number.isFinite(limit) && limit > 0) bits.push(`Lmt ${formatInr(row.limitPrice as string)}`)
   return bits.length ? bits.join(" · ") : "—"
 }
 
@@ -87,8 +79,7 @@ const filterFieldSx = {
 }
 
 function when(value: string | Date | null | undefined) {
-  if (!value) return "—"
-  return new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+  return formatIstDateTime(value)
 }
 
 const DESK_TABS = [
@@ -548,12 +539,8 @@ export default function DeskPage() {
                   <Typography variant="body2" noWrap>
                     {row.label} ({row.open})
                   </Typography>
-                  <Typography variant="caption" sx={{ color: pnlColor(row.closedToday) }}>
-                    {money(row.closedToday)}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: pnlColor(row.openMark) }}>
-                    {money(row.openMark)}
-                  </Typography>
+                  <Figure kind="inr" value={row.closedToday} pnl align="left" />
+                  <Figure kind="inr" value={row.openMark} pnl align="left" />
                 </Box>
               ))}
             </Box>
@@ -577,9 +564,7 @@ export default function DeskPage() {
                 <Typography variant="body2" noWrap>
                   {row.label}
                 </Typography>
-                <Typography variant="caption" sx={{ color: pnlColor(row.realized) }} noWrap>
-                  {money(row.realized)}
-                </Typography>
+                <Figure kind="inr" value={row.realized} pnl align="right" />
               </Box>
             ))}
           </Box>
@@ -587,7 +572,7 @@ export default function DeskPage() {
             component="button"
             type="button"
             onClick={() => setTab("positions")}
-            aria-label={`Cash ${money(p?.availableCash)}. Realized ${money(p?.realizedPnl)}. Unrealized ${money(p?.unrealizedPnl)}. Portfolio ${money(p?.portfolioValue)}. Gross exposure ${money(p?.grossExposure)}. Drawdown ${money(p?.drawdown)}.`}
+            aria-label={`Cash ${formatInr(p?.availableCash)}. Realized ${formatInr(p?.realizedPnl)}. Unrealized ${formatInr(p?.unrealizedPnl)}. Portfolio ${formatInr(p?.portfolioValue)}. Gross exposure ${formatInr(p?.grossExposure)}. Drawdown ${formatInr(p?.drawdown)}.`}
             sx={{
               ...deskTileSx,
               display: "grid",
@@ -598,12 +583,12 @@ export default function DeskPage() {
           >
             {(
               [
-                ["Cash", money(p?.availableCash)],
-                ["Portfolio", money(p?.portfolioValue)],
-                ["Realized", money(p?.realizedPnl)],
-                ["Gross exposure", money(p?.grossExposure)],
-                ["Unrealized", money(p?.unrealizedPnl)],
-                ["Drawdown", money(p?.drawdown)],
+                ["Cash", formatInr(p?.availableCash)],
+                ["Portfolio", formatInr(p?.portfolioValue)],
+                ["Realized", formatInr(p?.realizedPnl)],
+                ["Gross exposure", formatInr(p?.grossExposure)],
+                ["Unrealized", formatInr(p?.unrealizedPnl)],
+                ["Drawdown", formatInr(p?.drawdown)],
               ] as const
             ).map(([label, value]) => (
               <Box
@@ -736,12 +721,26 @@ export default function DeskPage() {
                       <TableCell>{String(row.strategy || "—")}</TableCell>
                       <TableCell>{String(row.provenance || "—")}</TableCell>
                       <TableCell align="right">{String(row.quantity)}</TableCell>
-                      <TableCell align="right">{money(row.averageEntryPrice as string)}</TableCell>
-                      <TableCell align="right">{money(row.markPrice as string)}</TableCell>
                       <TableCell align="right">
-                        {money(flat ? "0" : (row.unrealizedPnl as string))}
+                        <Figure
+                          kind="price"
+                          value={row.averageEntryPrice as string}
+                          flat={flat}
+                        />
                       </TableCell>
-                      <TableCell align="right">{money(row.realizedPnl as string)}</TableCell>
+                      <TableCell align="right">
+                        <Figure kind="price" value={row.markPrice as string} />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Figure
+                          kind="inr"
+                          value={flat ? "0" : (row.unrealizedPnl as string)}
+                          pnl
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Figure kind="inr" value={row.realizedPnl as string} pnl />
+                      </TableCell>
                       <TableCell>{flat ? "FLAT" : String(row.status)}</TableCell>
                       <TableCell>
                         {Number(row.quantity) !== 0 && row.status === "OPEN" ? (
@@ -890,9 +889,9 @@ export default function DeskPage() {
                       {String(row.entryQty)} / {String(row.exitQty)}
                     </TableCell>
                     <TableCell align="right">
-                      {money(row.averageEntry as string)} / {money(row.averageExit as string)}
+                      {formatInr(row.averageEntry as string)} / {formatInr(row.averageExit as string)}
                     </TableCell>
-                    <TableCell align="right">{money(row.netPnl as string)}</TableCell>
+                    <TableCell align="right">{formatInr(row.netPnl as string)}</TableCell>
                     <TableCell>{String(row.exitReason || "—")}</TableCell>
                     <TableCell>{String(row.status)}</TableCell>
                   </TableRow>
@@ -1078,12 +1077,16 @@ export default function DeskPage() {
                   {sessions.map((row: Record<string, unknown>) => (
                     <TableRow key={String(row.sessionDate)}>
                       <TableCell>{String(row.sessionDate)}</TableCell>
-                      <TableCell align="right">{money(row.netPnl as string)}</TableCell>
-                      <TableCell align="right">{money(row.fees as string)}</TableCell>
+                      <TableCell align="right">
+                        <Figure kind="inr" value={row.netPnl as string} pnl />
+                      </TableCell>
+                      <TableCell align="right">{formatInr(row.fees as string)}</TableCell>
                       <TableCell align="right">{String(row.tradeCount)}</TableCell>
                       <TableCell align="right">{String(row.winCount)}</TableCell>
-                      <TableCell align="right">{money(row.winRate as string)}</TableCell>
-                      <TableCell align="right">{money(row.maxDrawdown as string)}</TableCell>
+                      <TableCell align="right">
+                        <Figure kind="pct" value={row.winRate as string} />
+                      </TableCell>
+                      <TableCell align="right">{formatInr(row.maxDrawdown as string)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

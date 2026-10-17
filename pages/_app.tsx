@@ -8,6 +8,7 @@ import { ThemeProvider } from "@mui/material/styles"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google"
 import Head from "next/head"
 
 import { SWRConfig } from "swr"
@@ -15,6 +16,20 @@ import { SWRConfig } from "swr"
 import fetch from "../lib/fetchJson"
 
 import theme from "../src/theme"
+
+const fontSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-sans",
+  display: "swap",
+})
+
+const fontMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+})
 
 function MyApp({ Component, pageProps }) {
   return (
@@ -47,20 +62,15 @@ function MyApp({ Component, pageProps }) {
         <link rel="icon" href="/favicon.png" type="image/png" sizes="192x192" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-        <meta name="theme-color" content="#080c14" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap"
-        />
+        <meta name="theme-color" content="#0F1217" />
       </Head>
 
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-
-          <Component {...pageProps} />
+          <div className={`${fontSans.variable} ${fontMono.variable}`}>
+            <Component {...pageProps} />
+          </div>
         </ThemeProvider>
       </LocalizationProvider>
     </SWRConfig>
