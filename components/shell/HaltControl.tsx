@@ -3,7 +3,7 @@ import { Button, Popover, Stack, TextField, Tooltip } from "@mui/material"
 import { useState } from "react"
 
 import fetchJson from "../../lib/fetchJson"
-import ConfirmDialog from "../lib/ConfirmDialog"
+import ConfirmAction from "../lib/ConfirmAction"
 
 type Props = {
   deskHalted: boolean
@@ -53,12 +53,12 @@ export default function HaltControl({ deskHalted, haltReason, busy, onChanged, c
   if (deskHalted) {
     return (
       <>
-        <ConfirmDialog
+        <ConfirmAction
           open={resumeOpen}
+          tone="attention"
           title="Resume new entries?"
           message="This clears the desk halt and turns Trading enabled back on. Flatten and stop-loss were never blocked."
           confirmLabel="Resume"
-          confirmColor="warning"
           onConfirm={runResume}
           onCancel={() => setResumeOpen(false)}
         />

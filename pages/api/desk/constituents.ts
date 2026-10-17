@@ -1,5 +1,6 @@
 import { sendApiError } from "../../../lib/apiErrors"
 import logger from "../../../lib/logger"
+import { buildConstituentImpactPreview } from "../../../lib/momentum/constituentPreview"
 import {
   acceptConstituentChange,
   dismissConstituentChange,
@@ -24,6 +25,30 @@ export default withSession(async (req, res) => {
     }
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" })
     const action = String(req.body?.action || "")
+    if (action === "preview") {
+      const side = req.body.side === "REMOVE" ? "REMOVE" : "ADD"
+      if (book === "trend") {
+        const trend = (await listPendingConstituents("NIFTY100")).filter(row => row.action === side)
+        const books = await listDailyTrendBooks()
+        const preview = buildConstituentImpactPreview(
+          trend.map(row => ({ action: row.action, symbol: row.symbol })),
+          books.map(b => b.symbol)
+        )
+        return res.json({ preview, count: trend.length, side, book })
+      }
+      const momentum = (await listMomentumConstituents()).filter(row => row.action === side)
+      return res.json({
+        preview: {
+          momentum: {
+            symbols: momentum.map(row => row.symbol),
+            side,
+          },
+        },
+        count: momentum.length,
+        side,
+        book,
+      })
+    }
     if (action === "refresh") {
       const result = await refreshIndexMembership(indexCode, { force: true })
       return res.json({

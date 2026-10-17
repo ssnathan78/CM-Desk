@@ -1,5 +1,5 @@
-import Button from "@mui/material/Button"
 import type { ButtonProps } from "@mui/material/Button"
+import Button from "@mui/material/Button"
 
 import { color } from "../../src/tokens"
 

@@ -36,7 +36,7 @@ describe("help content", () => {
     expect(text).toMatch(/Allow live orders is the Zerodha master switch/i)
     expect(text).toMatch(/Trading enabled is desk-wide new entries/i)
     expect(text).toMatch(/Strategy enabled is that book's on\/off/i)
-    expect(text).toMatch(/Not halted only blocks new entries/i)
+    expect(text).toMatch(/New entries paused/i)
   })
 
   it("describes 9:20 leftover-wing exits on straddle and strangle", () => {
@@ -54,10 +54,13 @@ describe("help content", () => {
     expect(risk?.body.join(" ")).not.toMatch(/Combined premium exit: flatten/i)
   })
 
-  it("opens desk history tabs on today", () => {
+  it("documents desk views and positions default", () => {
     const desk = HELP_PAGES.desk.sections.find(s => s.id === "ledger")?.body.join(" ") ?? ""
-    expect(desk).toMatch(/open on today/i)
+    expect(desk).toMatch(/Books holds positions/i)
+    expect(desk).toMatch(/Setup is contracts/i)
     expect(desk).toMatch(/Positions opens on Live only/i)
+    const rail = HELP_PAGES.desk.sections.find(s => s.id === "status-rail")
+    expect(rail?.body.join(" ")).toMatch(/The rail summarizes/i)
   })
 
   it("explains Chase per-index books vs shared Desk Risk", () => {

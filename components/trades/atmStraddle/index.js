@@ -12,6 +12,7 @@ import {
 import { INSTRUMENTS, STRATEGIES, STRATEGIES_DETAILS } from "../../../lib/constants"
 import { jobsForPunch } from "../../../lib/punchSchedule"
 
+import ConfirmAction from "../../lib/ConfirmAction"
 import Form from "./TradeSetupForm"
 
 const AtmStraddle = ({
@@ -36,8 +37,9 @@ const AtmStraddle = ({
 
   const [state, setState] = useState(getDefaultState())
   const [submitError, setSubmitError] = useState(null)
+  const [runNowOpen, setRunNowOpen] = useState(false)
 
-  const onSubmit = async (formattedStateForApiProps = {}, runNow = false) => {
+  const submitJobs = async (formattedStateForApiProps = {}, runNow = false) => {
     const ready = jobsForPunch({
       instruments: state.instruments,
       lots: state.lots,
@@ -48,13 +50,6 @@ const AtmStraddle = ({
       return
     }
     const instruments = ready.instruments
-
-    if (runNow) {
-      const yes = await window.confirm("This will schedule this trade immediately. Are you sure?")
-      if (!yes) {
-        return
-      }
-    }
 
     function handleSyncJob(props) {
       return axios.post("/api/trades_day", formatFormDataForApi({ strategy, data: props }))
@@ -78,7 +73,7 @@ const AtmStraddle = ({
         })
       )
       setState(getDefaultState())
-      router.push("/desk?tab=today")
+      router.push("/desk?view=now&tab=today")
     } catch (e) {
       console.error(e)
       setSubmitError(apiErrorMessage(e, "Could not schedule this trade"))
@@ -87,14 +82,34 @@ const AtmStraddle = ({
 
   const onChange = props => commonOnChangeHandler(props, state, setState)
 
-  const handleRunNow = () => onSubmit({}, true)
+  const onSubmit = async (formattedStateForApiProps = {}, runNow = false) => {
+    if (runNow) {
+      setRunNowOpen(true)
+      return
+    }
+    await submitJobs(formattedStateForApiProps, false)
+  }
+
+  const handleRunNow = () => setRunNowOpen(true)
 
   return (
     <>
+      <ConfirmAction
+        open={runNowOpen}
+        tone="attention"
+        title="Schedule immediately?"
+        message="This will schedule this trade immediately. Are you sure?"
+        confirmLabel="Schedule now"
+        onCancel={() => setRunNowOpen(false)}
+        onConfirm={async () => {
+          setRunNowOpen(false)
+          await submitJobs({}, true)
+        }}
+      />
       {submitError ? (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubmitError(null)}>
           {submitError}{" "}
-          <MuiLink component={NextLink} href="/desk?tab=alerts" color="inherit">
+          <MuiLink component={NextLink} href="/desk?view=why&tab=alerts" color="inherit">
             View Desk → Alerts
           </MuiLink>
         </Alert>

@@ -5,11 +5,11 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   IconButton,
   LinearProgress,
   MenuItem,
-  Paper,
   Skeleton,
   Stack,
   Switch,
@@ -26,11 +26,24 @@ import {
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-
+import DailyTrendBookDrawer from "../components/daily-trend/DailyTrendBookDrawer"
+import {
+  SettingsSelectField,
+  SettingsSwitchField,
+  SettingsTextField,
+} from "../components/forms/SettingsFields"
 import Layout from "../components/Layout"
+import ConfirmAction from "../components/lib/ConfirmAction"
+import PageSection from "../components/lib/PageSection"
 import ScrollTable from "../components/lib/ScrollTable"
 import { useSnackbar } from "../components/lib/useSnackbar"
 import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
+import {
+  type DailyTrendBulkPatch,
+  type DailyTrendInlineRowPatch,
+  mergeDailyTrendBookSave,
+  parseOptionalDailyTrendBulkForm,
+} from "../lib/dailyTrend/engine"
 import fetchJson from "../lib/fetchJson"
 import useUser from "../lib/useUser"
 
@@ -117,10 +130,10 @@ const EMPTY: Book = {
 
 export default function DailyTrendPage() {
   useUser({ redirectTo: "/" })
-  const { showMessage, SnackbarAlert } = useSnackbar()
+  const { showMessage } = useSnackbar()
   const { data, mutate } = useSWR<Payload>("/api/daily-trend")
   const [config, setConfig] = useState<Payload["config"] | null>(null)
-  const [draft, setDraft] = useState<Book>(EMPTY)
+  const [editBook, setEditBook] = useState<Book | null>(null)
   const [busy, setBusy] = useState(false)
   const [decisions, setDecisions] = useState<Payload["decisions"]>([])
   const [query, setQuery] = useState("")
@@ -136,7 +149,121 @@ export default function DailyTrendPage() {
     budgetInr: "",
     entryStyle: "",
   })
+  const [pendingConfirm, setPendingConfirm] = useState<
+    "apply-all" | "evaluate-send" | "turn-on" | "turn-off" | null
+  >(null)
+  const [selectedSymbols, setSelectedSymbols] = useState<Set<string>>(() => new Set())
+  const [rowEdits, setRowEdits] = useState<Record<string, DailyTrendInlineRowPatch>>({})
   const runtime = data ? (config ?? data.config) : null
+
+  function bulkPatchFromBar(): DailyTrendBulkPatch | { error: string } {
+    const parsed = parseOptionalDailyTrendBulkForm(bulk)
+    if (!parsed.ok) return { error: parsed.error }
+    return parsed.patch
+  }
+
+  function mergedBookSettings(book: Book) {
+    const bulkPart = bulkPatchFromBar()
+    const bulk: DailyTrendBulkPatch = "error" in bulkPart ? {} : bulkPart
+    const inline = rowEdits[book.symbol] ?? {}
+    return mergeDailyTrendBookSave(book, bulk, inline)
+  }
+
+  function rowPatch(book: Book) {
+    const merged = mergedBookSettings(book)
+    return {
+      budgetInr: merged.budgetInr,
+      emaPeriod: merged.emaPeriod,
+      bufferPercent: merged.bufferPercent,
+    }
+  }
+
+  function bookForDrawer(book: Book): Book {
+    const merged = mergedBookSettings(book)
+    return { ...book, ...merged }
+  }
+
+  function patchRow(
+    symbol: string,
+    _book: Book,
+    field: "budgetInr" | "emaPeriod" | "bufferPercent",
+    raw: string
+  ) {
+    const value = Number(raw)
+    if (!Number.isFinite(value)) return
+    setRowEdits(current => ({
+      ...current,
+      [symbol]: { ...current[symbol], [field]: value },
+    }))
+  }
+
+  async function saveSelectedRows() {
+    if (!selectedSymbols.size) {
+      showMessage("Select at least one symbol to save.", "info")
+      return
+    }
+    const bulkPart = bulkPatchFromBar()
+    if ("error" in bulkPart) {
+      showMessage(bulkPart.error, "error")
+      return
+    }
+    setBusy(true)
+    try {
+      const symbols = [...selectedSymbols]
+      await Promise.all(
+        symbols.map(async symbol => {
+          const book = data?.books.find(row => row.symbol === symbol)
+          if (!book) return
+          const merged = mergeDailyTrendBookSave(book, bulkPart, rowEdits[symbol] ?? {})
+          await fetchJson("/api/daily-trend", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "save-book", ...book, ...merged }),
+          })
+        })
+      )
+      setRowEdits(current => {
+        const next = { ...current }
+        for (const symbol of symbols) delete next[symbol]
+        return next
+      })
+      if (Object.keys(bulkPart).length > 0) {
+        setBulk({
+          emaPeriod: "",
+          bufferPercent: "",
+          exitBufferPercent: "",
+          budgetInr: "",
+          entryStyle: "",
+        })
+      }
+      await mutate()
+      showMessage(`Saved ${symbols.length} symbol(s)`, "success")
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Batch save failed", "error")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function toggleSelected(symbol: string, on: boolean) {
+    setSelectedSymbols(current => {
+      const next = new Set(current)
+      if (on) next.add(symbol)
+      else next.delete(symbol)
+      return next
+    })
+  }
+
+  function toggleAllVisible(on: boolean) {
+    setSelectedSymbols(current => {
+      const next = new Set(current)
+      for (const book of books) {
+        if (on) next.add(book.symbol)
+        else next.delete(book.symbol)
+      }
+      return next
+    })
+  }
 
   async function saveRuntime(next = runtime) {
     setBusy(true)
@@ -164,7 +291,13 @@ export default function DailyTrendPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "save-book", ...book }),
       })
-      setDraft(EMPTY)
+      setEditBook(null)
+      setRowEdits(current => {
+        if (!book.symbol) return current
+        const next = { ...current }
+        delete next[book.symbol]
+        return next
+      })
       setMatches(current => current.filter(row => row.symbol !== book.symbol))
       await mutate()
       showMessage(`${book.symbol} saved`, "success")
@@ -203,13 +336,18 @@ export default function DailyTrendPage() {
       showMessage("Fill at least one field. Blank fields stay as they are.", "info")
       return
     }
-    const count = data?.books.length ?? 0
-    if (
-      !window.confirm(
-        `Apply these settings to all ${count} symbols? On/off, pause, status, and stops stay as they are.`
-      )
-    )
-      return
+    setPendingConfirm("apply-all")
+    return
+  }
+
+  async function applyToAllConfirmed() {
+    const body: Record<string, unknown> = { action: "apply-all" }
+    if (bulk.emaPeriod !== "") body.emaPeriod = Number(bulk.emaPeriod)
+    if (bulk.bufferPercent !== "") body.bufferPercent = Number(bulk.bufferPercent)
+    if (bulk.exitBufferPercent !== "") body.exitBufferPercent = Number(bulk.exitBufferPercent)
+    if (bulk.budgetInr !== "") body.budgetInr = Number(bulk.budgetInr)
+    if (bulk.entryStyle !== "") body.entryStyle = bulk.entryStyle
+    setPendingConfirm(null)
     setBusy(true)
     try {
       const result = await fetchJson<{ count: number }>("/api/daily-trend", {
@@ -335,10 +473,67 @@ export default function DailyTrendPage() {
 
   const pull = data?.pull
 
+  const bookCount = data?.books.length ?? 0
+
   return (
     <Layout title="Daily trend">
-      {SnackbarAlert}
-      <Stack spacing={2}>
+      <ConfirmAction
+        open={pendingConfirm === "apply-all"}
+        title="Apply to all symbols?"
+        message={`Apply these settings to all ${bookCount} symbols? On/off, pause, status, and stops stay as they are.`}
+        confirmLabel="Apply to all"
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => applyToAllConfirmed()}
+      />
+      <ConfirmAction
+        open={pendingConfirm === "evaluate-send"}
+        tone="attention"
+        title="Evaluate and send?"
+        message="Send the daily-trend orders this evaluation wants?"
+        confirmLabel="Evaluate and send"
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={async () => {
+          setPendingConfirm(null)
+          setBusy(true)
+          try {
+            const result = await fetchJson<Payload>("/api/daily-trend", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "evaluate", execute: true }),
+            })
+            setDecisions(result.decisions ?? [])
+            await mutate()
+            showMessage("Evaluate-and-send finished", "success")
+          } catch (error) {
+            showMessage(error instanceof Error ? error.message : "Evaluate failed", "error")
+          } finally {
+            setBusy(false)
+          }
+        }}
+      />
+      <ConfirmAction
+        open={pendingConfirm === "turn-on"}
+        title="Turn all symbols on?"
+        message={`Turn all ${bookCount} symbols on? A symbol that is on can buy when execution is Manual or Auto and Desk → Risk allows daily trend.`}
+        confirmLabel="Turn all on"
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={async () => {
+          setPendingConfirm(null)
+          await setEverySymbol(true)
+        }}
+      />
+      <ConfirmAction
+        open={pendingConfirm === "turn-off"}
+        title="Turn all symbols off?"
+        message={`Turn all ${bookCount} symbols off? Off is fully dark: no new buy and no stop. Shares already at the broker stay there.`}
+        confirmLabel="Turn all off"
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={async () => {
+          setPendingConfirm(null)
+          await setEverySymbol(false)
+        }}
+      />
+      <Stack spacing={3}>
         <Box>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
             <Typography variant="h5" sx={{ flex: 1 }}>
@@ -373,39 +568,41 @@ export default function DailyTrendPage() {
           )}
         </Box>
         {!runtime ? (
-          <Paper sx={{ p: 2 }}>
+          <PageSection title="Engine & execution">
             <Skeleton height={120} />
-          </Paper>
+          </PageSection>
         ) : (
-          <Paper sx={{ p: 2 }}>
-            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-              <Typography variant="body2">Engine on</Typography>
-              <Switch
-                inputProps={{ "aria-label": "Engine on" }}
+          <PageSection
+            title="Engine & execution"
+            description="Turn the strategy on, choose how orders are sent, and pull or evaluate history."
+          >
+            <Box sx={{ maxWidth: 720, mb: 1.5 }}>
+              <SettingsSwitchField
+                label="Engine on"
                 checked={runtime.active}
-                onChange={e => setConfig({ ...runtime, active: e.target.checked })}
+                onChange={active => setConfig({ ...runtime, active })}
               />
-              <Typography variant="body2">Pull data daily</Typography>
-              <Switch
+              <SettingsSwitchField
+                label="Pull data daily"
                 checked={runtime.dataRefresh}
-                onChange={e => setConfig({ ...runtime, dataRefresh: e.target.checked })}
+                onChange={dataRefresh => setConfig({ ...runtime, dataRefresh })}
               />
-              <TextField
-                select
-                size="small"
+              <SettingsSelectField
                 label="Execution"
                 value={runtime.execution}
-                onChange={e =>
+                onChange={execution =>
                   setConfig({
                     ...runtime,
-                    execution: e.target.value as Payload["config"]["execution"],
+                    execution,
                   })
                 }
               >
                 <MenuItem value="report">Report only</MenuItem>
                 <MenuItem value="manual">Manual send</MenuItem>
                 <MenuItem value="auto">Auto</MenuItem>
-              </TextField>
+              </SettingsSelectField>
+            </Box>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
               <Button variant="contained" disabled={busy} onClick={() => void saveRuntime()}>
                 Save
               </Button>
@@ -438,18 +635,7 @@ export default function DailyTrendPage() {
               <Button
                 color="warning"
                 disabled={busy || runtime.execution === "report"}
-                onClick={() => {
-                  if (!window.confirm("Send the daily-trend orders this evaluation wants?")) return
-                  void fetchJson<Payload>("/api/daily-trend", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "evaluate", execute: true }),
-                  }).then(async result => {
-                    setDecisions(result.decisions ?? [])
-                    await mutate()
-                    showMessage("Evaluate-and-send finished", "success")
-                  })
-                }}
+                onClick={() => setPendingConfirm("evaluate-send")}
               >
                 Evaluate and send
               </Button>
@@ -467,30 +653,32 @@ export default function DailyTrendPage() {
                 </Typography>
               </Box>
             ) : null}
-          </Paper>
+          </PageSection>
         )}
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Add a symbol
-          </Typography>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-            <TextField
-              size="small"
-              label="Search NSE cash"
+        <PageSection
+          title="Symbol book"
+          description="Add names, bulk-patch settings, then filter the list below."
+        >
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={1}
+            sx={{ alignItems: { md: "flex-end" }, mb: 1.5, flexWrap: "wrap" }}
+          >
+            <SettingsTextField
+              label="Add symbol (NSE cash)"
               placeholder="RELIANCE, Mahindra, NIFTYBEES"
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={setQuery}
               onKeyDown={e => {
                 if (e.key === "Enter") void searchSymbols()
               }}
-              sx={{ minWidth: { sm: 320 } }}
             />
             <Button variant="outlined" disabled={busy} onClick={() => void searchSymbols()}>
               Search
             </Button>
           </Stack>
           {matches.length ? (
-            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
               {matches.map(row => (
                 <Button
                   key={row.symbol}
@@ -504,420 +692,417 @@ export default function DailyTrendPage() {
               ))}
             </Stack>
           ) : null}
-        </Paper>
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Apply to every symbol
-          </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-            Fill only the fields you want to change. Blank fields stay as they are on each symbol.
-            This does not turn a symbol on or off, and it does not change pause, status, or the
-            stored stop.
+            Bulk patch: fill only fields to change. Blank leaves each symbol unchanged. Apply to all
+            writes every symbol. Save selected also applies filled bulk fields to checked rows
+            (inline cells win over bulk for budget, EMA, and buffer). Does not change on/off, pause,
+            status, or stop.
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-            <TextField
-              size="small"
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
+              gap: 0,
+              columnGap: 3,
+            }}
+          >
+            <SettingsTextField
               label="EMA"
-              type="number"
               value={bulk.emaPeriod}
-              onChange={e => setBulk({ ...bulk, emaPeriod: e.target.value })}
-              sx={{ width: 90 }}
+              onChange={emaPeriod => setBulk({ ...bulk, emaPeriod })}
             />
-            <TextField
-              size="small"
+            <SettingsTextField
               label="Buffer %"
-              type="number"
               value={bulk.bufferPercent}
-              onChange={e => setBulk({ ...bulk, bufferPercent: e.target.value })}
-              sx={{ width: 110 }}
+              onChange={bufferPercent => setBulk({ ...bulk, bufferPercent })}
             />
-            <TextField
-              size="small"
+            <SettingsTextField
               label="Exit %"
-              type="number"
               value={bulk.exitBufferPercent}
-              onChange={e => setBulk({ ...bulk, exitBufferPercent: e.target.value })}
-              sx={{ width: 100 }}
+              onChange={exitBufferPercent => setBulk({ ...bulk, exitBufferPercent })}
             />
-            <TextField
-              size="small"
+            <SettingsTextField
               label="Budget INR"
-              type="number"
               value={bulk.budgetInr}
-              onChange={e => setBulk({ ...bulk, budgetInr: e.target.value })}
-              sx={{ width: 140 }}
+              onChange={budgetInr => setBulk({ ...bulk, budgetInr })}
             />
-            <TextField
-              select
-              size="small"
+            <SettingsSelectField
               label="Entry"
-              value={bulk.entryStyle}
-              onChange={e => setBulk({ ...bulk, entryStyle: e.target.value })}
-              sx={{ width: 160 }}
+              value={bulk.entryStyle || ""}
+              onChange={entryStyle => setBulk({ ...bulk, entryStyle })}
             >
               <MenuItem value="">Leave as is</MenuItem>
               <MenuItem value="CLOSE_CROSS">Close cross</MenuItem>
               <MenuItem value="BREAK_HIGH">Break high</MenuItem>
-            </TextField>
+            </SettingsSelectField>
+          </Box>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ mt: 1.5, flexWrap: "wrap", alignItems: "center" }}
+          >
             <Button variant="outlined" disabled={busy} onClick={() => void applyToAll()}>
               Apply to all
             </Button>
-            <Button
-              variant="outlined"
-              disabled={busy}
-              onClick={() => {
-                const count = data?.books.length ?? 0
-                if (
-                  !window.confirm(
-                    `Turn all ${count} symbols on? A symbol that is on can buy when execution is Manual or Auto and Desk → Risk allows daily trend.`
-                  )
-                )
-                  return
-                void setEverySymbol(true)
-              }}
-            >
+            <Button variant="outlined" disabled={busy} onClick={() => setPendingConfirm("turn-on")}>
               Turn all on
             </Button>
             <Button
               variant="outlined"
               disabled={busy}
-              onClick={() => {
-                const count = data?.books.length ?? 0
-                if (
-                  !window.confirm(
-                    `Turn all ${count} symbols off? Off is fully dark: no new buy and no stop. Shares already at the broker stay there.`
-                  )
-                )
-                  return
-                void setEverySymbol(false)
-              }}
+              onClick={() => setPendingConfirm("turn-off")}
             >
               Turn all off
             </Button>
-          </Stack>
-        </Paper>
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Edit one symbol
-          </Typography>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-            <TextField
-              size="small"
-              label="Symbol"
-              helperText="NSE cash only. M&M is valid. 123 and ABC are not."
-              value={draft.symbol}
-              onChange={e => setDraft({ ...draft, symbol: e.target.value.toUpperCase() })}
-            />
-            <TextField
-              size="small"
-              label="Budget INR"
-              type="number"
-              helperText="Shares bought = floor(budget / last completed close). 0 buys nothing."
-              value={draft.budgetInr}
-              onChange={e => setDraft({ ...draft, budgetInr: Number(e.target.value) })}
-            />
-            <TextField
-              size="small"
-              label="EMA"
-              type="number"
-              value={draft.emaPeriod}
-              onChange={e => setDraft({ ...draft, emaPeriod: Number(e.target.value) })}
-            />
-            <TextField
-              size="small"
-              label="Buffer %"
-              type="number"
-              value={draft.bufferPercent}
-              onChange={e => setDraft({ ...draft, bufferPercent: Number(e.target.value) })}
-            />
-            <TextField
-              size="small"
-              label="Exit buffer %"
-              type="number"
-              value={draft.exitBufferPercent}
-              onChange={e => setDraft({ ...draft, exitBufferPercent: Number(e.target.value) })}
-            />
-            <TextField
-              select
-              size="small"
-              label="Entry"
-              value={draft.entryStyle}
-              onChange={e =>
-                setDraft({ ...draft, entryStyle: e.target.value as Book["entryStyle"] })
-              }
+            <Button
+              variant="outlined"
+              disabled={busy || selectedSymbols.size === 0}
+              onClick={() => void saveSelectedRows()}
             >
-              <MenuItem value="CLOSE_CROSS">Buy the close cross</MenuItem>
-              <MenuItem value="BREAK_HIGH">Wait for that day&apos;s high</MenuItem>
-            </TextField>
-            <Button disabled={busy || !draft.symbol} onClick={() => void saveBook(draft)}>
-              Save symbol
+              Save selected ({selectedSymbols.size})
             </Button>
           </Stack>
-        </Paper>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: "center" }}>
-          <TextField
-            size="small"
-            label="Filter symbol, name, or industry"
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            sx={{ maxWidth: 360 }}
-          />
-          <TextField
-            select
-            size="small"
-            label="Signal"
-            value={signalView}
-            onChange={e => setSignalView(e.target.value as "all" | "qualifies")}
-            sx={{ minWidth: 200 }}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 220px" },
+              gap: 2,
+              mt: 2,
+            }}
           >
-            <MenuItem value="all">All names</MenuItem>
-            <MenuItem value="qualifies">Qualifies</MenuItem>
-          </TextField>
-        </Stack>
-        <Typography variant="caption" color="text.secondary">
-          Nifty 100 is loaded off. Market cap refreshes about 20 names an hour from Screener while
-          this process is running, so the book turns over inside a day. Close is the last completed
-          session, the one compared with the EMA. A later stored price waits until the next session.
-          Signal Qualifies lists every name above the EMA band, including rows that are off. Sorting
-          Signal puts those names first. A budget of 0 still qualifies and buys no shares. Stop
-          stays blank until the book is long. Edit, pause, and remove are the icons on the left. The
-          table scrolls inside the page, so the horizontal bar stays with the rows.
-        </Typography>
-        <ScrollTable minWidth={1100} maxHeight="calc(100vh - 240px)">
-          <Table stickyHeader size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
-            <TableHead>
-              <TableRow>
-                <Sortable
-                  label="On"
-                  sortKey="enabled"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                  sx={{ ...pin(0, 3), width: 48, minWidth: 48 }}
-                />
-                <TableCell sx={{ ...pin(48, 3), width: 100, minWidth: 100 }} />
-                <Sortable
-                  label="Symbol"
-                  sortKey="symbol"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                  sx={{
-                    ...pin(148, 3),
-                    width: 96,
-                    minWidth: 96,
-                    boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
-                  }}
-                />
-                <Sortable
-                  label="State"
-                  sortKey="status"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Close"
-                  sortKey="close"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="EMA"
-                  sortKey="ema"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Signal"
-                  sortKey="signal"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Stop"
-                  sortKey="stop"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Name"
-                  sortKey="name"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Industry"
-                  sortKey="industry"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Mcap ₹ cr"
-                  sortKey="marketCapCr"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Budget"
-                  sortKey="budgetInr"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="EMA"
-                  sortKey="emaPeriod"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Buffer"
-                  sortKey="bufferPercent"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Exit"
-                  sortKey="exitBufferPercent"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-                <Sortable
-                  label="Entry"
-                  sortKey="entryStyle"
-                  active={sortKey}
-                  dir={sortDir}
-                  onSort={toggleSort}
-                />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {books.map(book => (
-                <TableRow key={book.symbol}>
-                  <TableCell sx={{ ...pin(0), width: 48, minWidth: 48 }}>
-                    <Switch
+            <SettingsTextField
+              label="Filter symbol, name, or industry"
+              value={filter}
+              onChange={setFilter}
+            />
+            <SettingsSelectField<"all" | "qualifies">
+              label="Signal"
+              value={signalView}
+              onChange={setSignalView}
+            >
+              <MenuItem value="all">All names</MenuItem>
+              <MenuItem value="qualifies">Qualifies</MenuItem>
+            </SettingsSelectField>
+          </Box>
+        </PageSection>
+        <DailyTrendBookDrawer
+          open={Boolean(editBook)}
+          book={editBook}
+          busy={busy}
+          onClose={() => setEditBook(null)}
+          onSave={async book => {
+            await saveBook({ ...editBook!, ...book, symbol: editBook!.symbol })
+          }}
+        />
+        <PageSection
+          title="Book table"
+          description="Checkbox and symbol stay fixed while you scroll; jump buttons reveal columns that slid underneath."
+          flush
+        >
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", px: 2, pb: 1 }}
+          >
+            Market cap refreshes about 20 names an hour from Screener. Hover Close or Mcap for
+            session dates. Select rows for budget, EMA period, and buffer; use Edit for exit buffer
+            and entry. Jump to Price & signals after scrolling to budget columns.
+          </Typography>
+          <ScrollTable
+            minWidth={1100}
+            maxHeight="calc(100vh - 240px)"
+            scrollControls
+            scrollStartLabel="Price & signals"
+            scrollEndLabel="Budget & settings"
+          >
+            <Table stickyHeader size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ ...pin(0, 3), width: 40, minWidth: 40 }}>
+                    <Checkbox
                       size="small"
-                      checked={book.enabled}
-                      onChange={e => void saveBook({ ...book, enabled: e.target.checked })}
+                      indeterminate={
+                        selectedSymbols.size > 0 && selectedSymbols.size < books.length
+                      }
+                      checked={books.length > 0 && selectedSymbols.size === books.length}
+                      onChange={(_, checked) => toggleAllVisible(checked)}
+                      slotProps={{ input: { "aria-label": "Select all visible symbols" } }}
                     />
                   </TableCell>
-                  <TableCell sx={{ ...pin(48), whiteSpace: "nowrap", width: 100, minWidth: 100 }}>
-                    <Tooltip title="Edit">
-                      <IconButton size="small" onClick={() => setDraft(book)}>
-                        <EditOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={book.paused ? "Resume" : "Pause"}>
-                      <IconButton
-                        size="small"
-                        onClick={() => void saveBook({ ...book, paused: !book.paused })}
-                      >
-                        {book.paused ? (
-                          <PlayArrowIcon fontSize="small" />
-                        ) : (
-                          <PauseIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Remove">
-                      <IconButton
-                        size="small"
-                        onClick={() =>
-                          void fetchJson("/api/daily-trend", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "remove-book", symbol: book.symbol }),
-                          }).then(() => mutate())
-                        }
-                      >
-                        <DeleteOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell
+                  <Sortable
+                    label="On"
+                    sortKey="enabled"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    sx={{ ...pin(40, 3), width: 48, minWidth: 48 }}
+                  />
+                  <TableCell sx={{ ...pin(88, 3), width: 100, minWidth: 100 }} />
+                  <Sortable
+                    label="Symbol"
+                    sortKey="symbol"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
                     sx={{
-                      ...pin(148),
+                      ...pin(188, 3),
                       width: 96,
                       minWidth: 96,
                       boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
                     }}
-                  >
-                    {book.symbol}
-                  </TableCell>
-                  <TableCell>{book.paused ? "paused" : book.status}</TableCell>
-                  <TableCell align="right">
-                    {book.close == null ? "—" : formatPx(book.close)}
-                    {book.closeDate ? (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block" }}
-                      >
-                        {book.closeDate}
-                      </Typography>
-                    ) : null}
-                    {book.storedClose != null && book.storedDate ? (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block" }}
-                      >
-                        {formatPx(book.storedClose)} on {book.storedDate} waits
-                      </Typography>
-                    ) : null}
-                  </TableCell>
-                  <TableCell align="right">{book.ema == null ? "—" : formatPx(book.ema)}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      color={book.signalBuy ? "success" : "default"}
-                      label={book.signal ?? "—"}
-                    />
-                  </TableCell>
-                  <TableCell>{book.stop ?? "—"}</TableCell>
-                  <TableCell>{book.name || "—"}</TableCell>
-                  <TableCell>{book.industry || "—"}</TableCell>
-                  <TableCell align="right">
-                    {formatCr(book.marketCapCr)}
-                    {book.marketCapAsOf ? (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block" }}
-                      >
-                        {book.marketCapAsOf}
-                      </Typography>
-                    ) : null}
-                  </TableCell>
-                  <TableCell align="right">{formatCr(book.budgetInr)}</TableCell>
-                  <TableCell>{book.emaPeriod}</TableCell>
-                  <TableCell>{book.bufferPercent}</TableCell>
-                  <TableCell>{book.exitBufferPercent}</TableCell>
-                  <TableCell>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
+                  />
+                  <Sortable
+                    label="State"
+                    sortKey="status"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Close"
+                    sortKey="close"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="EMA"
+                    sortKey="ema"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Signal"
+                    sortKey="signal"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Stop"
+                    sortKey="stop"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Name"
+                    sortKey="name"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Industry"
+                    sortKey="industry"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Mcap ₹ cr"
+                    sortKey="marketCapCr"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Budget"
+                    sortKey="budgetInr"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="EMA"
+                    sortKey="emaPeriod"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Buffer"
+                    sortKey="bufferPercent"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Exit"
+                    sortKey="exitBufferPercent"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
+                  <Sortable
+                    label="Entry"
+                    sortKey="entryStyle"
+                    active={sortKey}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                  />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </ScrollTable>
+              </TableHead>
+              <TableBody>
+                {books.map(book => {
+                  const selected = selectedSymbols.has(book.symbol)
+                  const patch = rowPatch(book)
+                  return (
+                    <TableRow key={book.symbol} selected={selected}>
+                      <TableCell sx={{ ...pin(0), width: 40, minWidth: 40 }}>
+                        <Checkbox
+                          size="small"
+                          checked={selected}
+                          onChange={(_, checked) => toggleSelected(book.symbol, checked)}
+                          slotProps={{ input: { "aria-label": `Select ${book.symbol}` } }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ ...pin(40), width: 48, minWidth: 48 }}>
+                        <Switch
+                          size="small"
+                          checked={book.enabled}
+                          onChange={e => void saveBook({ ...book, enabled: e.target.checked })}
+                        />
+                      </TableCell>
+                      <TableCell
+                        sx={{ ...pin(88), whiteSpace: "nowrap", width: 100, minWidth: 100 }}
+                      >
+                        <Tooltip title="Edit">
+                          <IconButton size="small" onClick={() => setEditBook(bookForDrawer(book))}>
+                            <EditOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={book.paused ? "Resume" : "Pause"}>
+                          <IconButton
+                            size="small"
+                            onClick={() => void saveBook({ ...book, paused: !book.paused })}
+                          >
+                            {book.paused ? (
+                              <PlayArrowIcon fontSize="small" />
+                            ) : (
+                              <PauseIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Remove">
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              void fetchJson("/api/daily-trend", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  action: "remove-book",
+                                  symbol: book.symbol,
+                                }),
+                              }).then(() => mutate())
+                            }
+                          >
+                            <DeleteOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          ...pin(188),
+                          width: 96,
+                          minWidth: 96,
+                          boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
+                        }}
+                      >
+                        {book.symbol}
+                      </TableCell>
+                      <TableCell>{book.paused ? "paused" : book.status}</TableCell>
+                      <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                        <CellWithTip
+                          tip={closeCellTip(book)}
+                          align="right"
+                          label={book.close == null ? "—" : formatPx(book.close)}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        {book.ema == null ? "—" : formatPx(book.ema)}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          color={book.signalBuy ? "success" : "default"}
+                          label={book.signal ?? "—"}
+                        />
+                      </TableCell>
+                      <TableCell>{book.stop ?? "—"}</TableCell>
+                      <TableCell>{book.name || "—"}</TableCell>
+                      <TableCell>{book.industry || "—"}</TableCell>
+                      <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                        <CellWithTip
+                          tip={
+                            book.marketCapAsOf
+                              ? `Market cap as of ${book.marketCapAsOf}`
+                              : undefined
+                          }
+                          align="right"
+                          label={formatCr(book.marketCapCr)}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        {selected ? (
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={patch.budgetInr}
+                            onChange={e => patchRow(book.symbol, book, "budgetInr", e.target.value)}
+                            sx={{ width: 96, "& .MuiInputBase-root": { py: 0.25 } }}
+                          />
+                        ) : (
+                          formatCr(book.budgetInr)
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {selected ? (
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={patch.emaPeriod}
+                            onChange={e => patchRow(book.symbol, book, "emaPeriod", e.target.value)}
+                            sx={{ width: 72, "& .MuiInputBase-root": { py: 0.25 } }}
+                          />
+                        ) : (
+                          book.emaPeriod
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {selected ? (
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={patch.bufferPercent}
+                            onChange={e =>
+                              patchRow(book.symbol, book, "bufferPercent", e.target.value)
+                            }
+                            sx={{ width: 72, "& .MuiInputBase-root": { py: 0.25 } }}
+                          />
+                        ) : (
+                          book.bufferPercent
+                        )}
+                      </TableCell>
+                      <TableCell>{book.exitBufferPercent}</TableCell>
+                      <TableCell>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </ScrollTable>
+        </PageSection>
         {(decisions ?? []).length > 0 ? (
-          <Paper sx={{ p: 2 }}>
+          <PageSection title="Last evaluation">
             {decisions?.map(row => (
               <Typography key={row.symbol} variant="body2">
                 {row.symbol}: {row.action} — {row.reason}
               </Typography>
             ))}
-          </Paper>
+          </PageSection>
         ) : null}
         <Typography variant="caption" color="text.secondary">
           Spec: docs/strategies/DAILY_TREND.md
@@ -937,6 +1122,44 @@ function formatPx(value: number): string {
 function formatCr(value: number | null | undefined): string {
   if (value == null) return "—"
   return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value)
+}
+
+function closeCellTip(book: Book): string | undefined {
+  const lines: string[] = []
+  if (book.closeDate) lines.push(`Last completed session: ${book.closeDate}`)
+  if (book.storedClose != null && book.storedDate) {
+    lines.push(`${formatPx(book.storedClose)} on ${book.storedDate} waits for the next session`)
+  }
+  return lines.length ? lines.join(" · ") : undefined
+}
+
+function CellWithTip({
+  label,
+  tip,
+  align,
+}: {
+  label: string
+  tip?: string
+  align?: "left" | "right"
+}) {
+  if (!tip) return <>{label}</>
+  return (
+    <Tooltip title={tip}>
+      <Box
+        component="span"
+        sx={{
+          display: "inline-block",
+          width: align === "right" ? "100%" : undefined,
+          textAlign: align,
+          borderBottom: "1px dotted",
+          borderColor: "text.disabled",
+          cursor: "help",
+        }}
+      >
+        {label}
+      </Box>
+    </Tooltip>
+  )
 }
 
 function pin(left: number, z = 1) {

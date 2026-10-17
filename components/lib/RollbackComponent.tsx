@@ -1,7 +1,8 @@
-import { Checkbox, FormControl, FormControlLabel, FormGroup, Grid } from "@mui/material"
+import { Checkbox, FormControlLabel, FormGroup, Grid } from "@mui/material"
 import React, { useEffect, useState } from "react"
 import { ROLLBACK_KEY_MAP } from "../../lib/constants"
 import type { ROLLBACK_TYPE } from "../../types/plans"
+import FieldRow from "../forms/FieldRow"
 
 interface RollbackComponentProps {
   rollback: ROLLBACK_TYPE
@@ -21,11 +22,11 @@ const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
 
   return (
     <Grid size={12}>
-      <FormControl component="fieldset">
+      <FieldRow label="Rollback trades (BETA)" wide>
         <FormGroup>
           <FormControlLabel
             key="rollback"
-            label="Rollback trades (BETA)"
+            label="Enable rollback"
             control={
               <Checkbox
                 checked={isSomeRollbackOptionEnabled}
@@ -66,7 +67,7 @@ const RollbackComponent = ({ rollback, onChange }: RollbackComponentProps) => {
             ))}
           </FormGroup>
         </FormGroup>
-      </FormControl>
+      </FieldRow>
     </Grid>
   )
 }

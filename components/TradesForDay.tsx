@@ -9,9 +9,8 @@ import { dashboardJobActions, isJobAborted } from "../lib/dashboardJobActions"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { operatorJobError } from "../lib/operatorJobError"
-import EmergencyPanel from "./desk/EmergencyPanel"
 import BrokerOrders from "./lib/brokerOrders"
-import ConfirmDialog from "./lib/ConfirmDialog"
+import ConfirmAction from "./lib/ConfirmAction"
 import PnLComponent from "./lib/PnLComponent"
 import TradeDetails from "./lib/tradeDetails"
 import { useSnackbar } from "./lib/useSnackbar"
@@ -44,7 +43,7 @@ const WrapperComponent = (props: TradeJob) => {
   const [flattenOpen, setFlattenOpen] = useState(false)
   const [flattenLoading, setFlattenLoading] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const { showMessage, SnackbarAlert } = useSnackbar()
+  const { showMessage } = useSnackbar()
 
   const isChase = props.strategy === "CHASE"
   const jobWasQueued = props.status !== "REJECT" && props.queue?.id
@@ -159,7 +158,6 @@ const WrapperComponent = (props: TradeJob) => {
 
   return (
     <Paper sx={{ mb: 1, px: 1.5, py: 1 }}>
-      {SnackbarAlert}
       <Box
         sx={{
           display: "flex",
@@ -209,8 +207,9 @@ const WrapperComponent = (props: TradeJob) => {
         </Box>
       </Box>
 
-      <ConfirmDialog
+      <ConfirmAction
         open={flattenOpen}
+        tone="attention"
         title={isChase ? "Square off Chase?" : "Square off this trade?"}
         message={
           isChase
@@ -218,7 +217,6 @@ const WrapperComponent = (props: TradeJob) => {
             : "This flattens the open legs for this job and stops further punches on it. It does not halt the desk. Chase is left running."
         }
         confirmLabel="Square off"
-        confirmColor="warning"
         onConfirm={() => void handleSquareOff()}
         onCancel={() => setFlattenOpen(false)}
       />
@@ -291,14 +289,12 @@ const TradesForDay = () => {
             New template
           </Button>
         </Paper>
-        <EmergencyPanel onDone={() => reloadTrades()} />
       </>
     )
   }
 
   return (
     <>
-      <EmergencyPanel onDone={() => reloadTrades()} />
       <Box>
         {trades.map((trade: TradeJob) => (
           <WrapperComponent

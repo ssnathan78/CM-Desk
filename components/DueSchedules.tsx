@@ -1,11 +1,11 @@
-import { Alert, Button, Paper, Stack, Typography } from "@mui/material"
-import axios from "axios"
+import { Alert, Button, Stack, Typography } from "@mui/material"
 import dayjs from "dayjs"
 import Link from "next/link"
 import { useState } from "react"
 import useSWR from "swr"
-import { apiErrorMessage } from "../lib/apiClientError"
 import { STRATEGIES_DETAILS } from "../lib/constants"
+import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
+import PageSection from "./lib/PageSection"
 
 type DueRow = {
   id: string
@@ -21,11 +21,10 @@ export default function DueSchedules() {
   if (!data?.length) return null
 
   return (
-    <Paper sx={{ p: 2, mb: 2 }}>
-      <Typography variant="h6">Due today</Typography>
-      <Typography color="text.secondary" sx={{ mb: 1 }}>
-        These schedules are not queued yet. Schedule copies the template into a job.
-      </Typography>
+    <PageSection
+      title="Due today"
+      description="These schedules are not queued yet. Schedule copies the template into a job."
+    >
       {error ? (
         <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
           {error}
@@ -55,14 +54,19 @@ export default function DueSchedules() {
                   setBusy(row.id)
                   setError(null)
                   try {
-                    await axios.post("/api/schedules", {
-                      action: "today",
-                      templateId: row.templateId,
-                      runAt: row.runAt,
+                    await fetchJson("/api/schedules", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "today",
+                        templateId: row.templateId,
+                        runAt: row.runAt,
+                      }),
                     })
                     await mutate()
                   } catch (e) {
-                    setError(apiErrorMessage(e, "Could not schedule"))
+                    const err = e as FetchJsonError
+                    setError(err.message || "Could not schedule")
                   } finally {
                     setBusy(null)
                   }
@@ -74,6 +78,6 @@ export default function DueSchedules() {
           )
         })}
       </Stack>
-    </Paper>
+    </PageSection>
   )
 }

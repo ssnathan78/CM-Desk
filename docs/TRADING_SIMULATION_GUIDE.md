@@ -17,6 +17,8 @@ yarn simulate -- --scenario random --seed 12345
 
 `yarn simulate` is a thin CLI over the same `simulate()` function the tests call. Use Yarn, not npm.
 
+**Desk UI:** Setup → Maintenance can run a catalog scenario via `POST /api/desk/simulate` (no live queues). In production the route returns 403 unless `ALLOW_SIM_UI=true` in deployment env.
+
 CI runs `yarn sim-test` after unit tests. It does not call Kite, and it does not use the wall clock for market hours.
 
 ## How simulated time works

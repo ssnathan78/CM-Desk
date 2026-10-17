@@ -4,7 +4,7 @@ test.describe("Desk home", () => {
   test("dashboard redirects to Desk and shows Today", async ({ page }) => {
     await page.goto("/dashboard")
     await expect(page).toHaveURL(/\/desk/)
-    await expect(page.getByText("Today", { exact: true })).toBeVisible()
+    await expect(page.getByText("Strategy board")).toBeVisible()
     await expect(page.getByRole("link", { name: /plan/i }).first()).toBeVisible()
   })
 

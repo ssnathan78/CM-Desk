@@ -64,7 +64,8 @@ async function bundledOrRemote(
     // The bundled file is the bootstrap when the download fails.
   }
   try {
-    return { text: readFileSync(resolve(process.cwd(), source.file), "utf8"), source: "bundled" }
+    const bundledPath = resolve(/* turbopackIgnore: true */ process.cwd(), source.file)
+    return { text: readFileSync(bundledPath, "utf8"), source: "bundled" }
   } catch {
     return null
   }

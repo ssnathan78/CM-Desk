@@ -1,17 +1,20 @@
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import ViewColumnOutlinedIcon from "@mui/icons-material/ViewColumnOutlined"
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
   Box,
   Button,
+  Checkbox,
   Chip,
+  IconButton,
   LinearProgress,
+  ListItemText,
+  Menu,
   MenuItem,
-  Paper,
   Skeleton,
   Stack,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -26,13 +29,76 @@ import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 
+import {
+  SettingsNumberField,
+  SettingsSelectField,
+  SettingsSwitchField,
+} from "../components/forms/SettingsFields"
 import Layout from "../components/Layout"
+import ConfirmAction from "../components/lib/ConfirmAction"
+import PageSection from "../components/lib/PageSection"
 import ScrollTable from "../components/lib/ScrollTable"
 import { useSnackbar } from "../components/lib/useSnackbar"
 import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import fetchJson from "../lib/fetchJson"
+import { diffRebalancePreview } from "../lib/momentum/rebalanceDiff"
 import { DEFAULT_MOMENTUM_CONFIG, type MomentumConfig } from "../lib/momentum/types"
 import useUser from "../lib/useUser"
+
+const VISIBLE_COLUMNS_KEY = "momentum.visibleColumns"
+
+const MOMENTUM_TABLE_COLUMNS = [
+  { key: "rank", label: "Rank", defaultVisible: true },
+  { key: "symbol", label: "Symbol", defaultVisible: true },
+  { key: "score", label: "Score", defaultVisible: true },
+  { key: "pass", label: "Filters", defaultVisible: true },
+  { key: "weight", label: "Target", defaultVisible: true },
+  { key: "price", label: "Close", defaultVisible: false },
+  { key: "roc12", label: "ROC 12m", defaultVisible: false },
+  { key: "roc24", label: "ROC 24m", defaultVisible: false },
+  { key: "pctBelowHigh", label: "% below high", defaultVisible: false },
+  { key: "aboveSma", label: "Above SMA", defaultVisible: false },
+] as const
+
+type MomentumColumnKey = (typeof MOMENTUM_TABLE_COLUMNS)[number]["key"]
+
+function defaultVisibleColumns(): MomentumColumnKey[] {
+  return MOMENTUM_TABLE_COLUMNS.filter(col => col.defaultVisible).map(col => col.key)
+}
+
+function readVisibleColumns(): MomentumColumnKey[] {
+  if (typeof window === "undefined") return defaultVisibleColumns()
+  try {
+    const raw = window.localStorage.getItem(VISIBLE_COLUMNS_KEY)
+    if (!raw) return defaultVisibleColumns()
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return defaultVisibleColumns()
+    const allowed = new Set(MOMENTUM_TABLE_COLUMNS.map(col => col.key))
+    const cols = parsed.filter((key): key is MomentumColumnKey =>
+      allowed.has(key as MomentumColumnKey)
+    )
+    return cols.length ? cols : defaultVisibleColumns()
+  } catch {
+    return defaultVisibleColumns()
+  }
+}
+
+function writeVisibleColumns(cols: MomentumColumnKey[]) {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(VISIBLE_COLUMNS_KEY, JSON.stringify(cols))
+}
+
+const SORTABLE_MOMENTUM_COLUMNS = new Set<MomentumColumnKey>([
+  "rank",
+  "symbol",
+  "score",
+  "pass",
+  "weight",
+])
+
+function momentumColumnLabel(key: MomentumColumnKey) {
+  return MOMENTUM_TABLE_COLUMNS.find(col => col.key === key)?.label ?? key
+}
 
 type ReportRow = {
   symbol: string
@@ -70,7 +136,7 @@ type Report = {
 
 export default function MomentumPage() {
   useUser({ redirectTo: "/" })
-  const { showMessage, SnackbarAlert } = useSnackbar()
+  const { showMessage } = useSnackbar()
   const { data, mutate } = useSWR<Report>("/api/momentum", {
     revalidateOnFocus: false,
     dedupingInterval: 15_000,
@@ -83,7 +149,14 @@ export default function MomentumPage() {
   const [busy, setBusy] = useState(false)
   const [page, setPage] = useState(0)
   const [trimPct, setTrimPct] = useState(10)
+  const [pendingOrder, setPendingOrder] = useState<"rebalance" | "deploy" | "trim" | null>(null)
   const [previewOrders, setPreviewOrders] = useState<Report["orders"] | null>(null)
+  const [previewDiff, setPreviewDiff] = useState<ReturnType<typeof diffRebalancePreview> | null>(
+    null
+  )
+  const lastPreviewRef = useRef<Report["orders"] | null>(null)
+  const [visibleColumns, setVisibleColumns] = useState<MomentumColumnKey[]>(defaultVisibleColumns)
+  const [columnMenu, setColumnMenu] = useState<HTMLElement | null>(null)
   const [pullWatch, setPullWatch] = useState<{
     running: boolean
     done: number
@@ -107,6 +180,19 @@ export default function MomentumPage() {
     },
     []
   )
+  useEffect(() => {
+    setVisibleColumns(readVisibleColumns())
+  }, [])
+
+  function toggleColumn(key: MomentumColumnKey) {
+    setVisibleColumns(current => {
+      const has = current.includes(key)
+      const next = has ? current.filter(col => col !== key) : [...current, key]
+      const minimal = next.length > 0 ? next : (["symbol"] as MomentumColumnKey[])
+      writeVisibleColumns(minimal)
+      return minimal
+    })
+  }
   const rows = useMemo(() => {
     const q = query.trim().toUpperCase()
     const targets = new Set((data?.targets ?? []).map(row => row.symbol))
@@ -210,13 +296,15 @@ export default function MomentumPage() {
     }
   }
 
-  async function save(next: MomentumConfig = config) {
+  async function save(next?: MomentumConfig) {
+    const payload = next ?? config
+    if (!payload) return
     setBusy(true)
     try {
       await fetchJson("/api/momentum", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: next }),
+        body: JSON.stringify({ config: payload }),
       })
       setDraft(null)
       await mutate()
@@ -240,9 +328,18 @@ export default function MomentumPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-      if (body.execute === false && Array.isArray(result.orders)) setPreviewOrders(result.orders)
-      else if (body.action === "rebalance" || body.action === "deploy" || body.action === "trim") {
+      if (body.execute === false && Array.isArray(result.orders)) {
+        setPreviewDiff(diffRebalancePreview(lastPreviewRef.current ?? previewOrders, result.orders))
+        lastPreviewRef.current = result.orders
+        setPreviewOrders(result.orders)
+      } else if (
+        body.action === "rebalance" ||
+        body.action === "deploy" ||
+        body.action === "trim"
+      ) {
         setPreviewOrders(null)
+        setPreviewDiff(null)
+        lastPreviewRef.current = null
       }
       await mutate()
       showMessage(result.message || ok, result.message ? "info" : "success")
@@ -300,8 +397,43 @@ export default function MomentumPage() {
 
   return (
     <Layout title="Momentum">
-      {SnackbarAlert}
-      <Stack spacing={2}>
+      <ConfirmAction
+        open={pendingOrder === "rebalance"}
+        tone="attention"
+        title="Send rebalance?"
+        message="Send the current rebalance orders?"
+        confirmLabel="Send rebalance"
+        onCancel={() => setPendingOrder(null)}
+        onConfirm={async () => {
+          setPendingOrder(null)
+          await post({ action: "rebalance", execute: true }, "Rebalance sent")
+        }}
+      />
+      <ConfirmAction
+        open={pendingOrder === "deploy"}
+        tone="attention"
+        title="Deploy spare cash?"
+        message="Buy an equal share of the spare cash for each name in today's book?"
+        confirmLabel="Deploy"
+        onCancel={() => setPendingOrder(null)}
+        onConfirm={async () => {
+          setPendingOrder(null)
+          await post({ action: "deploy", execute: true }, "Deploy sent")
+        }}
+      />
+      <ConfirmAction
+        open={pendingOrder === "trim"}
+        tone="attention"
+        title="Trim book?"
+        message={`Sell ${trimPct}% of each open momentum position and reduce Capital INR by the same percent?`}
+        confirmLabel="Trim book"
+        onCancel={() => setPendingOrder(null)}
+        onConfirm={async () => {
+          setPendingOrder(null)
+          await post({ action: "trim", execute: true, trimPct }, "Trim sent")
+        }}
+      />
+      <Stack spacing={3}>
         <Box>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
             <Typography variant="h5" sx={{ flex: 1 }}>
@@ -341,144 +473,138 @@ export default function MomentumPage() {
           )}
         </Box>
         {!config ? (
-          <Paper sx={{ p: 2 }}>
+          <PageSection title="Run & filters">
             <Skeleton height={200} />
-          </Paper>
+          </PageSection>
         ) : (
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
-              Run
-            </Typography>
+          <PageSection
+            title="Run & filters"
+            description="Engine, rebalance schedule, universe size, weights, and optional entry filters."
+          >
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                gap: 2,
-                alignItems: "center",
+                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                gap: 0,
+                columnGap: 3,
+                rowGap: 0,
+                width: "100%",
               }}
             >
-              <SwitchField
-                label="Engine on"
-                checked={config.active}
-                onChange={active => patch({ active })}
-              />
-              <SwitchField
-                label="Pull data daily"
-                checked={config.dataRefresh}
-                onChange={dataRefresh => patch({ dataRefresh })}
-              />
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Execution"
-                value={config.execution}
-                onChange={e => patch({ execution: e.target.value as MomentumConfig["execution"] })}
-              >
-                <MenuItem value="report">Report only</MenuItem>
-                <MenuItem value="manual">Manual send</MenuItem>
-                <MenuItem value="auto">Auto on rebalance day</MenuItem>
-              </TextField>
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Rebalance"
-                value={config.rebalance}
-                helperText={
-                  config.rebalance === "adhoc"
-                    ? "Never sends on a schedule. The order list is the buy and sell diff."
-                    : config.rebalance === "monthly"
-                      ? "First NSE session of the month. Weekday is only for weekly."
-                      : "Sends on the weekday below."
-                }
-                onChange={e => patch({ rebalance: e.target.value as MomentumConfig["rebalance"] })}
-              >
-                <MenuItem value="monthly">Monthly</MenuItem>
-                <MenuItem value="weekly">Weekly</MenuItem>
-                <MenuItem value="adhoc">Ad hoc</MenuItem>
-              </TextField>
-              {config.rebalance === "weekly" ? (
-                <Num
-                  label="Weekday (1–5)"
-                  value={config.weeklyDay}
-                  onChange={weeklyDay => patch({ weeklyDay })}
+              <Box>
+                <SwitchField
+                  label="Engine on"
+                  checked={config.active}
+                  onChange={active => patch({ active })}
                 />
-              ) : null}
-              <Num
-                label="Holdings"
-                value={config.holdingsCount}
-                onChange={holdingsCount => patch({ holdingsCount })}
-              />
-              <Num
-                label="Worst rank held"
-                value={config.worstRankHeld}
-                onChange={worstRankHeld => patch({ worstRankHeld })}
-              />
-              <Num
-                label="Entry rank max"
-                value={config.entryRankMax}
-                onChange={entryRankMax => patch({ entryRankMax })}
-              />
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Rank"
-                value={config.ranking}
-                onChange={e => patch({ ranking: e.target.value as MomentumConfig["ranking"] })}
-              >
-                <MenuItem value="SHARPE_12M">12-month Sharpe</MenuItem>
-                <MenuItem value="RETURN_12M">12-month return</MenuItem>
-                <MenuItem value="RETURN_12_1">12-month return, skip last month</MenuItem>
-              </TextField>
-              <TextField
-                select
-                fullWidth
-                size="small"
-                label="Weights"
-                value={config.weighting}
-                helperText={
-                  config.weighting === "drift"
-                    ? "Held shares stay put. A name is sold when it leaves the book, or when it grows past the trim level. New rupees buy only names you do not hold yet."
-                    : "Each rebalance resizes every name to the same slice of capital."
-                }
-                onChange={e => patch({ weighting: e.target.value as MomentumConfig["weighting"] })}
-              >
-                <MenuItem value="equal">Equal weight each rebalance</MenuItem>
-                <MenuItem value="drift">Let winners run</MenuItem>
-              </TextField>
-              <Num
-                label="Max weight %"
-                value={config.maxWeightPct}
-                helperText={
-                  config.weighting === "drift"
-                    ? "Caps a new name. It does not trim a share you already hold."
-                    : undefined
-                }
-                onChange={maxWeightPct => patch({ maxWeightPct })}
-              />
-              {config.weighting === "drift" ? (
-                <>
+                <SwitchField
+                  label="Pull data daily"
+                  checked={config.dataRefresh}
+                  onChange={dataRefresh => patch({ dataRefresh })}
+                />
+                <SettingsSelectField
+                  label="Execution"
+                  value={config.execution}
+                  onChange={execution => patch({ execution })}
+                >
+                  <MenuItem value="report">Report only</MenuItem>
+                  <MenuItem value="manual">Manual send</MenuItem>
+                  <MenuItem value="auto">Auto on rebalance day</MenuItem>
+                </SettingsSelectField>
+                <SettingsSelectField
+                  label="Rebalance"
+                  value={config.rebalance}
+                  helper={
+                    config.rebalance === "adhoc"
+                      ? "Never sends on a schedule. The order list is the buy and sell diff."
+                      : config.rebalance === "monthly"
+                        ? "First NSE session of the month. Weekday is only for weekly."
+                        : "Sends on the weekday below."
+                  }
+                  onChange={rebalance => patch({ rebalance })}
+                >
+                  <MenuItem value="monthly">Monthly</MenuItem>
+                  <MenuItem value="weekly">Weekly</MenuItem>
+                  <MenuItem value="adhoc">Ad hoc</MenuItem>
+                </SettingsSelectField>
+                {config.rebalance === "weekly" ? (
                   <Num
-                    label="Trim above % of book"
-                    value={config.trimAbovePct}
-                    onChange={trimAbovePct => patch({ trimAbovePct })}
+                    label="Weekday (1–5)"
+                    value={config.weeklyDay}
+                    onChange={weeklyDay => patch({ weeklyDay })}
                   />
-                  <Num
-                    label="Trim down to %"
-                    value={config.trimToPct}
-                    helperText="New capital buys a new name up to one equal slice. It is not added to shares you already hold. Leftover rupees wait for the next new name."
-                    onChange={trimToPct => patch({ trimToPct })}
-                  />
-                </>
-              ) : null}
-              <Num
-                label="Capital INR"
-                value={config.capitalInr}
-                helperText="Rupees for the whole book. 0 shows weights and buys nothing."
-                onChange={capitalInr => patch({ capitalInr })}
-              />
+                ) : null}
+              </Box>
+              <Box>
+                <Num
+                  label="Holdings"
+                  value={config.holdingsCount}
+                  onChange={holdingsCount => patch({ holdingsCount })}
+                />
+                <Num
+                  label="Worst rank held"
+                  value={config.worstRankHeld}
+                  onChange={worstRankHeld => patch({ worstRankHeld })}
+                />
+                <Num
+                  label="Entry rank max"
+                  value={config.entryRankMax}
+                  onChange={entryRankMax => patch({ entryRankMax })}
+                />
+                <SettingsSelectField
+                  label="Rank"
+                  value={config.ranking}
+                  onChange={ranking => patch({ ranking })}
+                >
+                  <MenuItem value="SHARPE_12M">12-month Sharpe</MenuItem>
+                  <MenuItem value="RETURN_12M">12-month return</MenuItem>
+                  <MenuItem value="RETURN_12_1">12-month return, skip last month</MenuItem>
+                </SettingsSelectField>
+                <SettingsSelectField
+                  label="Weights"
+                  value={config.weighting}
+                  helper={
+                    config.weighting === "drift"
+                      ? "Held shares stay put. A name is sold when it leaves the book, or when it grows past the trim level. New rupees buy only names you do not hold yet."
+                      : "Each rebalance resizes every name to the same slice of capital."
+                  }
+                  onChange={weighting => patch({ weighting })}
+                >
+                  <MenuItem value="equal">Equal weight each rebalance</MenuItem>
+                  <MenuItem value="drift">Let winners run</MenuItem>
+                </SettingsSelectField>
+                <Num
+                  label="Max weight %"
+                  value={config.maxWeightPct}
+                  helperText={
+                    config.weighting === "drift"
+                      ? "Caps a new name. It does not trim a share you already hold."
+                      : undefined
+                  }
+                  onChange={maxWeightPct => patch({ maxWeightPct })}
+                />
+                {config.weighting === "drift" ? (
+                  <>
+                    <Num
+                      label="Trim above % of book"
+                      value={config.trimAbovePct}
+                      onChange={trimAbovePct => patch({ trimAbovePct })}
+                    />
+                    <Num
+                      label="Trim down to %"
+                      value={config.trimToPct}
+                      helperText="New capital buys a new name up to one equal slice. It is not added to shares you already hold. Leftover rupees wait for the next new name."
+                      onChange={trimToPct => patch({ trimToPct })}
+                    />
+                  </>
+                ) : null}
+                <Num
+                  label="Capital INR"
+                  value={config.capitalInr}
+                  helperText="Rupees for the whole book. 0 shows weights and buys nothing."
+                  onChange={capitalInr => patch({ capitalInr })}
+                />
+              </Box>
             </Box>
             <Accordion disableGutters elevation={0} sx={{ mt: 1, bgcolor: "transparent" }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -488,8 +614,10 @@ export default function MomentumPage() {
                 <Box
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                    gap: 2,
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                    columnGap: 3,
+                    rowGap: 0,
+                    alignItems: "start",
                   }}
                 >
                   <Num
@@ -517,6 +645,7 @@ export default function MomentumPage() {
                     label="Min turnover INR"
                     value={config.filters.minAvgTurnoverInr}
                     helperText="Mean of close × volume over the last 21 sessions, after a history pull."
+                    helperPlacement="tooltip"
                     onChange={minAvgTurnoverInr =>
                       patch({ filters: { ...config.filters, minAvgTurnoverInr } })
                     }
@@ -533,25 +662,23 @@ export default function MomentumPage() {
                       patch({ filters: { ...config.filters, maxOneMonthShare } })
                     }
                   />
-                  <TextField
-                    select
-                    fullWidth
-                    size="small"
+                  <SettingsSelectField
                     label="Market cap"
-                    helperText="Off ignores it. Strict drops a name with no stored market cap, or below the minimum. The daily refresh covers the daily-trend book, not all 750."
+                    helper="Off ignores it. Strict drops a name with no stored market cap, or below the minimum. The daily refresh covers the daily-trend book, not all 750."
+                    helperPlacement="tooltip"
                     value={config.filters.marketCapFilter}
-                    onChange={e =>
+                    onChange={marketCapFilter =>
                       patch({
                         filters: {
                           ...config.filters,
-                          marketCapFilter: e.target.value as "off" | "strict",
+                          marketCapFilter,
                         },
                       })
                     }
                   >
                     <MenuItem value="off">Off</MenuItem>
                     <MenuItem value="strict">Strict</MenuItem>
-                  </TextField>
+                  </SettingsSelectField>
                 </Box>
               </AccordionDetails>
             </Accordion>
@@ -578,11 +705,7 @@ export default function MomentumPage() {
               <Button
                 color="warning"
                 disabled={busy || config.execution === "report"}
-                onClick={() => {
-                  if (window.confirm("Send the current rebalance orders?")) {
-                    void post({ action: "rebalance", execute: true }, "Rebalance sent")
-                  }
-                }}
+                onClick={() => setPendingOrder("rebalance")}
               >
                 Send rebalance
               </Button>
@@ -615,15 +738,7 @@ export default function MomentumPage() {
                       disabled={
                         busy || data?.config.weighting !== "drift" || config.execution === "report"
                       }
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Buy an equal share of the spare cash for each name in today's book?"
-                          )
-                        ) {
-                          void post({ action: "deploy", execute: true }, "Deploy sent")
-                        }
-                      }}
+                      onClick={() => setPendingOrder("deploy")}
                     >
                       Deploy spare cash
                     </Button>
@@ -648,15 +763,7 @@ export default function MomentumPage() {
                       disabled={
                         busy || data?.config.weighting !== "drift" || config.execution === "report"
                       }
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Sell ${trimPct}% of each open momentum position and reduce Capital INR by the same percent?`
-                          )
-                        ) {
-                          void post({ action: "trim", execute: true, trimPct }, "Trim sent")
-                        }
-                      }}
+                      onClick={() => setPendingOrder("trim")}
                     >
                       Trim book
                     </Button>
@@ -687,191 +794,279 @@ export default function MomentumPage() {
                 </Typography>
               </Box>
             ) : null}
-          </Paper>
+          </PageSection>
         )}
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={1}
-          sx={{ alignItems: { sm: "center" } }}
+        <PageSection
+          title="Universe & orders"
+          description="Filter the ranked list, preview rebalance diff, and export."
+          flush
         >
-          <TextField
-            size="small"
-            label="Filter symbol or name"
-            value={query}
-            onChange={e => {
-              setQuery(e.target.value)
-              setPage(0)
-            }}
-          />
-          <TextField
-            select
-            size="small"
-            label="Show"
-            value={view}
-            onChange={e => {
-              setView(e.target.value as "all" | "pass" | "orders")
-              setPage(0)
-            }}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="all">All names</MenuItem>
-            <MenuItem value="pass">Pass the filters</MenuItem>
-            <MenuItem value="orders">In the order diff</MenuItem>
-          </TextField>
-          <Button onClick={() => exportMomentum(rows, data)}>Export this view</Button>
-        </Stack>
-        <Typography variant="body2" color="text.secondary">
-          {(previewOrders ?? data?.orders ?? []).length} planned. Last pull{" "}
-          {data?.lastDataPullOn ?? "never"}. Rank as of{" "}
-          {data?.computedAt
-            ? new Date(data.computedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-            : "not stored"}
-          . Rebalance day {data?.due ? "yes" : "no"}.
-        </Typography>
-        {(previewOrders ?? data?.orders ?? []).length > 0 ? (
-          <Box sx={{ maxHeight: 140, overflow: "auto" }}>
-            {(previewOrders ?? data?.orders ?? []).map(order => (
-              <Typography key={`${order.side}-${order.symbol}`} variant="body2">
-                {order.side} {order.symbol} {order.quantity} — {order.reason}
-              </Typography>
-            ))}
-          </Box>
-        ) : null}
-        <ScrollTable minWidth={720}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                {(
-                  [
-                    ["rank", "Rank"],
-                    ["symbol", "Symbol"],
-                    ["score", "Score"],
-                    ["pass", "Filters"],
-                    ["weight", "Target"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <TableCell key={key} sortDirection={sortKey === key ? sortDir : false}>
-                    <TableSortLabel
-                      active={sortKey === key}
-                      direction={sortKey === key ? sortDir : "asc"}
-                      onClick={() => {
-                        if (sortKey === key)
-                          setSortDir(current => (current === "asc" ? "desc" : "asc"))
-                        else {
-                          setSortKey(key)
-                          setSortDir(key === "rank" || key === "symbol" ? "asc" : "desc")
-                        }
-                        setPage(0)
-                      }}
-                    >
-                      {label}
-                    </TableSortLabel>
-                  </TableCell>
+          <Box sx={{ px: 2, pb: 1 }}>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1}
+              sx={{ alignItems: { sm: "center" } }}
+            >
+              <TextField
+                size="small"
+                label="Filter symbol or name"
+                value={query}
+                onChange={e => {
+                  setQuery(e.target.value)
+                  setPage(0)
+                }}
+              />
+              <TextField
+                select
+                size="small"
+                label="Show"
+                value={view}
+                onChange={e => {
+                  setView(e.target.value as "all" | "pass" | "orders")
+                  setPage(0)
+                }}
+                sx={{ minWidth: 220 }}
+              >
+                <MenuItem value="all">All names</MenuItem>
+                <MenuItem value="pass">Pass the filters</MenuItem>
+                <MenuItem value="orders">In the order diff</MenuItem>
+              </TextField>
+              <Button onClick={() => exportMomentum(rows, data)}>Export this view</Button>
+              <IconButton
+                aria-label="Choose columns"
+                onClick={event => setColumnMenu(event.currentTarget)}
+                size="small"
+              >
+                <ViewColumnOutlinedIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                anchorEl={columnMenu}
+                open={Boolean(columnMenu)}
+                onClose={() => setColumnMenu(null)}
+              >
+                {MOMENTUM_TABLE_COLUMNS.map(col => (
+                  <MenuItem key={col.key} dense onClick={() => toggleColumn(col.key)}>
+                    <Checkbox
+                      size="small"
+                      checked={visibleColumns.includes(col.key)}
+                      tabIndex={-1}
+                    />
+                    <ListItemText primary={col.label} />
+                  </MenuItem>
                 ))}
-                <TableCell
-                  sx={{
-                    position: "sticky",
-                    right: 0,
-                    zIndex: 2,
-                    bgcolor: "background.paper",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Lock
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {pageRows.map(row => {
-                const target = data?.targets.find(item => item.symbol === row.symbol)
-                const lock = data?.locks.find(item => item.symbol === row.symbol)
-                return (
-                  <TableRow key={row.symbol}>
-                    <TableCell>{row.rank ?? "—"}</TableCell>
-                    <TableCell>
-                      {row.symbol}
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: "block" }}
+              </Menu>
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              {(previewOrders ?? data?.orders ?? []).length} planned. Last pull{" "}
+              {data?.lastDataPullOn ?? "never"}. Rank as of{" "}
+              {data?.computedAt
+                ? new Date(data.computedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                : "not stored"}
+              . Rebalance day {data?.due ? "yes" : "no"}.
+            </Typography>
+            {previewDiff &&
+            (previewDiff.added.length ||
+              previewDiff.removed.length ||
+              previewDiff.changed.length) ? (
+              <Chip
+                size="small"
+                color="info"
+                variant="outlined"
+                label={`Preview diff: ${previewDiff.summary}`}
+              />
+            ) : null}
+            {(previewOrders ?? data?.orders ?? []).length > 0 ? (
+              <Box sx={{ maxHeight: 140, overflow: "auto" }}>
+                {(previewOrders ?? data?.orders ?? []).map(order => (
+                  <Typography key={`${order.side}-${order.symbol}`} variant="body2">
+                    {order.side} {order.symbol} {order.quantity} — {order.reason}
+                  </Typography>
+                ))}
+              </Box>
+            ) : null}
+          </Box>
+          <ScrollTable minWidth={720}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  {visibleColumns.map(key => (
+                    <TableCell key={key} sortDirection={sortKey === key ? sortDir : false}>
+                      {SORTABLE_MOMENTUM_COLUMNS.has(key) ? (
+                        <TableSortLabel
+                          active={sortKey === key}
+                          direction={sortKey === key ? sortDir : "asc"}
+                          onClick={() => {
+                            if (sortKey === key)
+                              setSortDir(current => (current === "asc" ? "desc" : "asc"))
+                            else {
+                              setSortKey(key as typeof sortKey)
+                              setSortDir(key === "rank" || key === "symbol" ? "asc" : "desc")
+                            }
+                            setPage(0)
+                          }}
+                        >
+                          {momentumColumnLabel(key)}
+                        </TableSortLabel>
+                      ) : (
+                        momentumColumnLabel(key)
+                      )}
+                    </TableCell>
+                  ))}
+                  <TableCell
+                    sx={{
+                      position: "sticky",
+                      right: 0,
+                      zIndex: 2,
+                      bgcolor: "background.paper",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Lock
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {pageRows.map(row => {
+                  const target = data?.targets.find(item => item.symbol === row.symbol)
+                  const lock = data?.locks.find(item => item.symbol === row.symbol)
+                  return (
+                    <TableRow key={row.symbol}>
+                      {visibleColumns.map(key => (
+                        <TableCell key={key} sx={key === "pass" ? { maxWidth: 280 } : undefined}>
+                          {key === "rank" ? (
+                            (row.rank ?? "—")
+                          ) : key === "symbol" ? (
+                            <>
+                              {row.symbol}
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: "block" }}
+                              >
+                                {row.name}
+                              </Typography>
+                            </>
+                          ) : key === "score" ? (
+                            row.metrics?.score == null ? (
+                              "—"
+                            ) : (
+                              row.metrics.score.toFixed(2)
+                            )
+                          ) : key === "pass" ? (
+                            row.filterPass ? (
+                              <Chip size="small" color="success" label="pass" />
+                            ) : (
+                              row.filterReasons.join("; ")
+                            )
+                          ) : key === "weight" ? (
+                            target ? (
+                              `${target.weightPct.toFixed(1)}% · ${target.targetQty}`
+                            ) : (
+                              "—"
+                            )
+                          ) : key === "price" ? (
+                            row.price == null ? (
+                              "—"
+                            ) : (
+                              row.price.toFixed(2)
+                            )
+                          ) : key === "roc12" ? (
+                            row.metrics?.roc12 == null ? (
+                              "—"
+                            ) : (
+                              `${(row.metrics.roc12 * 100).toFixed(1)}%`
+                            )
+                          ) : key === "roc24" ? (
+                            row.metrics?.roc24 == null ? (
+                              "—"
+                            ) : (
+                              `${(row.metrics.roc24 * 100).toFixed(1)}%`
+                            )
+                          ) : key === "pctBelowHigh" ? (
+                            row.metrics?.pctBelowHigh == null ? (
+                              "—"
+                            ) : (
+                              `${(row.metrics.pctBelowHigh * 100).toFixed(1)}%`
+                            )
+                          ) : key === "aboveSma" ? (
+                            row.metrics?.aboveSma == null ? (
+                              "—"
+                            ) : row.metrics.aboveSma ? (
+                              "yes"
+                            ) : (
+                              "no"
+                            )
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                      ))}
+                      <TableCell
+                        sx={{
+                          position: "sticky",
+                          right: 0,
+                          zIndex: 1,
+                          bgcolor: "background.paper",
+                          whiteSpace: "nowrap",
+                        }}
                       >
-                        {row.name}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      {row.metrics?.score == null ? "—" : row.metrics.score.toFixed(2)}
-                    </TableCell>
-                    <TableCell sx={{ maxWidth: 280 }}>
-                      {row.filterPass ? (
-                        <Chip size="small" color="success" label="pass" />
-                      ) : (
-                        row.filterReasons.join("; ")
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {target ? `${target.weightPct.toFixed(1)}% · ${target.targetQty}` : "—"}
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        position: "sticky",
-                        right: 0,
-                        zIndex: 1,
-                        bgcolor: "background.paper",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {lock ? (
-                        <Button size="small" onClick={() => changeLock(row.symbol, null)}>
-                          {lock.mode === "EXCLUDE" ? "Clear exclude" : "Clear hold"}
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            size="small"
-                            onClick={() =>
-                              changeLock(row.symbol, {
-                                symbol: row.symbol,
-                                mode: "HOLD_WEIGHT",
-                                weightPct: target?.weightPct ?? config.maxWeightPct,
-                              })
-                            }
-                          >
-                            Hold
+                        {lock ? (
+                          <Button size="small" onClick={() => changeLock(row.symbol, null)}>
+                            {lock.mode === "EXCLUDE" ? "Clear exclude" : "Clear hold"}
                           </Button>
-                          <Button
-                            size="small"
-                            onClick={() =>
-                              changeLock(row.symbol, {
-                                symbol: row.symbol,
-                                mode: "EXCLUDE",
-                                weightPct: 0,
-                              })
-                            }
-                          >
-                            Exclude
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </ScrollTable>
-        <TablePagination
-          component="div"
-          count={rows.length}
-          page={rankPage}
-          onPageChange={(_event, next) => setPage(next)}
-          rowsPerPage={50}
-          rowsPerPageOptions={[50]}
-        />
-        <Typography variant="caption" color="text.secondary">
-          {rows.length} match this view, of {data?.rows.length ?? 0} names. Pass the filters is the
-          names that clear every filter. In the order diff is the names with a target weight or a
-          buy or sell.
-        </Typography>
+                        ) : (
+                          <>
+                            <Button
+                              size="small"
+                              onClick={() =>
+                                changeLock(row.symbol, {
+                                  symbol: row.symbol,
+                                  mode: "HOLD_WEIGHT",
+                                  weightPct: target?.weightPct ?? config?.maxWeightPct ?? 0,
+                                })
+                              }
+                            >
+                              Hold
+                            </Button>
+                            <Button
+                              size="small"
+                              onClick={() =>
+                                changeLock(row.symbol, {
+                                  symbol: row.symbol,
+                                  mode: "EXCLUDE",
+                                  weightPct: 0,
+                                })
+                              }
+                            >
+                              Exclude
+                            </Button>
+                          </>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </ScrollTable>
+          <TablePagination
+            component="div"
+            count={rows.length}
+            page={rankPage}
+            onPageChange={(_event, next) => setPage(next)}
+            rowsPerPage={50}
+            rowsPerPageOptions={[50]}
+          />
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", px: 2, pt: 1 }}
+          >
+            {rows.length} match this view, of {data?.rows.length ?? 0} names. Pass the filters is
+            the names that clear every filter. In the order diff is the names with a target weight
+            or a buy or sell.
+          </Typography>
+        </PageSection>
       </Stack>
     </Layout>
   )
@@ -915,43 +1110,28 @@ function exportMomentum(rows: Report["rows"], data: Report | undefined) {
   URL.revokeObjectURL(link.href)
 }
 
-function SwitchField({
-  label,
-  checked,
-  onChange,
-}: {
+function SwitchField(props: {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
 }) {
-  return (
-    <Stack direction="row" spacing={1} sx={{ alignItems: "center", minHeight: 40 }}>
-      <Switch checked={checked} onChange={e => onChange(e.target.checked)} />
-      <Typography variant="body2">{label}</Typography>
-    </Stack>
-  )
+  return <SettingsSwitchField {...props} />
 }
 
-function Num({
-  label,
-  value,
-  helperText,
-  onChange,
-}: {
+function Num(props: {
   label: string
   value: number
   helperText?: string
+  helperPlacement?: "below" | "tooltip"
   onChange: (value: number) => void
 }) {
   return (
-    <TextField
-      fullWidth
-      size="small"
-      label={label}
-      helperText={helperText}
-      type="number"
-      value={value}
-      onChange={e => onChange(Number(e.target.value))}
+    <SettingsNumberField
+      label={props.label}
+      value={props.value}
+      helper={props.helperText}
+      helperPlacement={props.helperPlacement}
+      onChange={props.onChange}
     />
   )
 }

@@ -12,9 +12,8 @@ import {
   Typography,
 } from "@mui/material"
 import { useEffect, useRef, useState } from "react"
-
-import BookBadge from "../figures/BookBadge"
 import { color } from "../../src/tokens"
+import BookBadge from "../figures/BookBadge"
 
 export type ConfirmActionProps = {
   open: boolean
@@ -95,7 +94,9 @@ export default function ConfirmAction({
         ) : null}
         {will?.length ? (
           <Box sx={{ mb: willNot?.length ? 1 : 0 }}>
-            <Typography variant="overline" color="text.secondary">Will</Typography>
+            <Typography variant="overline" color="text.secondary">
+              Will
+            </Typography>
             <List dense disablePadding>
               {will.map(line => (
                 <ListItem key={line} disablePadding>
@@ -107,7 +108,9 @@ export default function ConfirmAction({
         ) : null}
         {willNot?.length ? (
           <Box>
-            <Typography variant="overline" color="text.secondary">Will not</Typography>
+            <Typography variant="overline" color="text.secondary">
+              Will not
+            </Typography>
             <List dense disablePadding>
               {willNot.map(line => (
                 <ListItem key={line} disablePadding>

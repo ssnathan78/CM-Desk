@@ -1,13 +1,15 @@
-import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined"
 import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined"
 import AllInclusiveOutlinedIcon from "@mui/icons-material/AllInclusiveOutlined"
 import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined"
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined"
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined"
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined"
 import MenuIcon from "@mui/icons-material/Menu"
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined"
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined"
 import ShowChartOutlinedIcon from "@mui/icons-material/ShowChartOutlined"
-import ViewQuiltOutlinedIcon from "@mui/icons-material/ViewQuiltOutlined"
+import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined"
+import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined"
 import {
   AppBar,
   Avatar,
@@ -33,14 +35,27 @@ import { useTheme } from "@mui/material/styles"
 import Link from "next/link"
 import { useRouter } from "next/router"
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import useSWR from "swr"
 
 import fetchJson from "../lib/fetchJson"
+import {
+  diffErrorCount,
+  readErrorNotifyEnabled,
+  showErrorNotification,
+} from "../lib/ui/alertNotifications"
 import useUser from "../lib/useUser"
+import DeskKeyboardShortcuts from "./shell/DeskKeyboardShortcuts"
+import MobileOperatorSheet from "./shell/MobileOperatorSheet"
 import StatusRail from "./shell/StatusRail"
 
 const DRAWER_WIDTH = 260
+
+/** Clearance below fixed AppBar (theme spacing is 4px/unit — do not use small pt values). */
+const MAIN_OFFSET = {
+  xs: "calc(56px + env(safe-area-inset-top, 0px) + 12px)",
+  md: "calc(64px + env(safe-area-inset-top, 0px) + 16px)",
+} as const
 
 function pathOnly(asPath: string) {
   return asPath.split("?")[0]
@@ -80,10 +95,27 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
   const router = useRouter()
   const theme = useTheme()
   const compact = useMediaQuery(theme.breakpoints.down("md"))
+  const phone = useMediaQuery(theme.breakpoints.down("sm"))
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [operatorSheetOpen, setOperatorSheetOpen] = useState(false)
   const asPath = router.asPath
-  const { data: alertSummary } = useSWR(user?.isLoggedIn ? "/api/desk/alerts?summary=1" : null)
+  const { data: alertSummary } = useSWR(user?.isLoggedIn ? "/api/desk/alerts?summary=1" : null, {
+    refreshInterval: 15_000,
+  })
   const alertCount = Number(alertSummary?.errorCount ?? 0) + Number(alertSummary?.warnCount ?? 0)
+  const prevErrorCount = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    if (!user?.isLoggedIn || !readErrorNotifyEnabled()) return
+    const next = Number(alertSummary?.errorCount ?? 0)
+    const delta = diffErrorCount(prevErrorCount.current, next)
+    if (delta > 0) {
+      showErrorNotification(
+        delta === 1 ? "1 new error alert on Desk" : `${delta} new error alerts on Desk`
+      )
+    }
+    prevErrorCount.current = next
+  }, [alertSummary?.errorCount, user?.isLoggedIn])
 
   const close = () => setMobileOpen(false)
 
@@ -100,17 +132,29 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
       <List dense sx={{ flex: 1, py: 0 }} subheader={<li />}>
         <ListItemButton
           component={Link}
-          href={alertCount ? "/desk?tab=alerts" : "/desk"}
+          href={alertCount ? "/desk?view=why&tab=alerts" : "/desk"}
           selected={selected(asPath, "/desk")}
           onClick={close}
           sx={{ ...itemSx, pl: 1.5 }}
         >
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <Badge color="error" badgeContent={alertCount} max={9}>
-              <AccountBalanceWalletOutlinedIcon fontSize="small" />
+              <SpaceDashboardOutlinedIcon fontSize="small" />
             </Badge>
           </ListItemIcon>
           <ListItemText primary="Desk" />
+        </ListItemButton>
+        <ListItemButton
+          component={Link}
+          href="/risk"
+          selected={selected(asPath, "/risk")}
+          onClick={close}
+          sx={itemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
+            <ShieldOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Risk" />
         </ListItemButton>
 
         <ListSubheader
@@ -121,6 +165,18 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListSubheader>
         <ListItemButton
           component={Link}
+          href="/templates"
+          selected={selected(asPath, "/templates")}
+          onClick={close}
+          sx={itemSx}
+        >
+          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
+            <DescriptionOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Templates" />
+        </ListItemButton>
+        <ListItemButton
+          component={Link}
           href="/plan"
           selected={selected(asPath, "/plan")}
           onClick={close}
@@ -129,31 +185,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
             <CalendarMonthOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Plan" />
-        </ListItemButton>
-        <ListItemButton
-          component={Link}
-          href="/templates?type=ATM_STRADDLE"
-          selected={asPath.includes("type=ATM_STRADDLE")}
-          onClick={close}
-          sx={itemSx}
-        >
-          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <ShowChartOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Straddle" />
-        </ListItemButton>
-        <ListItemButton
-          component={Link}
-          href="/templates?type=ATM_STRANGLE"
-          selected={asPath.includes("type=ATM_STRANGLE")}
-          onClick={close}
-          sx={itemSx}
-        >
-          <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <ViewQuiltOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Strangle" />
+          <ListItemText primary="Schedules" />
         </ListItemButton>
 
         <ListSubheader
@@ -182,7 +214,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           sx={itemSx}
         >
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <ShowChartOutlinedIcon fontSize="small" />
+            <TrendingUpOutlinedIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText primary="Momentum" />
         </ListItemButton>
@@ -194,7 +226,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           sx={itemSx}
         >
           <ListItemIcon sx={{ minWidth: 36, color: "inherit" }}>
-            <AllInclusiveOutlinedIcon fontSize="small" />
+            <ShowChartOutlinedIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText primary="Daily trend" />
         </ListItemButton>
@@ -283,6 +315,10 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
 
   return (
     <Box sx={{ minHeight: "100vh", display: "flex", minWidth: 0, overflowX: "clip" }}>
+      <DeskKeyboardShortcuts />
+      {phone ? (
+        <MobileOperatorSheet open={operatorSheetOpen} onClose={() => setOperatorSheetOpen(false)} />
+      ) : null}
       <AppBar
         position="fixed"
         elevation={0}
@@ -295,7 +331,15 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
         }}
       >
-        <Toolbar sx={{ minHeight: { xs: 56 }, px: { xs: 1, sm: 2 } }}>
+        <Toolbar
+          sx={{
+            minHeight: { xs: 56, md: 64 },
+            px: { xs: 1, sm: 2 },
+            gap: 1,
+            flexWrap: { xs: "wrap", lg: "nowrap" },
+            py: { xs: 0.5, md: 0 },
+          }}
+        >
           {compact ? (
             <IconButton
               color="inherit"
@@ -358,7 +402,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           flex: 1,
           minWidth: 0,
           width: { xs: "100%", md: `calc(100% - ${DRAWER_WIDTH}px)` },
-          pt: 11,
+          pt: MAIN_OFFSET,
           pb: { xs: 12, md: 6 },
           px: { xs: 1.5, sm: 2, md: 4 },
         }}
@@ -396,16 +440,16 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           value="/desk"
           icon={
             <Badge color="error" badgeContent={alertCount} max={9}>
-              <AccountBalanceWalletOutlinedIcon />
+              <SpaceDashboardOutlinedIcon />
             </Badge>
           }
           component={Link}
-          href={alertCount ? "/desk?tab=alerts" : "/desk"}
+          href={alertCount ? "/desk?view=why&tab=alerts" : "/desk"}
         />
         <BottomNavigationAction
           label="Templates"
           value="/templates"
-          icon={<ViewQuiltOutlinedIcon />}
+          icon={<DescriptionOutlinedIcon />}
           component={Link}
           href="/templates"
         />
@@ -420,7 +464,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           label="More"
           value="/more"
           icon={<MenuIcon />}
-          onClick={() => setMobileOpen(true)}
+          onClick={() => (phone ? setOperatorSheetOpen(true) : setMobileOpen(true))}
         />
       </BottomNavigation>
     </Box>

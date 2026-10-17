@@ -1,114 +1,41 @@
-import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined"
-import PauseIcon from "@mui/icons-material/Pause"
-import PlayArrowIcon from "@mui/icons-material/PlayArrow"
-import RestartAltIcon from "@mui/icons-material/RestartAlt"
-import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined"
-import {
-  Box,
-  Button,
-  Chip,
-  IconButton,
-  MenuItem,
-  Paper,
-  Stack,
-  Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material"
+import { Box, Button, Stack, TextField, Typography, useMediaQuery } from "@mui/material"
+import { useTheme } from "@mui/material/styles"
 import Link from "next/link"
 import { useEffect, useState } from "react"
-
+import ChaseBookDrawer from "../components/chase/ChaseBookDrawer"
+import ChaseBooksTable from "../components/chase/ChaseBooksTable"
 import Layout from "../components/Layout"
 import { useActionNotice, useRowNotices } from "../components/lib/ActionNotice"
-import ConfirmDialog from "../components/lib/ConfirmDialog"
+import ConfirmAction from "../components/lib/ConfirmAction"
 import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
-import ScrollTable from "../components/lib/ScrollTable"
+import PageSection from "../components/lib/PageSection"
 import { useSnackbar } from "../components/lib/useSnackbar"
-import {
-  CHASE_INDEX_ORDER,
-  CHASE_OPEN_CLASSIFY,
-  type ChaseBookConfig,
-  defaultChaseBook,
-} from "../lib/chaseDefaults"
-import { normalizeChaseOpenClassify } from "../lib/chaseOpenClassify"
+import { CHASE_INDEX_ORDER, type ChaseBookConfig, defaultChaseBook } from "../lib/chaseDefaults"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
+import { useDeskStatus } from "../lib/hooks/useDeskStatus"
 import useUser from "../lib/useUser"
-
-const CHASE_COLUMN_NOTES = [
-  {
-    term: "Trade",
-    text: "Whether this book is in the hourly engine. Off skips candles and new signals. If it is already LONG, SHORT, or waiting on an entry, the minute job still trails and stops it.",
-  },
-  {
-    term: "Pause / Resume",
-    text: "Blocks new entries on this book only. EMA still updates. An open position keeps its stop until flat, then it will not re-enter until you Resume. Pause is disabled while Trade is off. It saves immediately.",
-  },
-  {
-    term: "Lots",
-    text: "How many futures lots this book trades. Quantity is lots × the front-month contract’s lot size. Desk max notional and Chase max lots still apply to every Chase book together.",
-  },
-  {
-    term: "EMA",
-    text: "Length of the hourly exponential moving average on typical price (high + low + close) / 3. Shipped value is 40. A longer period turns less often.",
-  },
-  {
-    term: "Buffer %",
-    text: "The close must be this percent above the EMA for a long, or this percent below for a short. Shipped value is 0.2, which is 1.002× / 0.998× the EMA. A larger buffer means fewer signals.",
-  },
-  {
-    term: "Protect %",
-    text: "How far the limit may sit from the last price on a Chase market order. Shipped value is 1.5. Allowed range is 0.25 to 5.",
-  },
-  {
-    term: "Entry offset",
-    text: "When the trigger is not yet traded, the limit is the trigger plus this many rupees on a buy, and minus on a sell. Shipped value is 5. This is not the strategy stop.",
-  },
-  {
-    term: "09:16",
-    text: "PDF compares the 09:16 candle close with the overnight hourly EMA. Legacy steps the EMA on a 60-minute bar and is only for comparing with the older port.",
-  },
-  {
-    term: "Save / Reset / Remove",
-    text: "Save writes the row. The save icon turns amber when this row differs from what is stored. Reset never sends an order. If the book still has futures quantity, Reset is refused and the position stays LONG or SHORT. On a flat book, or a pending entry that never filled, Reset returns the signal to AWAITING_SIGNAL and cancels that pending entry. Remove drops the underlying and is refused while the book is open.",
-  },
-] as const
-
-function bookNeedsSave(current: ChaseBookConfig, saved: ChaseBookConfig | undefined) {
-  if (!saved) return false
-  return (
-    current.lots !== saved.lots ||
-    current.emaPeriod !== saved.emaPeriod ||
-    current.bufferPercent !== saved.bufferPercent ||
-    current.entryLimitOffset !== saved.entryLimitOffset ||
-    current.marketProtectionPercent !== saved.marketProtectionPercent ||
-    current.enabled !== saved.enabled ||
-    current.paused !== saved.paused ||
-    current.openClassify !== saved.openClassify
-  )
-}
 
 const ChasePlanPage = () => {
   useUser({ redirectTo: "/" })
+  const theme = useTheme()
+  const showPriceCols = useMediaQuery(theme.breakpoints.up("lg"))
+  const { data: deskStatus } = useDeskStatus()
   const { data, error, mutate } = useChaseSettings()
   const [books, setBooks] = useState<ChaseBookConfig[]>(
     CHASE_INDEX_ORDER.map(instrument => defaultChaseBook(instrument, instrument === "NIFTY"))
   )
   const { rows: rowNotice, showRow } = useRowNotices()
   const { showNotice: showSearchNotice, NoticeBanner: searchNotice } = useActionNotice()
-  const { showMessage, SnackbarAlert } = useSnackbar()
+  const { showMessage } = useSnackbar()
   const [resetInstrument, setResetInstrument] = useState<string | null>(null)
   const [flattenOpen, setFlattenOpen] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [matches, setMatches] = useState<string[]>([])
+  const [editInstrument, setEditInstrument] = useState<string | null>(null)
+  const [drawerSaving, setDrawerSaving] = useState(false)
 
   useEffect(() => {
     if (data?.books?.length) {
@@ -261,318 +188,150 @@ const ChasePlanPage = () => {
     return <Layout title="Chase" loading />
   }
 
+  const chaseDesk = deskStatus?.strategies.CHASE
+  const executionMode = chaseDesk?.executionMode ?? "PAPER"
+
   return (
-    <Layout title="Chase plan" maxWidth="xl">
-      {SnackbarAlert}
-      <Typography variant="h5" component="h1">
-        Chase
-      </Typography>
-      <Typography color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-        Futures trend-follow around a long EMA. Each underlying is its own book — an index or a
-        stock future. Lots, buffer, Trade this book / Pause entries, and 09:16 classify are
-        independent. This is not a weekday template.{" "}
-        <Link href="/help/chase#trade-this-index">Trade this book vs Pause</Link>
-      </Typography>
-      <Button component={Link} href="/help/chase" size="small" sx={{ mb: 2 }}>
-        Chase guide
-      </Button>
-
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mb: 2 }}>
-        <TextField
-          size="small"
-          label="Add underlying"
-          placeholder="RELIANCE, INFY, NIFTY"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          sx={{ minWidth: { sm: 280 } }}
-        />
-        <Button variant="outlined" onClick={() => void searchUnderlyings()}>
-          Search futures
-        </Button>
-      </Stack>
-      {searchNotice}
-      {matches.length ? (
-        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap" }}>
-          {matches.map(name => (
-            <Button
-              key={name}
-              size="small"
-              variant="outlined"
-              onClick={() => void addUnderlying(name)}
-            >
-              Add {name}
-            </Button>
-          ))}
-        </Stack>
-      ) : null}
-
-      <Paper sx={{ mb: 2 }}>
-        <ScrollTable minWidth={1180}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Underlying</TableCell>
-                <TableCell>Trade</TableCell>
-                <TableCell align="right">Lots</TableCell>
-                <TableCell align="right">EMA</TableCell>
-                <TableCell align="right">Buffer %</TableCell>
-                <TableCell
-                  align="right"
-                  title="Limit distance from the last price on a Chase market order."
-                >
-                  Protect %
-                </TableCell>
-                <TableCell align="right">Entry offset</TableCell>
-                <TableCell title="PDF uses the 09:16 candle close. Legacy steps the EMA on a 60-minute bar.">
-                  09:16
-                </TableCell>
-                <TableCell align="center">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {books.map(book => {
-                const dirty = bookNeedsSave(
-                  book,
-                  data.books?.find(saved => saved.instrument === book.instrument)
-                )
-                return (
-                  <TableRow key={book.instrument}>
-                    <TableCell>
-                      <Stack spacing={0.5}>
-                        <Typography variant="body2">{book.instrument}</Typography>
-                        <Chip
-                          size="small"
-                          color={!book.enabled ? "default" : book.paused ? "warning" : "success"}
-                          label={
-                            !book.enabled
-                              ? "Off"
-                              : book.paused
-                                ? "Paused — no new entries"
-                                : "Entries allowed"
-                          }
-                        />
-                        {rowNotice[book.instrument] ? (
-                          <Typography
-                            variant="caption"
-                            color={
-                              rowNotice[book.instrument].severity === "error"
-                                ? "error"
-                                : "success.main"
-                            }
-                          >
-                            {rowNotice[book.instrument].text}
-                          </Typography>
-                        ) : null}
-                      </Stack>
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={book.enabled}
-                        onChange={e => patchBook(book.instrument, { enabled: e.target.checked })}
-                        slotProps={{ input: { "aria-label": `Trade ${book.instrument}` } }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        type="number"
-                        size="small"
-                        value={book.lots}
-                        onChange={e => patchBook(book.instrument, { lots: Number(e.target.value) })}
-                        sx={{ width: 72 }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        type="number"
-                        size="small"
-                        value={book.emaPeriod}
-                        onChange={e =>
-                          patchBook(book.instrument, { emaPeriod: Number(e.target.value) })
-                        }
-                        sx={{ width: 72 }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        type="number"
-                        size="small"
-                        value={book.bufferPercent}
-                        onChange={e =>
-                          patchBook(book.instrument, { bufferPercent: Number(e.target.value) })
-                        }
-                        sx={{ width: 80 }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        type="number"
-                        size="small"
-                        value={book.marketProtectionPercent}
-                        slotProps={{ htmlInput: { step: 0.05, min: 0.25, max: 5 } }}
-                        onChange={e =>
-                          patchBook(book.instrument, {
-                            marketProtectionPercent: Number(e.target.value),
-                          })
-                        }
-                        sx={{ width: 80 }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        type="number"
-                        size="small"
-                        value={book.entryLimitOffset}
-                        onChange={e =>
-                          patchBook(book.instrument, { entryLimitOffset: Number(e.target.value) })
-                        }
-                        sx={{ width: 80 }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        select
-                        size="small"
-                        value={book.openClassify}
-                        onChange={e =>
-                          patchBook(book.instrument, {
-                            openClassify: normalizeChaseOpenClassify(e.target.value),
-                          })
-                        }
-                        sx={{ width: 150 }}
-                      >
-                        <MenuItem value={CHASE_OPEN_CLASSIFY.PDF_0916}>PDF 09:16</MenuItem>
-                        <MenuItem value={CHASE_OPEN_CLASSIFY.LEGACY_60M}>Legacy 60m</MenuItem>
-                      </TextField>
-                    </TableCell>
-                    <TableCell sx={{ verticalAlign: "middle", whiteSpace: "nowrap" }}>
-                      <Tooltip title={dirty ? "Save unsaved changes" : "Save this book"}>
-                        <IconButton
-                          size="small"
-                          color={dirty ? "warning" : "default"}
-                          aria-label={dirty ? "Save unsaved changes" : "Save this book"}
-                          onClick={() => saveBook(book.instrument)}
-                        >
-                          <SaveOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip
-                        title={
-                          book.paused
-                            ? "Resume entries"
-                            : "Pause entries. An open book still trails until flat."
-                        }
-                      >
-                        <span>
-                          <IconButton
-                            size="small"
-                            disabled={!book.enabled}
-                            aria-label={book.paused ? "Resume entries" : "Pause entries"}
-                            onClick={() => saveBook(book.instrument, { paused: !book.paused })}
-                          >
-                            {book.paused ? (
-                              <PlayArrowIcon fontSize="small" />
-                            ) : (
-                              <PauseIcon fontSize="small" />
-                            )}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title="Reset status. Clears LONG or SHORT on this book.">
-                        <IconButton
-                          size="small"
-                          aria-label="Reset status"
-                          onClick={() => setResetInstrument(book.instrument)}
-                        >
-                          <RestartAltIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Remove this book">
-                        <IconButton
-                          size="small"
-                          aria-label="Remove book"
-                          onClick={() => setRemoveTarget(book.instrument)}
-                        >
-                          <DeleteOutlinedIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </ScrollTable>
-      </Paper>
-      {books
-        .filter(book => book.enabled)
-        .map(book => (
-          <ChaseNotionalPreview
-            key={book.instrument}
-            lots={book.lots}
-            instruments={[book.instrument]}
-            maxNotionalInr={data.notional?.maxNotionalInr ?? 0}
-            priceByIndex={Object.fromEntries(
-              (data.notional?.rows ?? []).map(row => [row.instrument, row.price])
-            )}
-            lotSizeByIndex={data.notional?.lotSizes}
-          />
-        ))}
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>
-          What each column does
-        </Typography>
-        <Stack spacing={0.75}>
-          {CHASE_COLUMN_NOTES.map(note => (
-            <Typography key={note.term} variant="body2" color="text.secondary">
-              <Box component="span" sx={{ color: "text.primary", fontWeight: 600 }}>
-                {note.term}.
-              </Box>{" "}
-              {note.text}
+    <Layout title="Chase" maxWidth="xl">
+      <Stack spacing={3}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+          <Box sx={{ flex: 1 }}>
+            <Typography color="text.secondary">
+              Futures trend-follow on hourly EMA. Overnight allowed. Rolls front month 15:00 IST on
+              expiry. <Link href="/help/chase">Guide</Link>
             </Typography>
-          ))}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {chaseDesk
+                ? `Desk: ${chaseDesk.enabled ? "Enabled" : "Disabled — dark"} · Book: ${executionMode} · New entries: ${chaseDesk.halted ? "paused" : "allowed"}`
+                : null}
+            </Typography>
+          </Box>
+          <Button color="warning" variant="outlined" onClick={() => setFlattenOpen(true)}>
+            Square off all Chase books…
+          </Button>
         </Stack>
-      </Paper>
-      <Typography variant="body2" color="text.secondary" sx={{ my: 2 }}>
-        Edit a cell, then Save that row. A book that is off and flat does not load candles or write
-        signals. The minute job still trails a book that is already open.
-      </Typography>
 
-      <Button
-        color="warning"
-        variant="contained"
-        onClick={() => setFlattenOpen(true)}
-        sx={{ mb: 2 }}
-      >
-        Square off all Chase books
-      </Button>
+        <PageSection
+          title="Add underlying"
+          description="Search NSE cash names, then add a Chase futures book for that symbol."
+        >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+            <TextField
+              size="small"
+              label="Add underlying"
+              placeholder="RELIANCE, INFY, NIFTY"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              sx={{ minWidth: { sm: 280 } }}
+            />
+            <Button variant="outlined" onClick={() => void searchUnderlyings()}>
+              Search futures
+            </Button>
+          </Stack>
+          {searchNotice}
+          {matches.length ? (
+            <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap" }}>
+              {matches.map(name => (
+                <Button
+                  key={name}
+                  size="small"
+                  variant="outlined"
+                  onClick={() => void addUnderlying(name)}
+                >
+                  Add {name}
+                </Button>
+              ))}
+            </Stack>
+          ) : null}
+        </PageSection>
 
-      <ConfirmDialog
-        open={flattenOpen}
-        title="Square off Chase?"
-        message="This flattens every Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk. A live book is refused while the market is closed: the position and its stop stay. Paper still flattens."
-        confirmLabel="Square off"
-        confirmColor="warning"
-        onConfirm={() => void squareOffChase()}
-        onCancel={() => setFlattenOpen(false)}
-      />
-      <ConfirmDialog
-        open={Boolean(removeTarget)}
-        title={`Remove ${removeTarget || "this book"}?`}
-        message="This drops the underlying from Chase. It is refused while the book is open or waiting on an entry. It does not send an order."
-        confirmLabel="Remove"
-        confirmColor="warning"
-        onConfirm={() => removeTarget && void removeUnderlying(removeTarget)}
-        onCancel={() => setRemoveTarget(null)}
-      />
-      <ConfirmDialog
-        open={Boolean(resetInstrument)}
-        title={`Reset ${resetInstrument || "Chase"} to a fresh signal?`}
-        message="If this book still has futures quantity, Reset is refused and the position stays. On a flat book, or a pending entry that never filled, this returns the signal to AWAITING_SIGNAL and cancels that pending entry. It does not send a flatten. Use Square off when you want out of the current book."
-        confirmLabel="Reset signal"
-        confirmColor="warning"
-        onConfirm={() => resetInstrument && void resetSignal(resetInstrument)}
-        onCancel={() => setResetInstrument(null)}
-      />
+        <PageSection
+          title="Books"
+          description="Row click or pencil opens the drawer. Engine and pause save immediately."
+          flush
+        >
+          <ChaseBooksTable
+            books={books}
+            statuses={data.statuses ?? []}
+            executionMode={executionMode}
+            showPriceCols={showPriceCols}
+            rowNotice={rowNotice}
+            onRowClick={instrument => setEditInstrument(instrument)}
+            onEngineChange={(instrument, enabled) => {
+              patchBook(instrument, { enabled })
+              void saveBook(instrument, { enabled })
+            }}
+            onPauseChange={(instrument, paused) => void saveBook(instrument, { paused })}
+            onMenuAction={(instrument, action) => {
+              if (action === "edit") setEditInstrument(instrument)
+              if (action === "reset") setResetInstrument(instrument)
+              if (action === "remove") setRemoveTarget(instrument)
+              if (action === "square") setFlattenOpen(true)
+            }}
+          />
+        </PageSection>
+        <ChaseBookDrawer
+          open={Boolean(editInstrument)}
+          book={books.find(b => b.instrument === editInstrument) ?? null}
+          onClose={() => setEditInstrument(null)}
+          saving={drawerSaving}
+          onSave={async patch => {
+            if (!editInstrument) return
+            setDrawerSaving(true)
+            try {
+              await saveBook(editInstrument, patch)
+              setEditInstrument(null)
+            } finally {
+              setDrawerSaving(false)
+            }
+          }}
+        />
+        {books
+          .filter(book => book.enabled)
+          .map(book => (
+            <ChaseNotionalPreview
+              key={book.instrument}
+              lots={book.lots}
+              instruments={[book.instrument]}
+              maxNotionalInr={data.notional?.maxNotionalInr ?? 0}
+              priceByIndex={Object.fromEntries(
+                (data.notional?.rows ?? []).map(row => [row.instrument, row.price])
+              )}
+              lotSizeByIndex={data.notional?.lotSizes}
+            />
+          ))}
+        <ConfirmAction
+          open={flattenOpen}
+          tone="attention"
+          title="Square off Chase?"
+          message="This flattens every Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk. A live book is refused while the market is closed: the position and its stop stay. Paper still flattens."
+          confirmLabel="Square off"
+          onConfirm={() => void squareOffChase()}
+          onCancel={() => setFlattenOpen(false)}
+        />
+        <ConfirmAction
+          open={Boolean(removeTarget)}
+          tone="attention"
+          title={`Remove ${removeTarget || "this book"}?`}
+          message="This drops the underlying from Chase. It is refused while the book is open or waiting on an entry. It does not send an order."
+          confirmLabel="Remove"
+          onConfirm={() => {
+            if (removeTarget) void removeUnderlying(removeTarget)
+          }}
+          onCancel={() => setRemoveTarget(null)}
+        />
+        <ConfirmAction
+          open={Boolean(resetInstrument)}
+          tone="attention"
+          title={`Reset ${resetInstrument || "Chase"} to a fresh signal?`}
+          message="If this book still has futures quantity, Reset is refused and the position stays. On a flat book, or a pending entry that never filled, this returns the signal to AWAITING_SIGNAL and cancels that pending entry. It does not send a flatten. Use Square off when you want out of the current book."
+          confirmLabel="Reset signal"
+          onConfirm={() => {
+            if (resetInstrument) void resetSignal(resetInstrument)
+          }}
+          onCancel={() => setResetInstrument(null)}
+        />
+      </Stack>
     </Layout>
   )
 }

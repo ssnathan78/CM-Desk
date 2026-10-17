@@ -7,7 +7,9 @@ import {
   dailyTrendRowSignal,
   emaFromCloses,
   evaluateDailyLong,
+  mergeDailyTrendBookSave,
   parseDailyTrendBulkPatch,
+  parseOptionalDailyTrendBulkForm,
   sharesForBudget,
 } from "../../lib/dailyTrend/engine"
 import { parseScreenerMarketCapCr } from "../../lib/dailyTrend/marketCap"
@@ -498,6 +500,36 @@ describe("daily long-only trend", () => {
       stop: 2400,
       entry: 2500,
       quantity: 12,
+    })
+  })
+
+  it("parses an empty bulk bar without error and merges save with inline over bulk", () => {
+    expect(parseOptionalDailyTrendBulkForm({
+      emaPeriod: "",
+      bufferPercent: "",
+      exitBufferPercent: "",
+      budgetInr: "",
+      entryStyle: "",
+    })).toEqual({ ok: true, patch: {} })
+    const book = {
+      budgetInr: 5000,
+      emaPeriod: 40,
+      bufferPercent: 1,
+      exitBufferPercent: 1,
+      entryStyle: "CLOSE_CROSS" as const,
+    }
+    expect(
+      mergeDailyTrendBookSave(book, { emaPeriod: 42 }, { budgetInr: 10000 })
+    ).toEqual({
+      budgetInr: 10000,
+      emaPeriod: 42,
+      bufferPercent: 1,
+      exitBufferPercent: 1,
+      entryStyle: "CLOSE_CROSS",
+    })
+    expect(mergeDailyTrendBookSave(book, { emaPeriod: 42 }, { emaPeriod: 45 })).toMatchObject({
+      emaPeriod: 45,
+      budgetInr: 5000,
     })
   })
 

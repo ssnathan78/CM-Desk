@@ -12,6 +12,39 @@ import { validateChaseSettings } from "../../lib/chaseValidation"
 import logger from "../../lib/logger"
 import withSession from "../../lib/session"
 
+async function chaseBookStatuses(books: { instrument: string }[]) {
+  const { getChaseStatus } = await import("../../lib/drizzleDbUtils")
+  const { getOpenPositions } = await import("../../lib/trading/ledger")
+  const { signedQty } = await import("../../lib/trading/accounting")
+  const { chaseIndexFromSymbol } = await import("../../lib/chaseValidation")
+  const { moneyAdd, moneyFromUnknown, moneyToString, moneyZero } = await import(
+    "../../lib/trading/money"
+  )
+  const open = await getOpenPositions()
+  return Promise.all(
+    books.map(async book => {
+      const row = await getChaseStatus(book.instrument)
+      const legs = open.filter(
+        p =>
+          p.strategy === "CHASE" && chaseIndexFromSymbol(p.tradingsymbol || "") === book.instrument
+      )
+      let netQty = 0
+      let openMark = moneyZero()
+      for (const leg of legs) {
+        netQty += signedQty(leg.quantity)
+        openMark = moneyAdd(openMark, moneyFromUnknown(leg.unrealizedPnl))
+      }
+      return {
+        instrument: book.instrument,
+        current: row?.status ?? null,
+        tradingsymbol: row?.tradingsymbol ?? null,
+        netQty,
+        openMark: moneyToString(openMark),
+      }
+    })
+  )
+}
+
 async function chaseBookLotSizes(names: string[]): Promise<Record<string, number>> {
   if (!names.length) return {}
   try {
@@ -36,13 +69,17 @@ export default withSession(async (req, res) => {
   try {
     if (req.method === "GET") {
       const [config, books] = await Promise.all([getChaseSettings(), listChaseBooks()])
-      const lotSizes = await chaseBookLotSizes(books.map(book => book.instrument))
+      const [statuses, lotSizes] = await Promise.all([
+        chaseBookStatuses(books),
+        chaseBookLotSizes(books.map(book => book.instrument)),
+      ])
       try {
         const { buildDeskSetupNotional } = await import("../../lib/trading/setupNotional")
         const setups = await buildDeskSetupNotional()
         return res.json({
           config,
           books,
+          statuses,
           notional: {
             maxNotionalInr: setups.maxNotionalInr,
             rows: setups.rows.filter(row => row.source === "CHASE"),
@@ -51,7 +88,12 @@ export default withSession(async (req, res) => {
         })
       } catch (e) {
         logger.warn("[chase-settings] notional preview unavailable", e)
-        return res.json({ config, books, notional: { maxNotionalInr: 0, rows: [], lotSizes } })
+        return res.json({
+          config,
+          books,
+          statuses,
+          notional: { maxNotionalInr: 0, rows: [], lotSizes },
+        })
       }
     }
 

@@ -105,7 +105,7 @@ Should print `PONG`.
 1. Open [http://127.0.0.1:3000/api/health](http://127.0.0.1:3000/api/health). You want `"status":"ok"` and both checks `"ok"`.
 2. Open [http://127.0.0.1:3000](http://127.0.0.1:3000) and click **Continue with Kite**.
 3. After Zerodha, you should land on `/desk`.
-4. New ledger screens are on [http://127.0.0.1:3000/desk](http://127.0.0.1:3000/desk): Positions, Orders, Trades, Alerts, Signals, Activity, and Risk. Schedule rejects land on Desk → Alerts. Chase hourly EMA compares and straddle skew waits land on Desk → Signals. Weekday templates stay on `/plan`. Chase settings stay on `/chase`.
+4. Desk home: [http://127.0.0.1:3000/desk?view=now](http://127.0.0.1:3000/desk?view=now) (Now / Books / Why / Setup). Legacy `?tab=` links still resolve. Risk limits: `/risk`. Schedules: `/plan`. Templates: `/templates`. Chase: `/chase`.
 
 ### Login failed / Chrome “HTTP ERROR 500”
 

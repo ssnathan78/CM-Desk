@@ -6,6 +6,9 @@ import flattenHandler from "../../pages/api/desk/flatten"
 import positionsHandler from "../../pages/api/desk/positions"
 import reconcileHandler from "../../pages/api/desk/reconcile"
 import riskHandler from "../../pages/api/desk/risk"
+import readinessHandler from "../../pages/api/desk/readiness"
+import reconSummaryHandler from "../../pages/api/desk/recon-summary"
+import simulateHandler from "../../pages/api/desk/simulate"
 import statusHandler from "../../pages/api/desk/status"
 import signalsHandler from "../../pages/api/desk/signals"
 import { invokeApi } from "../support/apiTestClient"
@@ -39,6 +42,11 @@ describe("desk API auth", () => {
 
   it("rejects anonymous desk status", async () => {
     const result = await invokeApi(statusHandler, { method: "GET", user: null })
+    expect(result.status).toBe(401)
+  })
+
+  it("rejects anonymous desk readiness", async () => {
+    const result = await invokeApi(readinessHandler, { method: "GET", user: null })
     expect(result.status).toBe(401)
   })
 
@@ -176,6 +184,42 @@ describeDb("desk API session", () => {
     expect(Array.isArray(body.alerts)).toBe(true)
     expect(typeof body.errorCount).toBe("number")
     expect(typeof body.warnCount).toBe("number")
+  })
+
+  it("returns recon summary payload", async () => {
+    const result = await invokeApi(reconSummaryHandler, { method: "GET", user })
+    expect(result.status).toBe(200)
+    const body = result.body as { headline?: string; bullets?: string[] }
+    expect(typeof body.headline).toBe("string")
+    expect(Array.isArray(body.bullets)).toBe(true)
+  })
+
+  it("returns desk readiness payload", async () => {
+    const result = await invokeApi(readinessHandler, { method: "GET", user })
+    expect(result.status).toBe(200)
+    const body = result.body as { ready?: boolean; blockers?: { id: string }[] }
+    expect(typeof body.ready).toBe("boolean")
+    expect(Array.isArray(body.blockers)).toBe(true)
+  })
+
+  it("lists catalog scenarios for simulation UI", async () => {
+    const result = await invokeApi(simulateHandler, { method: "GET", user })
+    expect(result.status).toBe(200)
+    const body = result.body as { scenarios?: string[] }
+    expect(Array.isArray(body.scenarios)).toBe(true)
+    expect(body.scenarios?.includes("normal-day")).toBe(true)
+  })
+
+  it("runs a catalog simulation when UI is allowed", async () => {
+    const result = await invokeApi(simulateHandler, {
+      method: "POST",
+      user,
+      body: { scenario: "normal-day" },
+    })
+    expect(result.status).toBe(200)
+    const body = result.body as { report?: string; ok?: boolean }
+    expect(typeof body.report).toBe("string")
+    expect(typeof body.ok).toBe("boolean")
   })
 
   it("returns desk status payload", async () => {

@@ -32,8 +32,10 @@ Post–dependency-upgrade refactor: idiomatic **React 19**, **MUI 9**, **Drizzle
 
 ### UI feedback
 
-- MUI 9 `Button` `loading` prop instead of `ActionButtonOrLoader`.
-- `ConfirmDialog` + snackbar instead of `window.alert` / `window.confirm` on dashboard flows.
+- MUI 9 `Button` `loading` prop (Risk save, template actions, Due schedules).
+- `ConfirmAction` + snackbar instead of `window.alert` / `window.confirm`.
+- Operator settings pages (Risk limits, Momentum, Daily trend, Chase drawer, templates) share [`components/forms/FieldRow.tsx`](../components/forms/FieldRow.tsx) and [`SettingsFields.tsx`](../components/forms/SettingsFields.tsx).
+- Desk tables use [`lib/ui/labels.ts`](../lib/ui/labels.ts) (`labelFor` + `humanizeCode` fallback).
 
 ## Legacy patterns removed
 
@@ -46,6 +48,9 @@ Post–dependency-upgrade refactor: idiomatic **React 19**, **MUI 9**, **Drizzle
 | Dead `PUT /api/reconcile` call | `brokerOrders` | removed |
 | Commented worker block | `ancillaryQueue.ts` | deleted |
 | Duplicate scheduler removal | `delete_job.js` | `jobControl.forceRemoveQueuedJob` |
+| `ActionButtonOrLoader` | `components/lib/` | MUI `Button` `loading` |
+| `ConfirmDialog` wrapper | Desk/Chase/Halt | `ConfirmAction` directly |
+| `pages/dashboard.js` | redirect stub | `pages/dashboard.tsx` |
 
 ## Conventions for new features
 
@@ -55,7 +60,8 @@ Post–dependency-upgrade refactor: idiomatic **React 19**, **MUI 9**, **Drizzle
 4. **Queues:** add/remove jobs through `lib/jobControl.ts` helpers.
 5. **IST dates:** use `istToday()` from `lib/drizzleIst.ts`.
 6. **Client fetch:** SWR + `fetchJson`; mutations via `useSWRMutation` or thin client helpers.
-7. **MUI:** Grid `size`, `slotProps`, `sx`; `color="text.secondary"`; Dialog/Snackbar for user feedback.
+7. **MUI:** Grid `size`, `slotProps`, `sx`; `color="text.secondary"`; `ConfirmAction`/Snackbar for user feedback.
+8. **Forms:** `FieldRow` + `SettingsFields` for operator config; `labelFor` in tables.
 
 ## Remaining debt backlog
 
@@ -63,7 +69,6 @@ Post–dependency-upgrade refactor: idiomatic **React 19**, **MUI 9**, **Drizzle
 - Optional MUI `cssVariables: true` in theme after visual E2E check.
 - Full `kiteUtils.ts` typing (touch only when editing related code).
 - Playwright globalSetup seed for faster smoke tests when browser CI is available.
-
 ## Verification gate
 
 After substantive changes:
@@ -76,4 +81,4 @@ yarn int-test && yarn api-test && yarn build
 
 Optional strict check for validation modules: `npx tsc -p tsconfig.strict-lib.json --noEmit`.
 
-Grep for deprecated APIs: `Grid item`, `renderInput`, `removeRepeatableByKey`, `CompatSession`, `req.session.get`.
+Grep for deprecated APIs: `Grid item`, `renderInput`, `removeRepeatableByKey`, `CompatSession`, `req.session.get`, `ActionButtonOrLoader`, `ConfirmDialog`.

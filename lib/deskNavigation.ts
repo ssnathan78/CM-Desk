@@ -13,11 +13,11 @@ export type DeskTab =
   | "lists"
   | "contracts"
   | "broker"
-  | "risk"
+  | "maintenance"
 
 const BOOKS: DeskTab[] = ["positions", "orders", "trades", "sessions"]
 const WHY: DeskTab[] = ["alerts", "signals", "decisions", "activity"]
-const SETUP: DeskTab[] = ["lists", "contracts", "broker", "risk"]
+const SETUP: DeskTab[] = ["broker", "contracts", "lists", "maintenance"]
 
 export function viewForTab(tab: DeskTab): DeskView {
   if (tab === "today") return "now"
@@ -53,7 +53,7 @@ export function tabsForView(view: DeskView): DeskTab[] {
 }
 
 export function migrateLegacyTab(tab: string | undefined): { view: DeskView; tab: DeskTab } {
-  if (tab === "risk") return { view: "setup", tab: "risk" }
+  if (tab === "risk") return { view: "setup", tab: "broker" }
   if (tab === "today" || !tab) return { view: "now", tab: "today" }
   const known = tab as DeskTab
   if (
@@ -76,10 +76,10 @@ export function migrateLegacyTab(tab: string | undefined): { view: DeskView; tab
   return { view: "now", tab: "today" }
 }
 
-export function parseDeskRoute(query: {
-  view?: string | string[]
-  tab?: string | string[]
-}): { view: DeskView; tab: DeskTab } {
+export function parseDeskRoute(query: { view?: string | string[]; tab?: string | string[] }): {
+  view: DeskView
+  tab: DeskTab
+} {
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view
   const rawTab = Array.isArray(query.tab) ? query.tab[0] : query.tab
   if (rawView === "now" || rawView === "books" || rawView === "why" || rawView === "setup") {

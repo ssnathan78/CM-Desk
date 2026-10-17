@@ -2,7 +2,6 @@ import {
   Alert,
   Chip,
   Link as MuiLink,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -11,9 +10,13 @@ import {
   Typography,
 } from "@mui/material"
 import NextLink from "next/link"
+import { alertTarget, hrefForDeskLink } from "../../lib/desk/deepLinks"
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
 import type { HistoryPreset } from "../../lib/trading/historyRange"
+import { labelFor } from "../../lib/ui/labels"
+import PageSection from "../lib/PageSection"
 import ScrollTable from "../lib/ScrollTable"
+import FeedClearMenu from "./FeedClearMenu"
 import FeedToolbar from "./FeedToolbar"
 
 type OperatorAlert = {
@@ -26,6 +29,7 @@ type OperatorAlert = {
   strategy?: string | null
   instrument?: string | null
   jobId?: string | null
+  orderId?: string | null
 }
 
 function when(value: string | null | undefined) {
@@ -57,11 +61,11 @@ export default function AlertsPanel({
   onClear: (period: FeedPeriod) => void
 }) {
   return (
-    <Paper sx={{ overflow: "hidden" }}>
-      <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
-        Failures that never became a Kite or ledger order (market closed, risk block, stale job,
-        Chase data miss) plus broker rejects. Orders tab stays the blotter.
-      </Typography>
+    <PageSection
+      title="Alerts"
+      description="Failures that never became a Kite or ledger order plus broker rejects. Orders tab is the blotter."
+      flush
+    >
       <FeedToolbar
         preset={preset}
         from={from}
@@ -70,6 +74,7 @@ export default function AlertsPanel({
         onFrom={onFrom}
         onTo={onTo}
         onClear={onClear}
+        extra={<FeedClearMenu label="Hide alerts" onClear={onClear} />}
       />
       {errorCount + warnCount > 0 ? (
         <Alert severity={errorCount ? "error" : "warning"} sx={{ mx: 2, mt: 1.5 }}>
@@ -109,10 +114,41 @@ export default function AlertsPanel({
                   />
                 </TableCell>
                 <TableCell>{row.source}</TableCell>
-                <TableCell>{row.code}</TableCell>
-                <TableCell>{row.summary}</TableCell>
-                <TableCell>{row.strategy || "—"}</TableCell>
-                <TableCell>{row.instrument || "—"}</TableCell>
+                <TableCell>
+                  <MuiLink
+                    component={NextLink}
+                    href={hrefForDeskLink(alertTarget(row))}
+                    underline="hover"
+                  >
+                    {labelFor(row.code)}
+                  </MuiLink>
+                </TableCell>
+                <TableCell>
+                  <MuiLink
+                    component={NextLink}
+                    href={hrefForDeskLink(alertTarget(row))}
+                    underline="hover"
+                  >
+                    {row.summary}
+                  </MuiLink>
+                  {row.jobId ? (
+                    <>
+                      {" · "}
+                      <MuiLink
+                        component={NextLink}
+                        href={hrefForDeskLink({
+                          pathname: "/desk",
+                          query: { view: "why", tab: "signals", jobId: row.jobId },
+                        })}
+                        underline="hover"
+                      >
+                        Open job
+                      </MuiLink>
+                    </>
+                  ) : null}
+                </TableCell>
+                <TableCell>{row.strategy ? labelFor(row.strategy) : "—"}</TableCell>
+                <TableCell>{row.instrument ? labelFor(row.instrument) : "—"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -128,6 +164,6 @@ export default function AlertsPanel({
           .
         </Typography>
       ) : null}
-    </Paper>
+    </PageSection>
   )
 }

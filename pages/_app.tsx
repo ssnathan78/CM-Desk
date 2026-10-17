@@ -12,9 +12,8 @@ import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google"
 import Head from "next/head"
 
 import { SWRConfig } from "swr"
-
+import ToastProvider from "../components/lib/ToastProvider"
 import fetch from "../lib/fetchJson"
-
 import theme from "../src/theme"
 
 const fontSans = IBM_Plex_Sans({
@@ -68,9 +67,11 @@ function MyApp({ Component, pageProps }) {
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <div className={`${fontSans.variable} ${fontMono.variable}`}>
-            <Component {...pageProps} />
-          </div>
+          <ToastProvider>
+            <div className={`${fontSans.variable} ${fontMono.variable}`}>
+              <Component {...pageProps} />
+            </div>
+          </ToastProvider>
         </ThemeProvider>
       </LocalizationProvider>
     </SWRConfig>

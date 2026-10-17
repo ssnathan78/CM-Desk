@@ -36,7 +36,8 @@ If you run only `next start`, you lose that glue.
 |-------|------|---------|
 | `/` | `pages/index.js` | Login landing |
 | `/dashboard` | `pages/dashboard.js` | Redirects to `/desk` |
-| `/desk` | `pages/desk.tsx` | Home. Opens on Positions. Today shows jobs and due schedules |
+| `/desk` | `pages/desk.tsx` | Home. `?view=now\|books\|why\|setup` + sub-tab. Default Now → strategy board and today's jobs |
+| `/risk` | `pages/risk.tsx` | Desk risk limits (moved off `/desk?tab=risk`) |
 | `/plan` | `pages/plan.tsx` | Weekday clocks for Straddle and Strangle templates |
 | `/templates` | `pages/templates.tsx` | Named Straddle and Strangle templates |
 | `/chase` | `pages/chase.tsx` | Single Chase config (not weekday-based) |

@@ -38,6 +38,14 @@ test.describe("Mobile layout", () => {
     expect(await pageOverflowsHorizontally(page)).toBe(false)
   })
 
+  test("more opens the operator sheet", async ({ page }) => {
+    await page.goto("/desk")
+    await page.getByRole("button", { name: "More" }).click()
+    await expect(page.getByRole("heading", { name: "Operator" })).toBeVisible()
+    await expect(page.getByRole("link", { name: "Risk" })).toBeVisible()
+    await expect(page.getByRole("link", { name: "Daily trend" })).toBeVisible()
+  })
+
   test("plan and chase pages do not overflow", async ({ page }) => {
     await page.goto("/plan")
     await expect(page.getByRole("button", { name: /by day/i })).toBeVisible({ timeout: 20_000 })

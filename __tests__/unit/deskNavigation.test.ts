@@ -12,5 +12,13 @@ describe("deskNavigation", () => {
       view: "books",
       tab: "orders",
     })
+    expect(parseDeskRoute({ view: "setup", tab: "maintenance" })).toEqual({
+      view: "setup",
+      tab: "maintenance",
+    })
+  })
+
+  it("maps legacy risk tab away from desk", () => {
+    expect(migrateLegacyTab("risk")).toEqual({ view: "setup", tab: "broker" })
   })
 })

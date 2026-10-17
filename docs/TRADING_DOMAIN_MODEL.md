@@ -190,6 +190,8 @@ On disagreement, **do not silently overwrite history**. Record a
 `reconciliation_event`, then apply broker facts as new events (fills, status
 transitions). Internal state is derived from those events.
 
+**Operator recon view:** Desk → Setup → Broker shows a short narrative (`GET /api/desk/recon-summary`) before the reconcile buttons: unresolved `reconciliation_events`, recon alerts in Why, last `RECONCILIATION_COMPLETED` audit, and open ledger position count. It does not replace the audit tables.
+
 ## 6. Time
 
 - All timestamps stored as `timestamptz` (UTC).

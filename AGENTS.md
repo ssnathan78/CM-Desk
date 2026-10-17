@@ -73,7 +73,7 @@ Ship to a server → `docs/DEPLOYMENT.md`.
 Security → `docs/SECURITY_REVIEW.md`, `docs/SECURITY_FINDINGS.md`.  
 Commands/stack → `CLAUDE.md` and this file.
 
-Longer project map: [CLAUDE.md](CLAUDE.md).
+Longer project map: [CLAUDE.md](CLAUDE.md). Desk UI routes: [docs/UI.md](docs/UI.md).
 
 Modernization patterns and backlog: [docs/CODEBASE_MODERNIZATION.md](docs/CODEBASE_MODERNIZATION.md).
 

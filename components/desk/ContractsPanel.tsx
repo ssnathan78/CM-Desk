@@ -1,7 +1,6 @@
 import {
   Alert,
   Chip,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -11,6 +10,7 @@ import {
   Typography,
 } from "@mui/material"
 import type { DeskInstrumentSnapshot } from "../../lib/trading/deskInstruments"
+import PageSection from "../lib/PageSection"
 import ScrollTable from "../lib/ScrollTable"
 
 function contract(row: { tradingsymbol: string; expiry: string; lotSize: number } | null) {
@@ -28,13 +28,15 @@ export default function ContractsPanel({ data }: { data: DeskInstrumentSnapshot 
   }
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={3}>
       <Alert severity={data.kiteError ? "warning" : "info"}>{data.cacheNote}</Alert>
       {data.kiteError ? (
         <Alert severity="error">Kite instrument dump failed: {data.kiteError}</Alert>
       ) : null}
-      <Paper sx={{ p: 2 }}>
-        <Typography sx={{ fontWeight: 600, mb: 1 }}>Chase engine</Typography>
+      <PageSection
+        title="Chase engine"
+        description="Index futures books from Chase settings; not option legs."
+      >
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mb: 1 }}>
           <Chip size="small" label={`Lots ${data.chase.lots}`} />
           <Chip size="small" label={data.chase.paused ? "Paused" : "Running"} />
@@ -47,12 +49,13 @@ export default function ContractsPanel({ data }: { data: DeskInstrumentSnapshot 
           Chase trades index futures, not options. Front-month FUT is used until expiry day; new
           entries then roll to next month so a flat book does not open the dying contract.
         </Typography>
-      </Paper>
+      </PageSection>
 
-      <Paper sx={{ overflow: "hidden" }}>
-        <Typography sx={{ fontWeight: 600, p: 2, pb: 0 }}>
-          Index contracts {data.source === "KITE_NFO" ? "(from Kite NFO)" : "(static lots only)"}
-        </Typography>
+      <PageSection
+        title={`Index contracts ${data.source === "KITE_NFO" ? "(Kite NFO)" : "(static lots)"}`}
+        description="Front/next FUT and option expiries used at punch time."
+        flush
+      >
         <ScrollTable minWidth={880}>
           <Table size="small">
             <TableHead>
@@ -109,7 +112,7 @@ export default function ContractsPanel({ data }: { data: DeskInstrumentSnapshot 
             </TableBody>
           </Table>
         </ScrollTable>
-      </Paper>
+      </PageSection>
       <Typography color="text.secondary" variant="body2">
         Straddle and strangle pick CE/PE symbols at punch time from the same NFO dump (current /
         next / monthly expiry on the plan). Those option symbols are not stored until a job actually

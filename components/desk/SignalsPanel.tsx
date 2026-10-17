@@ -1,10 +1,12 @@
 import {
   Chip,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
-  Paper,
+  Link as MuiLink,
   Select,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -12,10 +14,18 @@ import {
   TableRow,
   Typography,
 } from "@mui/material"
+import NextLink from "next/link"
+import { Fragment, useMemo, useState } from "react"
+import { hrefForDeskLink } from "../../lib/desk/deepLinks"
 import type { FeedPeriod } from "../../lib/trading/feedWindow"
 import type { HistoryPreset } from "../../lib/trading/historyRange"
 import type { SignalFilters, StrategySignal } from "../../lib/trading/signals"
+import { labelFor } from "../../lib/ui/labels"
+import { signalExplain } from "../../lib/ui/signalExplain"
+import { groupConsecutiveSignals } from "../../lib/ui/signalGrouping"
+import PageSection from "../lib/PageSection"
 import ScrollTable from "../lib/ScrollTable"
+import FeedClearMenu from "./FeedClearMenu"
 import FeedToolbar from "./FeedToolbar"
 
 function when(value: string | null | undefined) {
@@ -29,6 +39,50 @@ function outcomeColor(outcome: string) {
   if (outcome === "WAIT" || outcome === "HOLD") return "info"
   if (outcome === "ADJUST" || outcome === "EXIT") return "warning"
   return "default"
+}
+
+function SignalCells({ row }: { row: StrategySignal }) {
+  const explain = signalExplain(row)
+  return (
+    <>
+      <TableCell>{when(row.occurredAt)}</TableCell>
+      <TableCell>
+        <Chip
+          size="small"
+          label={labelFor(`SIGNAL_${row.outcome}`) || labelFor(row.outcome)}
+          color={outcomeColor(row.outcome)}
+          variant="outlined"
+        />
+      </TableCell>
+      <TableCell>{labelFor(row.kind) || row.kind}</TableCell>
+      <TableCell>
+        <Typography variant="body2">{row.summary}</Typography>
+        {explain && explain !== row.summary ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            {explain}
+          </Typography>
+        ) : null}
+      </TableCell>
+      <TableCell>{row.strategy ? labelFor(row.strategy) : "—"}</TableCell>
+      <TableCell>{row.instrument ? labelFor(row.instrument) : row.tradingsymbol || "—"}</TableCell>
+      <TableCell>
+        {row.jobId ? (
+          <MuiLink
+            component={NextLink}
+            href={hrefForDeskLink({
+              pathname: "/desk",
+              query: { view: "now", tab: "today" },
+            })}
+            underline="hover"
+          >
+            {row.jobName || row.orderTag || row.jobId}
+          </MuiLink>
+        ) : (
+          row.jobName || row.orderTag || row.planRef || "—"
+        )}
+      </TableCell>
+    </>
+  )
 }
 
 export default function SignalsPanel({
@@ -68,13 +122,23 @@ export default function SignalsPanel({
   onJobId: (value: string) => void
   onClear: (period: FeedPeriod) => void
 }) {
+  const [groupRepeats, setGroupRepeats] = useState(true)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  const views = useMemo(
+    () =>
+      groupRepeats
+        ? groupConsecutiveSignals(signals)
+        : signals.map(row => ({ mode: "single" as const, row })),
+    [signals, groupRepeats]
+  )
+
   return (
-    <Paper sx={{ overflow: "hidden" }}>
-      <Typography variant="body2" color="text.secondary" sx={{ px: 2, pt: 2 }}>
-        Persisted evaluations: Chase hourly EMA vs close, straddle skew samples, strangle strike
-        picks. Instrument separates Nifty, BankNifty, FinNifty, and Midcap. Job filters a scheduled
-        straddle or strangle trade. Chase does not create a job, so that list stays “All jobs”.
-      </Typography>
+    <PageSection
+      title="Signals"
+      description="Persisted Chase, straddle skew, and strangle strike evaluations. Filter by instrument or job."
+      flush
+    >
       <FeedToolbar
         preset={preset}
         from={from}
@@ -85,6 +149,17 @@ export default function SignalsPanel({
         onClear={onClear}
         extra={
           <>
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={groupRepeats}
+                  onChange={e => setGroupRepeats(e.target.checked)}
+                />
+              }
+              label="Group repeats"
+            />
+            <FeedClearMenu label="Clear signals" onClear={onClear} />
             <FormControl
               size="small"
               sx={{ minWidth: { xs: "100%", md: 160 }, width: { xs: "100%", md: "auto" } }}
@@ -162,24 +237,54 @@ export default function SignalsPanel({
             </TableRow>
           </TableHead>
           <TableBody>
-            {signals.map(row => (
-              <TableRow key={row.id}>
-                <TableCell>{when(row.occurredAt)}</TableCell>
-                <TableCell>
-                  <Chip
-                    size="small"
-                    label={row.outcome}
-                    color={outcomeColor(row.outcome)}
-                    variant="outlined"
-                  />
-                </TableCell>
-                <TableCell>{row.kind}</TableCell>
-                <TableCell>{row.summary}</TableCell>
-                <TableCell>{row.strategy || "—"}</TableCell>
-                <TableCell>{row.instrument || row.tradingsymbol || "—"}</TableCell>
-                <TableCell>{row.jobName || row.orderTag || row.planRef || "—"}</TableCell>
-              </TableRow>
-            ))}
+            {views.map(view => {
+              if (view.mode === "single") {
+                return (
+                  <TableRow key={view.row.id}>
+                    <SignalCells row={view.row} />
+                  </TableRow>
+                )
+              }
+              const isOpen = expanded[view.key]
+              return (
+                <Fragment key={view.key}>
+                  <TableRow
+                    hover
+                    onClick={() => setExpanded(prev => ({ ...prev, [view.key]: !prev[view.key] }))}
+                    sx={{ cursor: "pointer" }}
+                  >
+                    <TableCell>
+                      {when(view.first.occurredAt)}
+                      {view.count > 1 ? ` → ${when(view.last.occurredAt)}` : ""}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={`${view.first.outcome} ×${view.count}`}
+                        color={outcomeColor(view.first.outcome)}
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>{view.first.kind}</TableCell>
+                    <TableCell>{view.first.summary}</TableCell>
+                    <TableCell>{view.first.strategy || "—"}</TableCell>
+                    <TableCell>
+                      {view.first.instrument || view.first.tradingsymbol || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {view.first.jobName || view.first.orderTag || view.first.planRef || "—"}
+                    </TableCell>
+                  </TableRow>
+                  {isOpen
+                    ? view.rows.map(row => (
+                        <TableRow key={row.id} sx={{ bgcolor: "action.hover" }}>
+                          <SignalCells row={row} />
+                        </TableRow>
+                      ))
+                    : null}
+                </Fragment>
+              )
+            })}
           </TableBody>
         </Table>
       </ScrollTable>
@@ -189,6 +294,6 @@ export default function SignalsPanel({
           signal”). Straddle writes sampled skew waits plus the accept/reject.
         </Typography>
       ) : null}
-    </Paper>
+    </PageSection>
   )
 }

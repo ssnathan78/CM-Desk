@@ -1,6 +1,5 @@
 import {
   Button,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -12,6 +11,7 @@ import {
   Typography,
 } from "@mui/material"
 import { useMemo, useState } from "react"
+import PageSection from "../lib/PageSection"
 
 export type ConstituentChangeRow = {
   id: number
@@ -50,18 +50,15 @@ export default function ConstituentChanges(props: {
   const visible = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
 
   return (
-    <Paper sx={{ p: 2 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
-        <Typography variant="subtitle2" sx={{ flex: 1 }}>
-          Constituents
-        </Typography>
+    <PageSection
+      title="Constituents"
+      description={props.caption}
+      actions={
         <Button size="small" disabled={props.busy} onClick={props.onRefresh}>
           Refresh constituents
         </Button>
-      </Stack>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        {props.caption}
-      </Typography>
+      }
+    >
       {props.changes.length === 0 ? (
         <Typography variant="body2">No pending constituent changes.</Typography>
       ) : (
@@ -146,7 +143,7 @@ export default function ConstituentChanges(props: {
           ) : null}
         </Stack>
       )}
-    </Paper>
+    </PageSection>
   )
 }
 

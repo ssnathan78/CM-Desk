@@ -38,17 +38,35 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
       },
       {
         id: "ledger",
-        title: "Desk — orders, positions, history",
+        title: "Desk views — Now, Books, Why, Setup",
         body: [
-          "Desk is home. It opens on Positions. Today lists jobs and schedules that are due and not queued yet. Armed and Alerts are small status chips. The Today tile lists Intraday, Chase, Daily trend, and Momentum. The count in parentheses is open books. Closed is round-trips finished today. Mark is from the entry price. The Realized tile is the realized already stored on those books, same groups, not today's closed column and not Kite's day P&L. Cash, lifetime realized, unrealized, portfolio, gross exposure, and drawdown share the money tile. Realized and unrealized stay separate numbers. Closed today is not added to the open mark.",
-          "Desk → Orders is only the blotter: instructions that reached placeOrder (paper, mock, live, or reconciled). A Sunday or after-hours live “Schedule now” never creates an order. That reject is on Desk → Alerts. Mock punches still need at least one index ticked; otherwise nothing is sent.",
-          "Desk → Contracts shows the Kite NFO futures and option expiries the strategies will use today (front/next month FUT for Chase, current/next/monthly option dates for straddles and strangles). The contract list is fetched from Kite and cached until 07:00 IST — it is not a Postgres table. Chase stores only the selected indexes and, once in a trade, the tradingsymbol on chase_status.",
-          "Desk → Orders, Trades, Alerts, Signals, Lists, Decisions, Activity, and Sessions open on today (IST). The same Period menu on each of those tabs also offers this month, this quarter, this year, all time, and a custom range. Sessions is one row per day, so Today is that session. Positions opens on Live only and is not date-filtered, so an overnight book stays visible. All (Live + reconciled) adds broker-reconciled and migrated rows. Paper / mock is separate. Lists is the Nifty 100 and Nifty Total Market constituent check. It is not date-filtered.",
-          "Desk → Alerts is the operator log for silent fails: schedule rejects, queue/job failures, stale square-off discards, risk blocks, broker rejects, Chase data miss, a cash history pull that misses names, an index-file download that does not replace the stored list, and unresolved recon. The count on the tab follows the Period menu. Clear today, Clear before today, and Clear all hide those rows without deleting the ledger. Retry missing on Momentum or Daily trend downloads only names that still have no candles.",
-          "Desk → Signals is the persisted evaluation log: Chase hourly EMA vs close (including waiting for signal), straddle skew samples, strangle strike picks. It opens on today and uses the same Period menu. Filter by strategy, weekday plan, or a single job. Clear today / before today / all deletes those signal rows.",
-          "Kite remains the broker's execution reality. Desk → Broker holds both broker actions. Reconcile with broker ingests Kite orders and applies fills for every strategy the desk already knows. It records quantity mismatches and does not assign leftover shares to a strategy. Attribute broker quantity is per strategy. It shows broker quantity minus every other strategy minus this strategy. A positive difference adds shares. A negative difference removes shares you sold outside the desk. You can accept less than the difference. Today's Kite trade is copied when it exists. Otherwise you enter the date, quantity, and price. Accept writes only the strategy you picked. Square off on a position row (or on Today / Chase) sends a flatten for the open book. Clear phantom zeros a leftover ledger book after proving Kite is flat (or immediately for paper). It does not send an order and does not let you type a new qty.",
+          "Desk is home. The status rail across the top shows live vs paper, trading enabled, desk halt, and Kite session health. Now is the operator cockpit: strategy board, today’s jobs, account strip, and emergency actions. Books holds positions, orders, trades, and sessions. Why is alerts, signals, decisions, and activity. Setup is contracts, broker reconcile, and maintenance.",
+          "Books → Positions opens on Live only and is not date-filtered, so an overnight book stays visible. All (live + reconciled) adds broker-reconciled and migrated rows. Paper / mock is separate. Click a row for detail; square off and clear phantom stay on open books.",
+          "Books → Orders is only the blotter: instructions that reached placeOrder (paper, mock, live, or reconciled). A Sunday or after-hours live “Schedule now” never creates an order. That reject is in Why → Alerts. Mock punches still need at least one index ticked; otherwise nothing is sent.",
+          "Setup → Contracts shows the Kite NFO futures and option expiries the strategies will use today (front/next month FUT for Chase, current/next/monthly option dates for straddles and strangles). The contract list is fetched from Kite and cached until 07:00 IST — it is not a Postgres table.",
+          "Orders, trades, alerts, signals, lists, decisions, activity, and sessions in Books or Why open on today (IST). The same Period menu also offers this month, this quarter, this year, all time, and a custom range. Sessions is one row per day. Lists is the Nifty 100 and Nifty Total Market constituent check and is not date-filtered.",
+          "Why → Alerts is the operator log for silent fails: schedule rejects, queue/job failures, stale square-off discards, risk blocks, broker rejects, Chase data miss, a cash history pull that misses names, an index-file download that does not replace the stored list, and unresolved recon. Clear today, before today, and all hide those rows without deleting the ledger.",
+          "Why → Signals is the persisted evaluation log: Chase hourly EMA vs close (including waiting for signal), straddle skew samples, strangle strike picks. Kind and outcome use operator labels; each row can show a one-line explain under the summary (EMA, skew, strikes). Group repeats collapses identical consecutive rows. Filter by strategy, plan, instrument, or job.",
+          "Kite remains the broker's execution reality. Setup → Broker holds reconcile and attribute-broker-quantity. Square off on a position row (or on Now / Chase) sends a flatten for the open book. Clear phantom zeros a leftover ledger book after proving Kite is flat (or immediately for paper). It does not send an order.",
           "A signal is not an order. An order is not a fill. A fill is not a position. A position is not a completed trade. Desk keeps those records separate so a restart can reconstruct what happened.",
-          "Desk → Risk is the only place trading limits live. Strategies do not share P&L for those limits. See Risk flags below for Allow live orders vs Trading enabled, and Strategy enabled vs Not halted. The Risk page also lists Chase and today's weekday-plan size next to max notional so a 2-lot Nifty future is not a surprise at punch.",
+          "Risk limits live on the sidebar Risk page (/risk), not inside Desk. See Risk flags and the status rail below.",
+        ],
+      },
+      {
+        id: "status-rail",
+        title: "Status rail",
+        body: [
+          "The rail summarizes what can block a new punch without opening Risk. Live orders allowed reflects Desk Risk “Allow live orders” plus environment readiness. Trading enabled is desk-wide new entries; when off, flatten and stops still work. Halt new entries shows when the desk is halted with a stored reason — use Resume on the rail or in Risk. Kite session shows whether quotes and orders can reach Zerodha today.",
+          "Strategy permission lines under Now repeat the same vocabulary per book: execution mode (paper vs live), strategy enabled, and new entries paused for that strategy. They are read-only hints; change limits on Risk.",
+        ],
+      },
+      {
+        id: "go-live",
+        title: "Go-live checklist",
+        body: [
+          "Desk → Now and Risk → Execution show Ready for live? — a read-only checklist before you rely on Zerodha punches.",
+          "Blocking items include MOCK_ORDERS still on, Allow live orders off, an expired Kite login, or desk halt. Warnings cover open paper books while a strategy is set to Live, per-strategy halt, or trading enabled off.",
+          "Fix links jump to Risk, Books positions, or login. Live still needs each strategy Execution = Live and deployment MOCK_ORDERS=false.",
         ],
       },
       {
@@ -58,7 +76,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
           "Allow live orders is the Zerodha master switch. Off means paper and mock still work (quotes and the ledger). A live punch also needs MOCK_ORDERS=false in .env and that strategy's Execution set to Live. Squaring off an existing live book is still allowed during the session so you can get out. After the close, a live square-off is refused and the working stop stays.",
           "Trading enabled is desk-wide new entries. Turn it off to stop straddles, strangles, and Chase from opening. Flatten and stop-loss still go through. Halt new entries on the desk header is the same idea with a stored reason; Resume is explicit and also turns trading back on.",
           "Strategy enabled is that book's on/off. Off rejects every order for that strategy, including stop-loss and flatten. Use this when you want that book completely dark.",
-          "Not halted only blocks new entries (you halt it from Risk, or Kill desk). Flatten and stop-loss still work. Halt never auto-clears — uncheck Not halted, or Resume on the desk header for a desk-wide halt. Max lots and max open positions stay per strategy so a new entry is sized and not stacked on an existing book. Paper → Live archives that strategy’s paper trial (no Kite order) and resets Chase to AWAITING_SIGNAL. Save is rejected if Kite or the live ledger still has size. Live flatten never uses paper qty. Live → Paper is rejected while a live book is open. If a live ledger row is leftover and the broker is flat, Desk → Positions → Clear phantom zeros the app row without sending a Kite order.",
+          "New entries paused (per strategy on Risk, or Kill desk) only blocks new entries. Flatten and stop-loss still work. Pause never auto-clears — turn new entries back on in Risk, or Resume on the desk header for a desk-wide halt. Max lots and max open positions stay per strategy so a new entry is sized and not stacked on an existing book. Paper → Live archives that strategy’s paper trial (no Kite order) and resets Chase to AWAITING_SIGNAL. Save is rejected if Kite or the live ledger still has size. Live flatten never uses paper qty. Live → Paper is rejected while a live book is open. If a live ledger row is leftover and the broker is flat, Books → Positions → Clear phantom zeros the app row without sending a Kite order.",
         ],
       },
       {
@@ -264,15 +282,15 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Momentum keeps a stored list of NSE cash names and ranks them from daily prices. Rank 1 is the strongest score. Filters do not reshuffle that order. A name that fails a filter keeps its rank and is simply skipped for a new buy.",
           "The book is long only. It buys shares and later sells shares it already holds. It does not short. Today’s unfinished daily candle is ignored. The rank uses the last completed close.",
-          "Strategy on, on this page, turns the rank and the history download on. Desk → Risk is a second switch. Both have to allow Momentum before a live order can go out. Report only never sends an order.",
+          "Engine on, on this page, turns the rank and the history download on. Desk → Risk is a second switch (Momentum enabled and Allow live orders when you want Kite). Both have to allow Momentum before a live order can go out. Report only never sends an order.",
         ],
       },
       {
         id: "fields",
         title: "Fields on the page",
         body: [
-          "Strategy on: the rank and Pull history now work. Off leaves the name list visible and does not download or rank.",
-          "Pull data daily: the hourly check may download each name once per day. Off skips that automatic download. Pull history now still works when Strategy on is saved.",
+          "Engine on: the rank and Pull history now work. Off leaves the name list visible and does not download or rank.",
+          "Pull data daily: the hourly check may download each name once per day. Off skips that automatic download. Pull history now still works when Engine on is saved.",
           "Execution: Report only shows the buy and sell list. Manual sends only when you click Send rebalance. Auto sends on the rebalance day, once that day, without the click.",
           "Rebalance: Monthly uses the first NSE session of the month. Weekly uses the weekday below (1 is Monday, 5 is Friday). Ad hoc never sends by itself. The buy and sell list is still calculated. You preview it, then click Send when you want it.",
           "Holdings: how many names the book wants to own. Default 30. This is a cap, not a pile of extra slots.",
@@ -305,8 +323,8 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "buttons",
         title: "Buttons",
         body: [
-          "Save writes Strategy on, Pull data daily, execution, rebalance, holdings, ranks, weights, capital, and filters. Until you save, those edits sit on the form only. Save then ranks the stored names again, which is why the spinner stays up. It does not download from Zerodha.",
-          "Pull history now writes those same switches, then starts the download and returns at once. You can leave the page. The download keeps going, and the bar comes back when you return. It needs Strategy on. One name is requested at a time.",
+          "Save writes Engine on, Pull data daily, execution, rebalance, holdings, ranks, weights, capital, and filters. Until you save, those edits sit on the form only. Save then ranks the stored names again, which is why the spinner stays up. It does not download from Zerodha.",
+          "Pull history now writes those same switches, then starts the download and returns at once. You can leave the page. The download keeps going, and the bar comes back when you return. It needs Engine on. One name is requested at a time.",
           "Preview orders rebuilds the buy and sell list from the stored candles and the last saved settings. It does not place an order. An unsaved edit on the form is ignored until you Save.",
           "Send rebalance places that list. The button stays off while Execution is Report only. Manual sends on the click. Auto also sends on the rebalance day without the click. The success message means the click was accepted. Check Desk → Orders and Alerts for a rejection.",
           "In the table, Hold keeps that name at its current weight when Weights is equal weight. Later rebalances do not buy more shares to lift it up to an equal slice. Exclude sells the shares you hold and does not buy that name again. After either click the row changes at once and shows Clear hold or Clear exclude. The rank runs once after you stop clicking. Hold and Exclude do not need the Save button.",
@@ -341,7 +359,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "switches",
         title: "Switches",
         body: [
-          "On, at the top of the page, turns evaluation on. Off skips evaluation and the scheduled history pull. Pull data daily lets the hourly check download each name once per day. Pull history now still runs while On is saved.",
+          "Engine on, at the top of the page, turns evaluation on. Off skips evaluation and the scheduled history pull. Pull data daily lets the hourly check download each name once per day. Pull history now still runs while Engine on is saved.",
           "Execution Report only shows the decision and sends nothing. Manual sends when you click Evaluate and send. Auto sends on the hourly pass.",
           "Symbol On off is fully dark for that name: no buy and no stop. Pause blocks a new buy. A long book still exits on the stop. Desk halt blocks the buy and still allows the stop. Desk → Risk → Daily trend disabled blocks every order, including the stop.",
         ],
@@ -351,7 +369,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         title: "The symbol list",
         body: [
           "The first visit inserts the Nifty 100 names with On switched off. A name you remove is not put back by that seed. Apply to all writes only the fields you fill. It does not change on/off, pause, status, or the stop.",
-          "Constituent changes are on Desk → Lists. A new Nifty 100 name is added here with On off. Accepting a removal deletes that book and does not sell. The EMA column is the exponential average of completed daily closes. Signal says Below the band, or Buy and the share count, whether the row is On or off. Signal Qualifies shows only names above the band. Sorting Signal puts those names first. State stays flat until a fill. Stop stays blank until the book is long. The page Strategy on switch and Execution still have to allow an order.",
+          "Constituent changes are on Desk → Lists. A new Nifty 100 name is added here with On off. Accepting a removal deletes that book and does not sell. The EMA column is the exponential average of completed daily closes. Signal says Below the band, or Buy and the share count, whether the row is On or off. Signal Qualifies shows only names above the band. Sorting Signal puts those names first. State stays flat until a fill. Stop stays blank until the book is long. Engine on and Execution on this page, plus Desk → Risk for Daily trend, still have to allow an order.",
         ],
       },
     ],

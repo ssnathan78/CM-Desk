@@ -8,18 +8,14 @@ import {
   FormGroup,
   FormLabel,
   Grid,
-  Paper,
   Radio,
   RadioGroup,
   TextField,
   Typography,
 } from "@mui/material"
-import { TimePicker } from "@mui/x-date-pickers/TimePicker"
-import dayjs from "dayjs"
 import React from "react"
 import useSWR from "swr"
 
-import { ensureIST, formatFormDataForApi } from "../../../lib/browserUtils"
 import { type EXIT_STRATEGIES, INSTRUMENTS, STRATEGIES } from "../../../lib/constants"
 import fetchJson from "../../../lib/fetchJson"
 import { coerceLots } from "../../../lib/planMapper"
@@ -27,11 +23,11 @@ import {
   coerceScheduleableExitStrategy,
   EXIT_STRATEGIES_ALLOWED_AT_SCHEDULE,
   SCHEDULEABLE_EXIT_STRATEGIES,
-  validateLots,
-  validateSelectedInstruments,
   withIndexTick,
 } from "../../../lib/strategyValidation"
+import { labelFor } from "../../../lib/ui/labels"
 import type { ATM_STRADDLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
+import FieldRow from "../../forms/FieldRow"
 import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
 import FormSection from "../../lib/FormSection"
 import HedgeComponent from "../../lib/HedgeComponent"
@@ -41,6 +37,8 @@ import ProductTypeComponent from "../../lib/ProductTypeComponent"
 import RollbackComponent from "../../lib/RollbackComponent"
 import SlManagerComponent from "../../lib/SlManagerComponent"
 import VolatilityTypeComponent from "../../lib/VolatilityTypeComponent"
+import TradeTimePicker, { formatTradeScheduleLabel } from "../shared/TradeTimePicker"
+import { useTradeFormSubmit } from "../shared/useTradeFormSubmit"
 
 interface ATMStraddleTradeSetupFormProps {
   formHeading?: string
@@ -89,32 +87,19 @@ const TradeSetupForm = ({
     }
   }, [state.exitStrategy, onChange])
 
-  const [lotsError, setLotsError] = React.useState<string | null>(null)
-  const [instrumentError, setInstrumentError] = React.useState<string | null>(null)
+  const { handleFormSubmit, formError, lotsError, instrumentError } = useTradeFormSubmit({
+    state,
+    strategy,
+    embedded,
+    notice,
+    onChange,
+    onSubmit,
+  })
   const { data: riskData } = useSWR<{ settings?: { maxNotionalInr?: number } }>(
     "/api/desk/risk",
     fetchJson
   )
   const maxNotionalInr = Number(riskData?.settings?.maxNotionalInr) || 0
-
-  const handleFormSubmit = e => {
-    e.preventDefault()
-    const next = embedded ? withIndexTick(state) : state
-    if (next !== state) onChange(next)
-    const lotsCheck = validateLots(next.lots)
-    if (!lotsCheck.ok) {
-      setLotsError(lotsCheck.error)
-      return
-    }
-    const instrumentsCheck = validateSelectedInstruments(next.instruments)
-    if (!instrumentsCheck.ok) {
-      setInstrumentError(instrumentsCheck.error)
-      return
-    }
-    setLotsError(null)
-    setInstrumentError(null)
-    onSubmit(formatFormDataForApi({ strategy, data: next }))
-  }
 
   const body = (
     <>
@@ -126,10 +111,9 @@ const TradeSetupForm = ({
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: embedded
-            ? { xs: "1fr", lg: "1fr 1fr" }
-            : { xs: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr" },
+          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
           gap: 2,
+          alignItems: "start",
         }}
       >
         <FormSection
@@ -139,15 +123,18 @@ const TradeSetupForm = ({
         >
           <Grid container spacing={2}>
             <Grid size={12}>
-              <TextField
-                size="small"
-                fullWidth
-                name="name"
-                value={state.name ?? ""}
-                onChange={e => onChange({ name: e.target.value })}
+              <FieldRow
                 label="Template name"
-                helperText="Shown in the plan list. Does not change what is traded."
-              />
+                helper="Shown in the plan list. Does not change what is traded."
+              >
+                <TextField
+                  size="small"
+                  fullWidth
+                  name="name"
+                  value={state.name ?? ""}
+                  onChange={e => onChange({ name: e.target.value })}
+                />
+              </FieldRow>
             </Grid>
             <Grid size={12}>
               <InstrumentPicker
@@ -157,7 +144,6 @@ const TradeSetupForm = ({
                 disabled={state.disableInstrumentChange}
                 error={instrumentError}
                 onChange={next => {
-                  setInstrumentError(null)
                   const instrument = (Object.keys(next) as INSTRUMENTS[]).find(key => next[key])
                   onChange({ instruments: next, ...(instrument ? { instrument } : {}) })
                 }}
@@ -167,114 +153,49 @@ const TradeSetupForm = ({
             <ProductTypeComponent state={state} onChange={onChange} />
             <ExpiryTypeComponent state={state} onChange={onChange} />
             <Grid size={12}>
-              <TextField
-                size="small"
-                fullWidth
-                name="lots"
-                value={state.lots ?? ""}
-                error={Boolean(lotsError)}
-                helperText={
-                  lotsError || "Default lots for every ticked index unless overridden below"
-                }
-                onChange={e => {
-                  setLotsError(null)
-                  onChange({ lots: coerceLots(e.target.value) })
-                }}
+              <FieldRow
                 label="Lots"
-              />
+                helper={lotsError || "Default lots for every ticked index unless overridden below"}
+              >
+                <TextField
+                  size="small"
+                  fullWidth
+                  name="lots"
+                  value={state.lots ?? ""}
+                  error={Boolean(lotsError)}
+                  onChange={e => onChange({ lots: coerceLots(e.target.value) })}
+                />
+              </FieldRow>
             </Grid>
             {(Object.keys(state.instruments || {}) as INSTRUMENTS[])
               .filter(key => state.instruments?.[key])
               .map(instrument => (
                 <Grid size={{ xs: 12, sm: 4 }} key={`lots-${instrument}`}>
-                  <TextField
-                    size="small"
-                    fullWidth
-                    label={`${instrument} lots`}
-                    value={state.lotsByInstrument?.[instrument] ?? state.lots ?? ""}
-                    onChange={e => {
-                      setLotsError(null)
-                      onChange({
-                        lotsByInstrument: {
-                          ...(state.lotsByInstrument || {}),
-                          [instrument]: coerceLots(e.target.value),
-                        },
-                      })
-                    }}
-                  />
+                  <FieldRow label={`${labelFor(instrument)} lots`}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      value={state.lotsByInstrument?.[instrument] ?? state.lots ?? ""}
+                      onChange={e => {
+                        onChange({
+                          lotsByInstrument: {
+                            ...(state.lotsByInstrument || {}),
+                            [instrument]: coerceLots(e.target.value),
+                          },
+                        })
+                      }}
+                    />
+                  </FieldRow>
                 </Grid>
               ))}
             <Grid size={12}>
-              <OptionNotionalPreview
-                lots={Number(state.lots) || 0}
-                instruments={state.instruments}
-                maxNotionalInr={maxNotionalInr}
-              />
-            </Grid>
-          </Grid>
-        </FormSection>
-
-        <FormSection title="Entry" hint="Skew wait before punching" helpHref="/help/straddle#entry">
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                size="small"
-                fullWidth
-                name="maxSkewPercent"
-                value={state.maxSkewPercent}
-                onChange={e => onChange({ maxSkewPercent: +e.target.value || undefined })}
-                label="Ideal skew %"
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                size="small"
-                fullWidth
-                name="thresholdSkewPercent"
-                value={state.thresholdSkewPercent}
-                onChange={e => onChange({ thresholdSkewPercent: +e.target.value || undefined })}
-                label="Threshold skew %"
-              />
-            </Grid>
-            <Grid size={12}>
-              <TextField
-                size="small"
-                fullWidth
-                name="expireIfUnsuccessfulInMins"
-                value={state.expireIfUnsuccessfulInMins}
-                onChange={e =>
-                  onChange({
-                    expireIfUnsuccessfulInMins: +e.target.value || undefined,
-                  })
-                }
-                label="Skew checker (minutes)"
-              />
-            </Grid>
-            <Grid size={12}>
-              <FormControl component="fieldset">
-                <FormLabel component="legend">If skew never converges</FormLabel>
-                <RadioGroup
-                  aria-label="takeTradeIrrespectiveSkew"
-                  name="takeTradeIrrespectiveSkew"
-                  value={state.takeTradeIrrespectiveSkew}
-                  onChange={() =>
-                    onChange({
-                      takeTradeIrrespectiveSkew: !state.takeTradeIrrespectiveSkew,
-                    })
-                  }
-                >
-                  <FormControlLabel
-                    value={false}
-                    control={<Radio size="small" />}
-                    label={<Typography variant="body2">Reject the trade</Typography>}
-                  />
-                  <FormControlLabel
-                    value
-                    control={<Radio size="small" />}
-                    label={<Typography variant="body2">Enter anyway</Typography>}
-                  />
-                </RadioGroup>
-              </FormControl>
+              <FieldRow label="Notional preview" wide>
+                <OptionNotionalPreview
+                  lots={Number(state.lots) || 0}
+                  instruments={state.instruments}
+                  maxNotionalInr={maxNotionalInr}
+                />
+              </FieldRow>
             </Grid>
           </Grid>
         </FormSection>
@@ -293,7 +214,11 @@ const TradeSetupForm = ({
               onChange={onChange}
             />
             <Grid size={12}>
-              <FormControl component="fieldset">
+              <FieldRow
+                label="Loss floor (pts)"
+                wide
+                helper="Exit when combined points fall below this. Usually negative (e.g. −18). After a profit trail it moves up."
+              >
                 <FormGroup>
                   <FormControlLabel
                     label="Square off if losses breach (points)"
@@ -319,14 +244,17 @@ const TradeSetupForm = ({
                           trailingMaxLossPoints: +e.target.value || undefined,
                         })
                       }
-                      label="Max loss (points)"
                     />
                   ) : null}
                 </FormGroup>
-              </FormControl>
+              </FieldRow>
             </Grid>
             <Grid size={12}>
-              <FormControl component="fieldset">
+              <FieldRow
+                label="Profit target (pts)"
+                wide
+                helper="On breach, the trail-up % raises the target."
+              >
                 <FormGroup>
                   <FormControlLabel
                     label="Square off if profits breach (points)"
@@ -343,36 +271,105 @@ const TradeSetupForm = ({
                   />
                   {state.isMaxProfitEnabled ? (
                     <>
-                      <TextField
-                        size="small"
-                        fullWidth
-                        name="maxProfitPoints"
-                        value={state.trailingMaxProfitPoints}
-                        onChange={e =>
-                          onChange({
-                            trailingMaxProfitPoints: +e.target.value || undefined,
-                          })
-                        }
-                        label="Max profit (points)"
-                      />
-                      <TextField
-                        size="small"
-                        fullWidth
-                        name="trailingProfitPercent"
-                        value={state.trailingProfitPercent}
-                        onChange={e =>
-                          onChange({
-                            trailingProfitPercent: +e.target.value || undefined,
-                          })
-                        }
-                        label="Profit trail-up %"
-                        helperText="On breach, target is raised by this %"
-                        sx={{ mt: 2 }}
-                      />
+                      <FieldRow label="Max profit (points)">
+                        <TextField
+                          size="small"
+                          fullWidth
+                          name="maxProfitPoints"
+                          value={state.trailingMaxProfitPoints}
+                          onChange={e =>
+                            onChange({
+                              trailingMaxProfitPoints: +e.target.value || undefined,
+                            })
+                          }
+                        />
+                      </FieldRow>
+                      <FieldRow label="Profit trail-up %">
+                        <TextField
+                          size="small"
+                          fullWidth
+                          name="trailingProfitPercent"
+                          value={state.trailingProfitPercent}
+                          onChange={e =>
+                            onChange({
+                              trailingProfitPercent: +e.target.value || undefined,
+                            })
+                          }
+                        />
+                      </FieldRow>
                     </>
                   ) : null}
                 </FormGroup>
-              </FormControl>
+              </FieldRow>
+            </Grid>
+          </Grid>
+        </FormSection>
+
+        <FormSection title="Entry" hint="Skew wait before punching" helpHref="/help/straddle#entry">
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <FieldRow label="Ideal skew %">
+                <TextField
+                  size="small"
+                  fullWidth
+                  name="maxSkewPercent"
+                  value={state.maxSkewPercent}
+                  onChange={e => onChange({ maxSkewPercent: +e.target.value || undefined })}
+                />
+              </FieldRow>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <FieldRow label="Threshold skew %">
+                <TextField
+                  size="small"
+                  fullWidth
+                  name="thresholdSkewPercent"
+                  value={state.thresholdSkewPercent}
+                  onChange={e => onChange({ thresholdSkewPercent: +e.target.value || undefined })}
+                />
+              </FieldRow>
+            </Grid>
+            <Grid size={12}>
+              <FieldRow label="Skew checker (minutes)">
+                <TextField
+                  size="small"
+                  fullWidth
+                  name="expireIfUnsuccessfulInMins"
+                  value={state.expireIfUnsuccessfulInMins}
+                  onChange={e =>
+                    onChange({
+                      expireIfUnsuccessfulInMins: +e.target.value || undefined,
+                    })
+                  }
+                />
+              </FieldRow>
+            </Grid>
+            <Grid size={12}>
+              <FieldRow label="If skew never converges" wide>
+                <FormControl component="fieldset" sx={{ width: "100%" }}>
+                  <RadioGroup
+                    aria-label="takeTradeIrrespectiveSkew"
+                    name="takeTradeIrrespectiveSkew"
+                    value={state.takeTradeIrrespectiveSkew}
+                    onChange={() =>
+                      onChange({
+                        takeTradeIrrespectiveSkew: !state.takeTradeIrrespectiveSkew,
+                      })
+                    }
+                  >
+                    <FormControlLabel
+                      value={false}
+                      control={<Radio size="small" />}
+                      label={<Typography variant="body2">Reject the trade</Typography>}
+                    />
+                    <FormControlLabel
+                      value
+                      control={<Radio size="small" />}
+                      label={<Typography variant="body2">Enter anyway</Typography>}
+                    />
+                  </RadioGroup>
+                </FormControl>
+              </FieldRow>
             </Grid>
           </Grid>
         </FormSection>
@@ -380,10 +377,10 @@ const TradeSetupForm = ({
         <FormSection title="Timing" hint="When to run and flatten" helpHref="/help/straddle#timing">
           <Grid container spacing={2}>
             <Grid size={12}>
-              <FormControl component="fieldset">
+              <FieldRow label="Auto square off" wide>
                 <FormGroup>
                   <FormControlLabel
-                    label="Auto square off"
+                    label="Enable auto square off"
                     control={
                       <Checkbox
                         checked={state.isAutoSquareOffEnabled}
@@ -396,84 +393,72 @@ const TradeSetupForm = ({
                     }
                   />
                   {state.isAutoSquareOffEnabled ? (
-                    <TimePicker
-                      label="Square off time"
-                      value={state.squareOffTime ? dayjs(state.squareOffTime) : null}
-                      onChange={selectedDate => {
-                        onChange({ squareOffTime: ensureIST(selectedDate) })
-                      }}
-                      slotProps={{
-                        textField: {
-                          margin: "normal",
-                          id: "time-picker",
-                          size: "small",
-                          fullWidth: true,
-                        },
-                      }}
-                    />
+                    <FieldRow label="Square off time">
+                      <TradeTimePicker
+                        value={state.squareOffTime}
+                        onChange={value => onChange({ squareOffTime: value })}
+                      />
+                    </FieldRow>
                   ) : null}
                 </FormGroup>
-              </FormControl>
+              </FieldRow>
             </Grid>
             <RollbackComponent rollback={state.rollback!} onChange={onChange} />
             <Grid size={12}>
-              <TimePicker
-                label="Schedule run"
-                value={isSchedulingDisabled ? null : state.runAt ? dayjs(state.runAt) : null}
-                disabled={isSchedulingDisabled}
-                onChange={selectedDate => {
-                  onChange({ runAt: ensureIST(selectedDate) })
-                }}
-                slotProps={{
-                  textField: {
-                    margin: "normal",
-                    id: "time-picker",
-                    size: "small",
-                    fullWidth: true,
-                  },
-                }}
-              />
+              <FieldRow label="Schedule run">
+                <TradeTimePicker
+                  disabled={isSchedulingDisabled}
+                  value={isSchedulingDisabled ? undefined : state.runAt}
+                  onChange={value => onChange({ runAt: value })}
+                />
+              </FieldRow>
             </Grid>
           </Grid>
         </FormSection>
 
-        <FormSection title="Save" span>
-          {notice || instrumentError || lotsError ? (
-            <Alert severity="error" sx={{ mb: 1 }}>
-              {notice || instrumentError || lotsError}
-            </Alert>
-          ) : null}
-          <Box
-            sx={{
-              display: "flex",
-              gap: 1,
-              flexWrap: "wrap",
-              position: "sticky",
-              bottom: 0,
-              py: 1,
-              bgcolor: "background.paper",
-            }}
-          >
-            {isRunnable ? (
-              <Button variant="outlined" type="button" onClick={onRunNow}>
-                Schedule now
-              </Button>
+        {!embedded ? (
+          <FormSection title="Save" span>
+            {formError ? (
+              <Alert severity="error" sx={{ mb: 1 }}>
+                {formError}
+              </Alert>
             ) : null}
-            <Button
-              variant="contained"
-              type="button"
-              onClick={handleFormSubmit}
-              disabled={isSchedulingDisabled}
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1,
+                flexWrap: "wrap",
+                position: "sticky",
+                bottom: 0,
+                py: 1,
+                bgcolor: "background.paper",
+              }}
             >
-              {isRunnable ? `Schedule for ${dayjs(state.runAt).format("hh:mma")}` : "Save template"}
-            </Button>
-            {!isRunnable ? (
-              <Button type="button" onClick={onCancel}>
-                Cancel
+              {isRunnable ? (
+                <Button variant="outlined" type="button" onClick={onRunNow}>
+                  Schedule now
+                </Button>
+              ) : null}
+              <Button
+                variant="contained"
+                type="button"
+                onClick={handleFormSubmit}
+                disabled={isSchedulingDisabled}
+              >
+                {isRunnable ? formatTradeScheduleLabel(state.runAt) : "Save template"}
               </Button>
-            ) : null}
-          </Box>
-        </FormSection>
+              {!isRunnable ? (
+                <Button type="button" onClick={onCancel}>
+                  Cancel
+                </Button>
+              ) : null}
+            </Box>
+          </FormSection>
+        ) : formError ? (
+          <Alert severity="error" sx={{ mt: 1 }}>
+            {formError}
+          </Alert>
+        ) : null}
       </Box>
     </>
   )
@@ -482,10 +467,6 @@ const TradeSetupForm = ({
     return <form noValidate>{body}</form>
   }
 
-  return (
-    <form noValidate>
-      <Paper sx={{ p: 2 }}>{body}</Paper>
-    </form>
-  )
+  return <form noValidate>{body}</form>
 }
 export default TradeSetupForm

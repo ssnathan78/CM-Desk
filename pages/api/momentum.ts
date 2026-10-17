@@ -69,7 +69,7 @@ export default withSession(async (req, res) => {
       if (!state.config.active) {
         return res.status(409).json({
           error:
-            "Strategy on is saved as off. Turn Strategy on on this page. Desk → Risk does not start the history pull. This button saves the switches on the page, then pulls.",
+            "Engine on is saved as off. Turn Engine on on this page. Desk → Risk does not start the history pull. This button saves the switches on the page, then pulls.",
         })
       }
       const token = req.session.user.session?.access_token

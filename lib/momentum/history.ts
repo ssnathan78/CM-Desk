@@ -97,7 +97,7 @@ export function emptyPullMessage(input: {
   if (input.scope === "trend" && !input.trendActive)
     return "Daily trend is off. Turn it on, save, then use Pull history now."
   if (input.scope === "momentum" && !input.momentumActive)
-    return "Momentum is off. Turn Strategy on, save, then use Pull history now."
+    return "Momentum is off. Turn Engine on, save, then use Pull history now."
   if (input.scope === "trend") return "There are no symbols on the daily-trend page."
   if (input.scope === "momentum") return "The momentum list is empty."
   return "No download is due. Pull data daily is off, or today's candles were already downloaded."

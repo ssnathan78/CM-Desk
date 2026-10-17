@@ -2,6 +2,7 @@ import { Box, Link as MuiLink, Typography } from "@mui/material"
 import NextLink from "next/link"
 import type React from "react"
 
+/** Template editor panel — matches PageSection header band, tuned for dense forms. */
 export default function FormSection({
   title,
   hint,
@@ -17,33 +18,43 @@ export default function FormSection({
 }) {
   return (
     <Box
-      sx={{
+      sx={theme => ({
         gridColumn: span ? "1 / -1" : "auto",
+        minWidth: 0,
         border: "1px solid",
         borderColor: "divider",
-        borderRadius: 2,
-        p: 2,
-        minWidth: 0,
-      }}
+        borderRadius: 1,
+        overflow: "hidden",
+        bgcolor:
+          theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.03)" : theme.palette.grey[50],
+      })}
     >
-      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
-        <Typography variant="overline" color="primary.main" sx={{ letterSpacing: "0.08em" }}>
-          {title}
-        </Typography>
-        {helpHref ? (
-          <MuiLink component={NextLink} href={helpHref} variant="caption">
-            What is this?
-          </MuiLink>
+      <Box
+        sx={{
+          px: 2,
+          py: 1,
+          borderBottom: 1,
+          borderColor: "divider",
+          bgcolor: "action.hover",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, flexWrap: "wrap" }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+            {title}
+          </Typography>
+          {helpHref ? (
+            <MuiLink component={NextLink} href={helpHref} variant="caption">
+              What is this?
+            </MuiLink>
+          ) : null}
+        </Box>
+        {hint ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+            {hint}
+          </Typography>
         ) : null}
       </Box>
-      {hint ? (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
-          {hint}
-        </Typography>
-      ) : (
-        <Box sx={{ mb: 1 }} />
-      )}
-      {children}
+      <Box sx={{ p: 2 }}>{children}</Box>
     </Box>
   )
 }

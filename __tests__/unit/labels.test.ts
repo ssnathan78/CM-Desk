@@ -6,10 +6,14 @@ describe("labelFor", () => {
     expect(labelFor("MIDCPNIFTY")).toBe("Midcap Nifty")
     expect(labelFor("EXIT")).toBe("Exit")
     expect(labelFor("HEDGE")).toBe("Hedge")
+    expect(labelFor("MAX_NOTIONAL")).toBe("Max notional")
+    expect(labelFor("ORDER_REJECTED")).toBe("Order rejected")
+    expect(labelFor("MISSING_ORDER")).toBe("Missing order")
   })
 
-  it("falls back to raw code", () => {
-    expect(labelFor("UNKNOWN_X")).toBe("UNKNOWN_X")
+  it("humanizes unknown codes", () => {
+    expect(labelFor("UNKNOWN_X")).toBe("Unknown X")
+    expect(labelFor("CHASE_AWAITING_SIGNAL")).toBe("Chase Awaiting Signal")
     expect(isKnownCode("CHASE")).toBe(true)
     expect(isKnownCode("UNKNOWN_X")).toBe(false)
   })

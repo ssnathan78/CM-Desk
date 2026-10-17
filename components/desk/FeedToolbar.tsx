@@ -39,15 +39,6 @@ export default function FeedToolbar({
         onTo={onTo}
       />
       {extra}
-      <Button size="small" variant="outlined" onClick={() => onClear("today")}>
-        Clear today
-      </Button>
-      <Button size="small" variant="outlined" onClick={() => onClear("before_today")}>
-        Clear before today
-      </Button>
-      <Button size="small" color="warning" variant="outlined" onClick={() => onClear("all")}>
-        Clear all
-      </Button>
     </Stack>
   )
 }

@@ -18,13 +18,15 @@ Flatten / SL / EXIT roles **skip** desk halt, trading-disabled, strategy halt, d
 
 ## Operator flags (Desk → Risk)
 
+Desk-wide **new entries** are gated by two independent controls: **Trading enabled** (quiet config, `TRADING_DISABLED`) and **Desk halt** (loud kill with a stored reason, `DESK_HALTED`). Resume clears the halt and turns Trading enabled back on. Per-strategy **New entries** maps to the strategy halt flag (`STRATEGY_HALTED`); **Desk permission** is strategy enabled (`STRATEGY_DISABLED`).
+
 | Flag | Blocks | Still allowed |
 |--|--|--|
 | Allow live orders (off) | Real Kite orders (`LIVE_BLOCKED`) unless `MOCK_ORDERS` or PAPER | Paper/mock entries and exits |
 | Trading enabled (off) | New **entries** desk-wide (`TRADING_DISABLED`) | Flatten / SL / EXIT |
-| Desk Halt | New **entries** desk-wide (`DESK_HALTED`), with a stored reason | Flatten / SL / EXIT |
-| Strategy enabled (off) | **Every** order for that strategy (`STRATEGY_DISABLED`) | Nothing for that strategy |
-| Not halted (unchecked) | New **entries** for that strategy (`STRATEGY_HALTED`) | Flatten / SL / EXIT |
+| Desk halt (Halt new entries) | New **entries** desk-wide (`DESK_HALTED`), with a stored reason | Flatten / SL / EXIT |
+| Desk permission / Strategy enabled (off) | **Every** order for that strategy (`STRATEGY_DISABLED`) | Nothing for that strategy |
+| New entries off (strategy halted) | New **entries** for that strategy (`STRATEGY_HALTED`) | Flatten / SL / EXIT |
 
 Live Kite still needs the triple gate: `MOCK_ORDERS=false` + Allow live orders + that strategy's Execution = Live.
 

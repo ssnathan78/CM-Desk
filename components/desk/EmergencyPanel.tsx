@@ -17,23 +17,17 @@ const KILL_MESSAGES = {
       "Paper books flatten even when the market is closed.",
     ],
     willNot: ["Halt the desk.", "Pause Chase (it can take the next signal after flatten)."],
-    note:
-      "A live book is refused while the market is closed. The position and its stop stay.",
+    note: "A live book is refused while the market is closed. The position and its stop stay.",
   },
   intraday: {
-    will: [
-      "Flatten today's straddles and strangles and abort those jobs.",
-      "Halt the desk.",
-    ],
+    will: ["Flatten today's straddles and strangles and abort those jobs.", "Halt the desk."],
     willNot: ["Pause Chase.", "Flatten Chase books."],
-    note:
-      "A live intraday book is refused while the market is closed. Those positions and stops stay. The halt still happens.",
+    note: "A live intraday book is refused while the market is closed. Those positions and stops stay. The halt still happens.",
   },
   all: {
     will: ["Flatten every open book.", "Pause Chase.", "Halt the desk."],
     willNot: [],
-    note:
-      "A live book is refused while the market is closed. Chase may stay LONG or SHORT. Pause and halt still happen.",
+    note: "A live book is refused while the market is closed. Chase may stay LONG or SHORT. Pause and halt still happen.",
   },
 } as const
 
@@ -43,7 +37,7 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
   const [pendingScope, setPendingScope] = useState<Scope | null>(null)
   const [loading, setLoading] = useState(false)
   const [dialogError, setDialogError] = useState<string | null>(null)
-  const { showMessage, SnackbarAlert } = useSnackbar()
+  const { showMessage } = useSnackbar()
 
   const runAction = async () => {
     if (!pendingScope) return
@@ -99,13 +93,14 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
         bgcolor: color.bg.surface,
       }}
     >
-      {SnackbarAlert}
       <Typography variant="subtitle2" sx={{ mb: 1 }}>
         Emergency
       </Typography>
       <ConfirmAction
         open={Boolean(pendingScope)}
-        tone={pendingScope === "all" ? "danger" : pendingScope === "intraday" ? "danger" : "attention"}
+        tone={
+          pendingScope === "all" ? "danger" : pendingScope === "intraday" ? "danger" : "attention"
+        }
         title={
           pendingScope === "flatten"
             ? "Square off every open book?"

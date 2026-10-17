@@ -13,8 +13,8 @@ export default function DiscreteSlider({
   onChange,
 }: any) {
   return (
-    <Box sx={{ width: 300 }}>
-      <Typography gutterBottom>{label}</Typography>
+    <Box sx={{ width: 300, maxWidth: "100%" }}>
+      {label ? <Typography gutterBottom>{label}</Typography> : null}
       <Slider
         value={value}
         defaultValue={defaultValue}

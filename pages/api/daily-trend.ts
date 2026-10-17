@@ -152,7 +152,7 @@ export default withSession(async (req, res) => {
     if (req.method === "POST" && req.body?.action === "pull") {
       const state = await getDailyTrendState()
       if (!state.config.active)
-        return res.status(409).json({ error: "Turn the strategy on before pulling history" })
+        return res.status(409).json({ error: "Turn Engine on before pulling history" })
       return res.json(
         startCashHistoryPull({
           accessToken: req.session.user.session?.access_token,

@@ -131,6 +131,55 @@ export function applyDailyTrendBulk<T extends DailyTrendBulkPatch>(
   return { ...book, ...patch }
 }
 
+export type DailyTrendInlineRowPatch = Partial<
+  Pick<DailyTrendBulkPatch, "budgetInr" | "emaPeriod" | "bufferPercent">
+>
+
+type DailyTrendBookScalars = {
+  budgetInr: number
+  emaPeriod: number
+  bufferPercent: number
+  exitBufferPercent: number
+  entryStyle: "CLOSE_CROSS" | "BREAK_HIGH"
+}
+
+/** Inline row edits beat bulk bar; bulk beats stored book. Used before save-book. */
+export function mergeDailyTrendBookSave(
+  book: DailyTrendBookScalars,
+  bulk: DailyTrendBulkPatch,
+  inline: DailyTrendInlineRowPatch
+): DailyTrendBookScalars {
+  return {
+    budgetInr: inline.budgetInr ?? bulk.budgetInr ?? book.budgetInr,
+    emaPeriod: inline.emaPeriod ?? bulk.emaPeriod ?? book.emaPeriod,
+    bufferPercent: inline.bufferPercent ?? bulk.bufferPercent ?? book.bufferPercent,
+    exitBufferPercent: bulk.exitBufferPercent ?? book.exitBufferPercent,
+    entryStyle: bulk.entryStyle ?? book.entryStyle,
+  }
+}
+
+export type DailyTrendBulkFormFields = {
+  emaPeriod: string
+  bufferPercent: string
+  exitBufferPercent: string
+  budgetInr: string
+  entryStyle: string
+}
+
+/** Parses the bulk bar; all blank is an empty patch (not an error). */
+export function parseOptionalDailyTrendBulkForm(
+  form: DailyTrendBulkFormFields
+): { ok: true; patch: DailyTrendBulkPatch } | { ok: false; error: string } {
+  const empty =
+    form.emaPeriod === "" &&
+    form.bufferPercent === "" &&
+    form.exitBufferPercent === "" &&
+    form.budgetInr === "" &&
+    form.entryStyle === ""
+  if (empty) return { ok: true, patch: {} }
+  return parseDailyTrendBulkPatch(form)
+}
+
 export function normalizeDailyTrendConfig(raw: unknown): DailyTrendConfig {
   const row = raw && typeof raw === "object" ? (raw as Partial<DailyTrendConfig>) : {}
   const quantity = Math.round(Number(row.quantity))

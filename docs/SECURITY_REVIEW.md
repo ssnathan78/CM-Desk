@@ -71,6 +71,7 @@ flowchart TB
 3. **In-memory rate limits** — per-process; use reverse-proxy limits for multi-instance production.
 4. **Docker dev Postgres/Redis host ports** — convenience only; do not publish 5432/6379 on production VPS (see [DEPLOYMENT.md](DEPLOYMENT.md)).
 5. **Paper vs live** — a strategy is live only if `MOCK_ORDERS=false`, Desk “Allow live orders”, and that strategy’s `executionMode=LIVE`. New/unknown strategies stay PAPER. Reconcile ignores PAPER/MOCK rows when comparing to Kite.
+6. **Simulation UI** — `POST /api/desk/simulate` reuses the hermetic catalog (no Kite). It is disabled in production unless `ALLOW_SIM_UI=true`; keep that flag off on the public droplet unless you explicitly want browser-triggered scenario runs.
 
 ## Verification
 
