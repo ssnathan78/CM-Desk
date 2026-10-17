@@ -1,12 +1,4 @@
-import {
-  Box,
-  Button,
-  Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material"
+import { Box, Button, Stack, TextField, Typography } from "@mui/material"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import ChaseBookDrawer from "../components/chase/ChaseBookDrawer"
@@ -27,7 +19,6 @@ import useUser from "../lib/useUser"
 
 const ChasePlanPage = () => {
   useUser({ redirectTo: "/" })
-  const [showPrices, setShowPrices] = useState(false)
   const { data: deskStatus } = useDeskStatus()
   const { data, error, mutate } = useChaseSettings()
   const [books, setBooks] = useState<ChaseBookConfig[]>(
@@ -261,28 +252,13 @@ const ChasePlanPage = () => {
 
         <PageSection
           title="Books"
-          description="Configuration and runtime in one grid. Row click or ⋮ → Edit opens the drawer. Engine and pause save immediately."
+          description="Book column stays fixed while you scroll; jump buttons move configuration vs runtime. Row click or ⋮ → Edit opens the drawer."
           flush
-          actions={
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={showPrices ? "prices" : "core"}
-              onChange={(_, value) => {
-                if (value) setShowPrices(value === "prices")
-              }}
-              aria-label="Books table columns"
-            >
-              <ToggleButton value="core">Config + runtime</ToggleButton>
-              <ToggleButton value="prices">+ Prices</ToggleButton>
-            </ToggleButtonGroup>
-          }
         >
           <ChaseBooksTable
             books={books}
             statuses={data.statuses ?? []}
             executionMode={executionMode}
-            showPriceCols={showPrices}
             onRowClick={instrument => setEditInstrument(instrument)}
             onEngineChange={(instrument, enabled) => {
               patchBook(instrument, { enabled })

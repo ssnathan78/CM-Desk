@@ -211,7 +211,7 @@ Shows engine vs **Desk → Risk** enabled, execution mode, and page execution la
 
 - **Config at a glance:** EMA, buffer, protect, offset, open classify columns (`ChaseBooksTable` + `lib/chase/chaseBookCompare.ts`).
 - **Amber cell:** value differs from first **enabled** book in index order.
-- **Toggle:** “Config + runtime” vs “+ Prices” in `PageSection` actions (`pages/chase.tsx`).
+- **Frozen book column** + jump **Configuration** / **Runtime & prices** (like Daily trend symbol column).
 - **Toasts:** book actions via `bookToast()` → snackbar, not text in the Book cell.
 
 ---

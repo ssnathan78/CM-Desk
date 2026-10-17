@@ -22,7 +22,7 @@ Operator-facing surfaces for the personal Kite desk (2026 layout). Behaviour rul
 | `/risk` | Risk | Limits matrix, execution mode, new entries, sticky save |
 | `/templates` | Templates | Master–detail editor; `?type=` and `?id=` optional |
 | `/plan` | Schedules | Weekday grid; attach template to clock |
-| `/chase` | Chase | Books grid: config + runtime columns, diff vs first enabled book; drawer editor; `status` from API |
+| `/chase` | Chase | Books grid: frozen book column, config + runtime (incl. prices), jump scroll; drawer editor |
 | `/momentum`, `/daily-trend` | Same as page | Permission line from desk status + page config |
 | `/help`, `/help/[topic]` | Guide | Operator help (revamp vocabulary) |
 | `/strat/straddle`, `/strat/strangle` | — | Redirect to `/templates?type=…` |

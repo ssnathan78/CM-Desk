@@ -42,6 +42,31 @@ export type ChaseStatusRow = {
 
 const groupBorder = { borderLeft: 1, borderColor: "divider" }
 
+const BOOK_COL_MIN = 128
+
+function pinBookHeader() {
+  return {
+    position: "sticky" as const,
+    left: 0,
+    top: 0,
+    zIndex: 4,
+    bgcolor: "background.paper",
+    minWidth: BOOK_COL_MIN,
+    boxShadow: "2px 0 4px -2px rgba(0,0,0,0.35)",
+  }
+}
+
+function pinBookBody() {
+  return {
+    position: "sticky" as const,
+    left: 0,
+    zIndex: 1,
+    bgcolor: "background.paper",
+    minWidth: BOOK_COL_MIN,
+    boxShadow: "2px 0 4px -2px rgba(0,0,0,0.25)",
+  }
+}
+
 function diffCellSx(differs: boolean) {
   return differs
     ? {
@@ -105,7 +130,6 @@ export default function ChaseBooksTable({
   books,
   statuses,
   executionMode,
-  showPriceCols,
   onRowClick,
   onEngineChange,
   onPauseChange,
@@ -114,7 +138,6 @@ export default function ChaseBooksTable({
   books: ChaseBookConfig[]
   statuses: ChaseStatusRow[]
   executionMode: "PAPER" | "LIVE"
-  showPriceCols: boolean
   onRowClick: (instrument: string) => void
   onEngineChange: (instrument: string, enabled: boolean) => void
   onPauseChange: (instrument: string, paused: boolean) => void
@@ -124,7 +147,7 @@ export default function ChaseBooksTable({
   const primary = useMemo(() => chaseConfigPrimaryBook(books), [books])
   const primaryLabel = primary ? labelFor(primary.instrument) : "primary book"
 
-  const minWidth = showPriceCols ? 1320 : 1180
+  const minWidth = 1320
 
   return (
     <>
@@ -132,16 +155,16 @@ export default function ChaseBooksTable({
         minWidth={minWidth}
         scrollControls
         scrollStartLabel="Configuration"
-        scrollEndLabel="Runtime & controls"
+        scrollEndLabel="Runtime & prices"
       >
-        <Table size="small">
+        <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell rowSpan={2}>Book</TableCell>
+              <TableCell rowSpan={2} sx={pinBookHeader()}>Book</TableCell>
               <TableCell colSpan={5} align="center" sx={groupBorder}>
                 Configuration
               </TableCell>
-              <TableCell colSpan={showPriceCols ? 7 : 5} align="center" sx={groupBorder}>
+              <TableCell colSpan={7} align="center" sx={groupBorder}>
                 Runtime
               </TableCell>
               <TableCell colSpan={3} align="center" sx={groupBorder}>
@@ -160,8 +183,8 @@ export default function ChaseBooksTable({
               <TableCell sx={groupBorder}>State</TableCell>
               <TableCell>Mode</TableCell>
               <TableCell align="right">Qty</TableCell>
-              {showPriceCols ? <TableCell align="right">Avg (₹)</TableCell> : null}
-              {showPriceCols ? <TableCell align="right">Mark (₹)</TableCell> : null}
+              <TableCell align="right">Avg (₹)</TableCell>
+              <TableCell align="right">Mark (₹)</TableCell>
               <TableCell align="right">Open mark (₹)</TableCell>
               <TableCell>Contract</TableCell>
               <TableCell sx={groupBorder}>Engine</TableCell>
@@ -182,7 +205,7 @@ export default function ChaseBooksTable({
                   sx={{ cursor: "pointer", height: 32 }}
                   onClick={() => onRowClick(book.instrument)}
                 >
-                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  <TableCell sx={{ ...pinBookBody(), whiteSpace: "nowrap" }}>
                     <Typography variant="body2" noWrap>
                       {labelFor(book.instrument)}
                     </Typography>
@@ -235,16 +258,12 @@ export default function ChaseBooksTable({
                   <TableCell align="right">
                     <Figure kind="qty" value={qty} align="right" />
                   </TableCell>
-                  {showPriceCols ? (
-                    <TableCell align="right">
-                      <Figure kind="price" value={st?.averageEntryPrice} flat={flat} />
-                    </TableCell>
-                  ) : null}
-                  {showPriceCols ? (
-                    <TableCell align="right">
-                      <Figure kind="price" value={st?.markPrice} flat={flat} />
-                    </TableCell>
-                  ) : null}
+                  <TableCell align="right">
+                    <Figure kind="price" value={st?.averageEntryPrice} flat={flat} />
+                  </TableCell>
+                  <TableCell align="right">
+                    <Figure kind="price" value={st?.markPrice} flat={flat} />
+                  </TableCell>
                   <TableCell align="right">
                     <Figure kind="inr" value={st?.openMark ?? "0"} pnl />
                   </TableCell>

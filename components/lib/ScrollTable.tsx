@@ -22,15 +22,17 @@ export default function ScrollTable({
   scrollEndLabel = "Later columns",
 }: ScrollTableProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const [edges, setEdges] = useState({ left: false, right: false })
+  const [edges, setEdges] = useState({ left: false, right: false, overflow: false })
 
   const updateEdges = useCallback(() => {
     const el = ref.current
     if (!el) return
     const maxScroll = el.scrollWidth - el.clientWidth
+    const overflow = maxScroll > 4
     setEdges({
-      left: el.scrollLeft > 4,
-      right: maxScroll > 4 && el.scrollLeft < maxScroll - 4,
+      left: overflow && el.scrollLeft > 4,
+      right: overflow && el.scrollLeft < maxScroll - 4,
+      overflow,
     })
   }, [])
 
@@ -50,15 +52,22 @@ export default function ScrollTable({
     el.scrollTo({ left: el.scrollWidth - el.clientWidth, behavior: "smooth" })
   }
 
-  const showBar = scrollControls && (edges.left || edges.right)
+  const showBar = scrollControls && edges.overflow
 
   return (
     <Box>
-      {showBar ? (
+      {scrollControls ? (
         <Stack
           direction="row"
           spacing={0.5}
-          sx={{ mb: 0.5, flexWrap: "wrap", justifyContent: "flex-end", gap: 0.5 }}
+          sx={{
+            mb: 0.5,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+            gap: 0.5,
+            minHeight: showBar ? 32 : 0,
+            visibility: showBar ? "visible" : "hidden",
+          }}
         >
           {edges.left ? (
             <Button
