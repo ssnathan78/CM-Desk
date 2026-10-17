@@ -147,6 +147,10 @@ export function inferOrderRole(args: {
   tag?: string | null
 }): OrderRole {
   const purpose = (args.purpose || "").toUpperCase()
+  // Purpose wins over order type. Chase enters with an SL at the day's high or
+  // low; that order is still an entry. A protective stop sets purpose SL.
+  // Order type SL/SL-M/SL-L is a stop only when purpose is absent.
+  if (purpose === "ENTRY") return "ENTRY"
   if (purpose === "FLATTEN" || purpose === "SQUARE_OFF") return "FLATTEN"
   if (purpose === "SL" || purpose === "EXIT") return purpose === "SL" ? "SL" : "EXIT"
   const type = (args.orderType || "").toUpperCase()

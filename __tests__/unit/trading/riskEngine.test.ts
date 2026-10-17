@@ -54,6 +54,145 @@ describe("inferOrderRole", () => {
   it("defaults market entries to ENTRY", () => {
     expect(inferOrderRole({ orderType: "MARKET" })).toBe("ENTRY")
   })
+
+  it("keeps an entry stop as ENTRY and a protective stop as SL", () => {
+    expect(inferOrderRole({ purpose: "ENTRY", orderType: "SL" })).toBe("ENTRY")
+    expect(inferOrderRole({ purpose: "entry", orderType: "SL-M" })).toBe("ENTRY")
+    expect(inferOrderRole({ purpose: "ENTRY", orderType: "SL-L" })).toBe("ENTRY")
+    expect(inferOrderRole({ purpose: "SL", orderType: "SL" })).toBe("SL")
+    expect(inferOrderRole({ purpose: "SL", orderType: "MARKET" })).toBe("SL")
+    expect(inferOrderRole({ orderType: "SL" })).toBe("SL")
+    expect(inferOrderRole({ orderType: "SL-M" })).toBe("SL")
+    expect(inferOrderRole({ purpose: "FLATTEN", orderType: "MARKET" })).toBe("FLATTEN")
+  })
+})
+
+/** Same classification placeOrder uses: purpose and order type, then evaluateOrder. */
+function chaseEntryStop(): RiskIntent {
+  return intent({
+    role: inferOrderRole({ purpose: "ENTRY", orderType: "SL" }),
+    orderType: "SL",
+    strategy: "CHASE",
+    tradingsymbol: "NIFTY26OCTFUT",
+    side: "BUY",
+    product: "NRML",
+    tag: "chase",
+    quantity: 65,
+    lots: 1,
+    ltp: 25000,
+    triggerPrice: 25100,
+  })
+}
+
+describe("Chase entry stop is an entry", () => {
+  it("desk halt, trading disabled, strategy halt, and live-blocked reject it", () => {
+    const halted = evaluateOrder(
+      chaseEntryStop(),
+      ctx({ settings: { ...DEFAULT_RISK_SETTINGS, deskHalted: true, haltReason: "kill" } })
+    )
+    expect(halted.ok).toBe(false)
+    if (!halted.ok) expect(halted.code).toBe("DESK_HALTED")
+
+    const tradingOff = evaluateOrder(
+      chaseEntryStop(),
+      ctx({ settings: { ...DEFAULT_RISK_SETTINGS, tradingEnabled: false } })
+    )
+    expect(tradingOff.ok).toBe(false)
+    if (!tradingOff.ok) expect(tradingOff.code).toBe("TRADING_DISABLED")
+
+    const stratHalted = {
+      ...DEFAULT_RISK_SETTINGS,
+      strategies: {
+        ...DEFAULT_RISK_SETTINGS.strategies,
+        CHASE: {
+          ...DEFAULT_RISK_SETTINGS.strategies.CHASE,
+          halted: true,
+          haltReason: "pause",
+        },
+      },
+    }
+    const paused = evaluateOrder(chaseEntryStop(), ctx({ settings: stratHalted }))
+    expect(paused.ok).toBe(false)
+    if (!paused.ok) expect(paused.code).toBe("STRATEGY_HALTED")
+
+    const live = evaluateOrder(chaseEntryStop(), ctx({ isMock: false, isPaper: false }))
+    expect(live.ok).toBe(false)
+    if (!live.ok) expect(live.code).toBe("LIVE_BLOCKED")
+  })
+
+  it("applies max notional, max lots, and max positions to the entry stop", () => {
+    const notional = evaluateOrder(
+      chaseEntryStop(),
+      ctx({ settings: { ...DEFAULT_RISK_SETTINGS, maxNotionalInr: 100_000 } })
+    )
+    expect(notional.ok).toBe(false)
+    if (!notional.ok) expect(notional.code).toBe("MAX_NOTIONAL")
+
+    const lots = evaluateOrder(
+      intent({
+        ...chaseEntryStop(),
+        lots: 21,
+      }),
+      ctx()
+    )
+    expect(lots.ok).toBe(false)
+    if (!lots.ok) expect(lots.code).toBe("MAX_LOTS")
+
+    const positions = evaluateOrder(chaseEntryStop(), ctx({ openPositionCount: 12 }))
+    expect(positions.ok).toBe(false)
+    if (!positions.ok) expect(positions.code).toBe("MAX_POSITIONS")
+  })
+
+  it("still allows a protective stop and a flatten while the desk is halted", () => {
+    const halted = ctx({
+      settings: { ...DEFAULT_RISK_SETTINGS, deskHalted: true, haltReason: "kill" },
+    })
+    const protective = intent({
+      role: inferOrderRole({ purpose: "SL", orderType: "SL" }),
+      orderType: "SL",
+      strategy: "CHASE",
+      tradingsymbol: "NIFTY26OCTFUT",
+      side: "SELL",
+      product: "NRML",
+      tag: "chase",
+      quantity: 65,
+    })
+    expect(evaluateOrder(protective, halted)).toEqual({ ok: true })
+    const flatten = intent({
+      role: inferOrderRole({ purpose: "FLATTEN", orderType: "MARKET" }),
+      orderType: "MARKET",
+      strategy: "CHASE",
+      tradingsymbol: "NIFTY26OCTFUT",
+      side: "SELL",
+      product: "NRML",
+      tag: "chase",
+      quantity: 65,
+    })
+    expect(evaluateOrder(flatten, halted)).toEqual({ ok: true })
+  })
+
+  it("strategy disabled blocks the entry stop and the protective stop", () => {
+    const settings = {
+      ...DEFAULT_RISK_SETTINGS,
+      strategies: {
+        ...DEFAULT_RISK_SETTINGS.strategies,
+        CHASE: { ...DEFAULT_RISK_SETTINGS.strategies.CHASE, enabled: false },
+      },
+    }
+    const disabled = ctx({ settings })
+    const entry = evaluateOrder(chaseEntryStop(), disabled)
+    expect(entry.ok).toBe(false)
+    if (!entry.ok) expect(entry.code).toBe("STRATEGY_DISABLED")
+    const protective = intent({
+      role: inferOrderRole({ purpose: "SL", orderType: "SL" }),
+      orderType: "SL",
+      strategy: "CHASE",
+      quantity: 65,
+    })
+    const stop = evaluateOrder(protective, disabled)
+    expect(stop.ok).toBe(false)
+    if (!stop.ok) expect(stop.code).toBe("STRATEGY_DISABLED")
+  })
 })
 
 describe("evaluateOrder", () => {
