@@ -6,6 +6,7 @@ import { db } from "../../lib/drizzle"
 import { istToday } from "../../lib/drizzleIst"
 import { enqueueTradeJob } from "../../lib/enqueueTradeJob"
 import logger from "../../lib/logger"
+import { dueScheduleRunsNow } from "../../lib/operatorActionCopy"
 import { mapPlanFromDb } from "../../lib/planMapper"
 import { jobExecutions, strategySchedules, strategyTemplates } from "../../lib/schema"
 import withSession from "../../lib/session"
@@ -58,7 +59,8 @@ export default withSession(async (req: NextApiRequest, res: NextApiResponse) => 
           .where(eq(strategyTemplates.id, templateId))
         if (!template) return res.status(404).json({ error: "Template not found" })
         const runAt = req.body.runAt || template.runAt
-        const runNow = Boolean(req.body.runNow) || (runAt ? dayjs().isAfter(dayjs(runAt)) : true)
+        const runNow =
+          req.body.runNow === true || dueScheduleRunsNow(new Date(), runAt ? String(runAt) : null)
         const body = templateToJobBody(mapPlanFromDb(template) as Record<string, unknown>, {
           runNow,
           runAt,

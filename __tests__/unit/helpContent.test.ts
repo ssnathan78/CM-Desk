@@ -82,6 +82,12 @@ describe("help content", () => {
     expect(onOff).toMatch(/Neither control flattens/i)
   })
 
+  it("says daily-trend off does not run the stop", () => {
+    const books = HELP_PAGES["daily-trend"].sections.find(s => s.id === "books")?.body.join(" ") ?? ""
+    expect(books).toMatch(/no new buy and no stop/)
+    expect(books).not.toMatch(/Neither changes pause, status, or the stop/)
+  })
+
   it("keeps HelpTopic keys aligned with HELP_PAGES", () => {
     const keys = Object.keys(HELP_PAGES) as HelpTopic[]
     expect([...keys].sort()).toEqual([...HELP_TOPICS].sort())

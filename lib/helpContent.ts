@@ -289,8 +289,8 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "fields",
         title: "Fields on the page",
         body: [
-          "Engine on: the rank and Pull history now work. Off leaves the name list visible and does not download or rank.",
-          "Pull data daily: the hourly check may download each name once per day. Off skips that automatic download. Pull history now still works when Engine on is saved.",
+          "Engine on: the rank and Save and pull history work. Off leaves the name list visible and does not download or rank.",
+          "Pull data daily: the hourly check may download each name once per day. Off skips that automatic download. Save and pull history still works when Engine on is saved. The Execution menu is not live until Save.",
           "Execution: Report only shows the buy and sell list. Manual sends only when you click Send rebalance. Auto sends on the rebalance day, once that day, without the click.",
           "Rebalance: Monthly uses the first NSE session of the month. Weekly uses the weekday below (1 is Monday, 5 is Friday). Ad hoc never sends by itself. The buy and sell list is still calculated. You preview it, then click Send when you want it.",
           "Holdings: how many names the book wants to own. Default 30. This is a cap, not a pile of extra slots.",
@@ -333,7 +333,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         title: "Buttons",
         body: [
           "Save writes Engine on, Pull data daily, execution, rebalance, holdings, ranks, weights, capital, and filters. Until you save, those edits sit on the form only. Save then ranks the stored names again, which is why the spinner stays up. It does not download from Zerodha.",
-          "Pull history now writes those same switches, then starts the download and returns at once. You can leave the page. The download keeps going, and the bar comes back when you return. It needs Engine on. One name is requested at a time.",
+          "Save and pull history writes those same switches, then starts the download and returns at once. You can leave the page. The download keeps going, and the bar comes back when you return. It needs Engine on. One name is requested at a time. Send rebalance follows the saved execution, not an unsaved menu.",
           "Preview orders rebuilds the buy and sell list from the stored candles and the last saved settings. It does not place an order. An unsaved edit on the form is ignored until you Save.",
           "Send rebalance places that list. The button stays off while Execution is Report only. Manual sends on the click. Auto also sends on the rebalance day without the click. The success message means the click was accepted. Check Desk → Orders and Alerts for a rejection.",
           "In the table, Hold keeps that name at its current weight when Weights is equal weight. Later rebalances do not buy more shares to lift it up to an equal slice. Exclude sells the shares you hold and does not buy that name again. After either click the row changes at once and shows Clear hold or Clear exclude. The rank runs once after you stop clicking. Hold and Exclude do not need the Save button.",
@@ -368,7 +368,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "switches",
         title: "Switches",
         body: [
-          "Engine on, at the top of the page, turns evaluation on. Off skips evaluation and the scheduled history pull. Pull data daily lets the hourly check download each name once per day. Pull history now still runs while Engine on is saved.",
+          "Engine on, at the top of the page, turns evaluation on. Off skips evaluation and the scheduled history pull. Pull data daily lets the hourly check download each name once per day. Pull history now still runs while Engine on is saved. It does not save an unsaved Engine or Execution menu.",
           "Execution Report only shows the decision and sends nothing. Manual sends when you click Evaluate and send. Auto sends on the hourly pass.",
           "Symbol On off is fully dark for that name: no buy and no stop. Pause blocks a new buy. A long book still exits on the stop. Desk halt blocks the buy and still allows the stop. Desk → Risk → Daily trend disabled blocks every order, including the stop.",
         ],
@@ -377,7 +377,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "books",
         title: "The symbol list",
         body: [
-          "The first visit inserts the Nifty 100 names with On switched off. A name you remove is not put back by that seed. Apply to all writes only the fields you fill. Turn selected on/off changes engine for checked rows only. Save selected applies bulk and inline budget, EMA, and buffer. Neither changes pause, status, or the stop.",
+          "The first visit inserts the Nifty 100 names with On switched off. A name you remove is not put back by that seed. Apply to all writes only the fields you fill. Turn selected off is fully dark for those symbols: no new buy and no stop. The stored stop price stays. Pause blocks a new buy and still allows the stop. Save selected applies bulk and inline budget, EMA, and buffer. Engine and Execution on this page are not live until Save.",
           "Filters for symbol, name, industry, and signal sit at the top of the Book table section so they stay visually tied to the grid. Use the ℹ tooltips on bulk fields for longer help.",
           "Constituent changes are on Desk → Lists. A new Nifty 100 name is added here with On off. Accepting a removal deletes that book and does not sell. The EMA column is the exponential average of completed daily closes. Signal says Below the band, or Buy and the share count, whether the row is On or off. Signal Qualifies shows only names above the band. Sorting Signal puts those names first. State stays flat until a fill. Stop stays blank until the book is long. Engine on and Execution on this page, plus Desk → Risk for Daily trend, still have to allow an order.",
         ],

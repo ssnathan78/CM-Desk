@@ -4,6 +4,7 @@ import { useState } from "react"
 
 import fetchJson from "../../lib/fetchJson"
 import ConfirmAction from "../lib/ConfirmAction"
+import { useSnackbar } from "../lib/useSnackbar"
 
 type Props = {
   deskHalted: boolean
@@ -18,6 +19,7 @@ export default function HaltControl({ deskHalted, haltReason, busy, onChanged, c
   const [reasonDraft, setReasonDraft] = useState("")
   const [resumeOpen, setResumeOpen] = useState(false)
   const [localBusy, setLocalBusy] = useState(false)
+  const { showMessage } = useSnackbar()
 
   const runHalt = async (reason: string) => {
     setLocalBusy(true)
@@ -30,6 +32,10 @@ export default function HaltControl({ deskHalted, haltReason, busy, onChanged, c
       await onChanged()
       setReasonAnchor(null)
       setReasonDraft("")
+      return true
+    } catch (e) {
+      showMessage(e instanceof Error ? e.message : "Could not halt new entries", "error")
+      return false
     } finally {
       setLocalBusy(false)
     }
@@ -45,6 +51,8 @@ export default function HaltControl({ deskHalted, haltReason, busy, onChanged, c
       })
       setResumeOpen(false)
       await onChanged()
+    } catch (e) {
+      showMessage(e instanceof Error ? e.message : "Could not resume new entries", "error")
     } finally {
       setLocalBusy(false)
     }
@@ -86,8 +94,8 @@ export default function HaltControl({ deskHalted, haltReason, busy, onChanged, c
           aria-label="Halt new entries"
           startIcon={compact ? <BlockIcon fontSize="small" /> : undefined}
           onClick={async e => {
-            await runHalt("Halted from status rail")
-            setReasonAnchor(e.currentTarget)
+            const saved = await runHalt("Halted from status rail")
+            if (saved) setReasonAnchor(e.currentTarget)
           }}
         >
           {compact ? null : "Halt new entries"}

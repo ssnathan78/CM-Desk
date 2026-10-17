@@ -5,6 +5,7 @@ import { CHASE_STATUS } from "./constants"
 import { getChaseStatus, updateChaseStatus } from "./drizzleDbUtils"
 import { cancelOrder } from "./kiteUtils"
 import logger from "./logger"
+import { type ChaseResetProbe, planChaseSignalReset } from "./operatorActionCopy"
 
 export type ChaseResetResult =
   | { ok: true; instrument: string; previousStatus: string | null }
@@ -79,20 +80,54 @@ export async function resetChaseSignalState(input: {
   return { ok: true, instrument, previousStatus }
 }
 
+async function probeChaseReset(instrument: string, accessToken?: string): Promise<ChaseResetProbe> {
+  const row = await getChaseStatus(instrument)
+  const previousStatus = row?.status ?? null
+  const tradingsymbol = row?.tradingsymbol ?? null
+  if (
+    !(
+      tradingsymbol &&
+      (previousStatus === CHASE_STATUS.LONG || previousStatus === CHASE_STATUS.SHORT)
+    )
+  ) {
+    return { instrument, state: "clear" }
+  }
+  try {
+    const book = await resolveChaseBookBreakdown(tradingsymbol, accessToken || "")
+    if (chaseStatusHasPosition(previousStatus, book.netQty)) {
+      return { instrument, state: "open" }
+    }
+    return { instrument, state: "clear" }
+  } catch (e) {
+    logger.warn("[probeChaseReset] quantity unknown", e)
+    return { instrument, state: "unknown" }
+  }
+}
+
 export async function resetAllChaseSignalState(input: {
   accessToken?: string
   force?: boolean
 }): Promise<
   | { ok: true; results: ChaseResetResult[] }
-  | { ok: false; error: string; results: ChaseResetResult[] }
+  | { ok: false; error: string; results: ChaseResetResult[]; unchanged?: boolean }
 > {
   const { listChaseBooks } = await import("./chaseSettings")
+  const books = await listChaseBooks()
+  if (!input.force) {
+    const probes: ChaseResetProbe[] = []
+    for (const book of books) {
+      probes.push(await probeChaseReset(book.instrument, input.accessToken))
+    }
+    const plan = planChaseSignalReset(probes)
+    if (!plan.ok) {
+      return { ok: false, error: plan.error, results: [], unchanged: true }
+    }
+  }
   const results: ChaseResetResult[] = []
-  for (const book of await listChaseBooks()) {
-    const instrument = book.instrument
+  for (const book of books) {
     results.push(
       await resetChaseSignalState({
-        instrument,
+        instrument: book.instrument,
         accessToken: input.accessToken,
         force: input.force,
       })
@@ -100,7 +135,11 @@ export async function resetAllChaseSignalState(input: {
   }
   const failed = results.find(row => !row.ok)
   if (failed && !failed.ok) {
-    return { ok: false, error: failed.error, results }
+    return {
+      ok: false,
+      error: `${failed.error} Books reset before this failure were already changed.`,
+      results,
+    }
   }
   return { ok: true, results }
 }

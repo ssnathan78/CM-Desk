@@ -1,9 +1,11 @@
+import { normalizeChaseUnderlying } from "./chaseUniverse"
 import { RISK_STRATEGY_KEYS, type RiskStrategyKey } from "./trading/riskEngine"
 
 export type FlattenScope =
   | { kind: "all" }
   | { kind: "intraday" }
   | { kind: "strategy"; strategy: string }
+  | { kind: "chaseBook"; instrument: string }
   | { kind: "job"; jobId: string }
   | { kind: "position"; positionId: string }
 
@@ -13,9 +15,32 @@ export function parseFlattenScope(
   if (!body || typeof body !== "object") {
     return {
       ok: false,
-      error: "Specify exactly one of positionId, jobId, strategy, all, or intraday",
+      error: "Specify exactly one of positionId, jobId, strategy, instrument, all, or intraday",
     }
   }
+  const instrumentRaw = typeof body.instrument === "string" ? body.instrument.trim() : ""
+  if (instrumentRaw) {
+    const mixed =
+      body.all === true ||
+      body.intraday === true ||
+      body.scope === "intraday" ||
+      (typeof body.jobId === "string" && body.jobId.trim()) ||
+      (typeof body.positionId === "string" && body.positionId.trim())
+    if (mixed) {
+      return {
+        ok: false,
+        error: "Specify exactly one of positionId, jobId, strategy, instrument, all, or intraday",
+      }
+    }
+    const strategy = typeof body.strategy === "string" ? body.strategy.trim().toUpperCase() : ""
+    if (strategy && strategy !== "CHASE") {
+      return { ok: false, error: "instrument is only valid with strategy CHASE" }
+    }
+    const instrument = normalizeChaseUnderlying(instrumentRaw)
+    if (!instrument) return { ok: false, error: "Enter a Kite NFO underlying" }
+    return { ok: true, scope: { kind: "chaseBook", instrument } }
+  }
+
   const picks: FlattenScope[] = []
   if (body.all === true) picks.push({ kind: "all" })
   if (body.intraday === true || body.scope === "intraday") picks.push({ kind: "intraday" })
@@ -35,7 +60,7 @@ export function parseFlattenScope(
   if (picks.length !== 1) {
     return {
       ok: false,
-      error: "Specify exactly one of positionId, jobId, strategy, all, or intraday",
+      error: "Specify exactly one of positionId, jobId, strategy, instrument, all, or intraday",
     }
   }
   return { ok: true, scope: picks[0] }

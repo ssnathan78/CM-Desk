@@ -148,6 +148,7 @@ A failed **Kite position** read is a different rule: unknown quantity, not 0. Se
 | Live session flatten | `liveFlattenSessionBlock` in `lib/flattenNotice.ts`; also `placeOrder` | `__tests__/unit/flattenOpen.test.ts` |
 | Square-off book, tag match, Chase stop ownership, rollover gate | `lib/trading/exitSafety.ts` | `__tests__/unit/trading/exitSafety.test.ts` |
 | Risk row missing | `RiskSettingsUnavailableError` in `lib/trading/riskSettings.ts` | `__tests__/unit/trading/riskSettingsFailClosed.test.ts` |
-| Kill pause and halt are real | `runDeskKill` in `lib/killDesk.ts`, `killOperatorNotice` in `lib/killNotice.ts` | `__tests__/unit/criticalPaths.test.ts`, `__tests__/unit/trading/exitSafety.test.ts` |
+| Kill pause and halt are real | `runDeskKill` in `lib/killDesk.ts`, `killDialogNotice` in `lib/killNotice.ts` | `__tests__/unit/criticalPaths.test.ts`, `__tests__/unit/trading/exitSafety.test.ts` |
+| Operator confirm and result copy | `lib/operatorActionCopy.ts` | `__tests__/unit/operatorActionCopy.test.ts` |
 | 09:16 exit purpose and status | `planChaseMorningExit` in `lib/chaseFill.ts` | `__tests__/unit/strategies/chaseFill.test.ts` |
 | Paper vs live quantity | `lib/trading/bookSplit.ts` | `__tests__/unit/trading/bookSplit.test.ts` |

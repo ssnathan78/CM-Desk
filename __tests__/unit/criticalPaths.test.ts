@@ -106,6 +106,18 @@ describe("killDesk runDeskKill", () => {
     expect(result.deskHalted).toBe(true)
   })
 
+  it("reports flattenFailed when the flatten call throws and still records the halt", async () => {
+    const { flattenOpenPositions } = await import("../../lib/flattenOpen")
+    const mocked = flattenOpenPositions as jest.Mock
+    mocked.mockRejectedValueOnce(new Error("kite down"))
+    const { runDeskKill } = await import("../../lib/killDesk")
+    const { createTestUser } = await import("../support/sessionFactory")
+    const result = await runDeskKill("intraday", createTestUser())
+    expect(result.flattenFailed).toBe(true)
+    expect(result.deskHalted).toBe(true)
+    expect(result.liveLeftOpen).toBe(false)
+  })
+
   it("does not claim the desk is halted when the halt fails", async () => {
     const { haltDesk } = await import("../../lib/trading/riskSettings")
     const halt = haltDesk as jest.Mock

@@ -6,10 +6,10 @@ import { useState } from "react"
 
 import fetchJson, { type FetchJsonError } from "../../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../../lib/flattenNotice"
-import { killOperatorNotice } from "../../lib/killNotice"
+import { killDialogNotice } from "../../lib/killNotice"
+import type { ActionOutcome } from "../../lib/operatorActionCopy"
 import { color } from "../../src/tokens"
 import ConfirmAction from "../lib/ConfirmAction"
-import { useSnackbar } from "../lib/useSnackbar"
 
 const KILL_MESSAGES = {
   flatten: {
@@ -38,7 +38,7 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
   const [pendingScope, setPendingScope] = useState<Scope | null>(null)
   const [loading, setLoading] = useState(false)
   const [dialogError, setDialogError] = useState<string | null>(null)
-  const { showMessage } = useSnackbar()
+  const [outcome, setOutcome] = useState<ActionOutcome | null>(null)
 
   const runAction = async () => {
     if (!pendingScope) return
@@ -52,27 +52,28 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
           body: JSON.stringify({ all: true }),
         })
         const notice = flattenOperatorNotice(result, "Open books squared off.")
-        if (notice.severity === "error") showMessage(notice.text, "error")
+        setOutcome(notice)
       } else {
         const result = await fetchJson<{
           liveLeftOpen?: boolean
-          scope?: "intraday" | "all"
           chasePaused?: boolean
           deskHalted?: boolean
+          flattenFailed?: boolean
         }>("/api/kill-desk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ scope: pendingScope }),
         })
-        const notice = killOperatorNotice({
-          scope: pendingScope,
-          liveLeftOpen: Boolean(result.liveLeftOpen),
-          chasePaused: Boolean(result.chasePaused),
-          deskHalted: result.deskHalted !== false,
-        })
-        if (notice) showMessage(notice.text, notice.severity)
+        setOutcome(
+          killDialogNotice({
+            scope: pendingScope,
+            liveLeftOpen: Boolean(result.liveLeftOpen),
+            chasePaused: Boolean(result.chasePaused),
+            deskHalted: result.deskHalted === true,
+            flattenFailed: Boolean(result.flattenFailed),
+          })
+        )
       }
-      setPendingScope(null)
       await onDone()
     } catch (e) {
       const err = e as FetchJsonError
@@ -123,10 +124,12 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
         defaultFocus="cancel"
         busy={loading}
         error={dialogError}
+        outcome={outcome}
         onConfirm={runAction}
         onCancel={() => {
           setPendingScope(null)
           setDialogError(null)
+          setOutcome(null)
         }}
       />
       <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>

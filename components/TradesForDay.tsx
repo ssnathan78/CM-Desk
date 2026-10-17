@@ -8,6 +8,7 @@ import { STRATEGIES_DETAILS } from "../lib/constants"
 import { dashboardJobActions, isJobAborted } from "../lib/dashboardJobActions"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
+import { type ActionOutcome, chaseSquareOffCopy } from "../lib/operatorActionCopy"
 import { operatorJobError } from "../lib/operatorJobError"
 import BrokerOrders from "./lib/brokerOrders"
 import ConfirmAction from "./lib/ConfirmAction"
@@ -42,6 +43,7 @@ const WrapperComponent = (props: TradeJob) => {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [flattenOpen, setFlattenOpen] = useState(false)
   const [flattenLoading, setFlattenLoading] = useState(false)
+  const [flattenOutcome, setFlattenOutcome] = useState<ActionOutcome | null>(null)
   const [expanded, setExpanded] = useState(false)
   const { showMessage } = useSnackbar()
 
@@ -127,21 +129,20 @@ const WrapperComponent = (props: TradeJob) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(isChase ? { strategy: "CHASE" } : { jobId: props.id }),
       })
-      setFlattenOpen(false)
       await mutate("/api/trades_day")
       const notice = flattenOperatorNotice(
         result,
         isChase
-          ? "Chase squared off. The next signal can still be taken unless you pause or halt."
+          ? "Every Chase book was squared off. The next signal can still be taken unless you pause or halt."
           : "Position squared off."
       )
-      showMessage(notice.text, notice.severity)
+      setFlattenOutcome(notice)
     } catch (e) {
       const err = e as FetchJsonError
-      showMessage(
-        (err.data as { error?: string })?.error || err.message || "Could not square off",
-        "error"
-      )
+      setFlattenOutcome({
+        severity: "error",
+        text: (err.data as { error?: string })?.error || err.message || "Could not square off",
+      })
     } finally {
       setFlattenLoading(false)
     }
@@ -199,7 +200,10 @@ const WrapperComponent = (props: TradeJob) => {
               variant="outlined"
               color="warning"
               loading={flattenLoading}
-              onClick={() => setFlattenOpen(true)}
+              onClick={() => {
+                setFlattenOutcome(null)
+                setFlattenOpen(true)
+              }}
             >
               Square off
             </Button>
@@ -210,15 +214,20 @@ const WrapperComponent = (props: TradeJob) => {
       <ConfirmAction
         open={flattenOpen}
         tone="attention"
-        title={isChase ? "Square off Chase?" : "Square off this trade?"}
+        title={isChase ? chaseSquareOffCopy(null).title : "Square off this trade?"}
         message={
           isChase
-            ? "This flattens the current Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk."
-            : "This flattens the open legs for this job and stops further punches on it. It does not halt the desk. Chase is left running."
+            ? chaseSquareOffCopy(null).message
+            : "This flattens the open legs for this job and stops further punches on it. It does not halt the desk. Chase is left running. A live book is refused while the market is closed. The position and its stop stay."
         }
         confirmLabel="Square off"
+        busy={flattenLoading}
+        outcome={flattenOutcome}
         onConfirm={() => void handleSquareOff()}
-        onCancel={() => setFlattenOpen(false)}
+        onCancel={() => {
+          setFlattenOpen(false)
+          setFlattenOutcome(null)
+        }}
       />
 
       {expanded ? (

@@ -98,6 +98,7 @@ export async function runDeskKill(scope: KillDeskScope, user: KiteUser) {
     chasePaused,
     deskHalted,
     liveLeftOpen,
+    flattenFailed,
   }
 }
 

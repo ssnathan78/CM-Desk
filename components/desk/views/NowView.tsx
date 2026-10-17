@@ -32,7 +32,7 @@ export default function NowView({
   todayRows: TodayRow[]
   realizedRows: RealizedRow[]
   portfolio?: Portfolio | null
-  onChaseSquareOff: () => void
+  onChaseSquareOff: (instrument: string) => void
   onEmergencyDone: () => Promise<void>
 }) {
   return (

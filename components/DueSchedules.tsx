@@ -5,6 +5,8 @@ import { useState } from "react"
 import useSWR from "swr"
 import { STRATEGIES_DETAILS } from "../lib/constants"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
+import { dueSchedulePresentation } from "../lib/operatorActionCopy"
+import ConfirmAction from "./lib/ConfirmAction"
 import PageSection from "./lib/PageSection"
 
 type DueRow = {
@@ -18,7 +20,23 @@ export default function DueSchedules() {
   const { data, mutate } = useSWR<DueRow[]>("/api/schedules")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [pending, setPending] = useState<DueRow | null>(null)
   if (!data?.length) return null
+
+  const pendingName = pending?.template?.name || "Template"
+  const pendingStrategy = pending?.template?.strategy
+  const pendingLabel = pendingStrategy
+    ? STRATEGIES_DETAILS[pendingStrategy]?.heading || pendingStrategy
+    : ""
+  const pendingDetail = [pendingLabel, pending?.template?.instrument].filter(Boolean).join(" · ")
+  const presentation = pending
+    ? dueSchedulePresentation({
+        now: new Date(),
+        runAt: pending.runAt,
+        name: pendingName,
+        detail: pendingDetail,
+      })
+    : null
 
   return (
     <PageSection
@@ -30,6 +48,40 @@ export default function DueSchedules() {
           {error}
         </Alert>
       ) : null}
+      <ConfirmAction
+        open={Boolean(pending && presentation)}
+        tone="attention"
+        title={presentation?.title ?? "Schedule?"}
+        message={presentation?.message}
+        confirmLabel={presentation?.runsNow ? "Run now" : "Queue"}
+        onCancel={() => setPending(null)}
+        onConfirm={async () => {
+          if (!pending || !presentation) return
+          const row = pending
+          const runsNow = presentation.runsNow
+          setPending(null)
+          setBusy(row.id)
+          setError(null)
+          try {
+            await fetchJson("/api/schedules", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "today",
+                templateId: row.templateId,
+                runAt: row.runAt,
+                runNow: runsNow,
+              }),
+            })
+            await mutate()
+          } catch (e) {
+            const err = e as FetchJsonError
+            setError(err.message || "Could not schedule")
+          } finally {
+            setBusy(null)
+          }
+        }}
+      />
       <Stack spacing={1}>
         {data.map(row => {
           const name = row.template?.name || "Template"
@@ -50,29 +102,16 @@ export default function DueSchedules() {
                 size="small"
                 variant="contained"
                 disabled={busy === row.id}
-                onClick={async () => {
-                  setBusy(row.id)
-                  setError(null)
-                  try {
-                    await fetchJson("/api/schedules", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        action: "today",
-                        templateId: row.templateId,
-                        runAt: row.runAt,
-                      }),
-                    })
-                    await mutate()
-                  } catch (e) {
-                    const err = e as FetchJsonError
-                    setError(err.message || "Could not schedule")
-                  } finally {
-                    setBusy(null)
-                  }
-                }}
+                onClick={() => setPending(row)}
               >
-                Schedule
+                {
+                  dueSchedulePresentation({
+                    now: new Date(),
+                    runAt: row.runAt,
+                    name,
+                    detail: [label, row.template?.instrument].filter(Boolean).join(" · "),
+                  }).buttonLabel
+                }
               </Button>
             </Stack>
           )

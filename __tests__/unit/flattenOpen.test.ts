@@ -25,12 +25,22 @@ describe("parseFlattenScope", () => {
       ok: true,
       scope: { kind: "position", positionId: "pos-1" },
     })
+    expect(parseFlattenScope({ strategy: "CHASE", instrument: "nifty" })).toEqual({
+      ok: true,
+      scope: { kind: "chaseBook", instrument: "NIFTY" },
+    })
+    expect(parseFlattenScope({ instrument: "RELIANCE" })).toEqual({
+      ok: true,
+      scope: { kind: "chaseBook", instrument: "RELIANCE" },
+    })
   })
 
   it("rejects missing, unknown, or mixed selectors", () => {
     expect(parseFlattenScope({}).ok).toBe(false)
     expect(parseFlattenScope({ strategy: "IRON_FLY" }).ok).toBe(false)
     expect(parseFlattenScope({ all: true, strategy: "CHASE" }).ok).toBe(false)
+    expect(parseFlattenScope({ strategy: "ATM_STRADDLE", instrument: "NIFTY" }).ok).toBe(false)
+    expect(parseFlattenScope({ instrument: "NIFTY26OCTFUT" }).ok).toBe(false)
   })
 })
 

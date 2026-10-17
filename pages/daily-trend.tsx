@@ -3,6 +3,7 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined"
 import PauseIcon from "@mui/icons-material/Pause"
 import PlayArrowIcon from "@mui/icons-material/PlayArrow"
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -42,14 +43,21 @@ import {
   mergeDailyTrendBookSave,
   parseOptionalDailyTrendBulkForm,
 } from "../lib/dailyTrend/engine"
+import { DAILY_TREND_FIELD_HELP } from "../lib/dailyTrend/fieldHelp"
 import {
   DAILY_TREND_TABLE_COLUMNS,
   DAILY_TREND_VISIBLE_COLUMNS_KEY,
   type DailyTrendTableColumnId,
   dailyTrendColumnsInOrder,
 } from "../lib/dailyTrend/tableColumns"
-import { DAILY_TREND_FIELD_HELP } from "../lib/dailyTrend/fieldHelp"
 import fetchJson from "../lib/fetchJson"
+import {
+  type ActionOutcome,
+  dailyTrendEvaluateNotice,
+  removeDailyTrendConfirm,
+  symbolOffConfirm,
+  unsavedRuntimeNote,
+} from "../lib/operatorActionCopy"
 import {
   defaultVisibleIds,
   readVisibleColumns,
@@ -121,7 +129,15 @@ type Payload = {
     message: string | null
     shown: boolean
   }
-  decisions?: { symbol: string; action: string; reason: string; state?: string }[]
+  active?: boolean
+  execution?: "report" | "manual" | "auto"
+  decisions?: {
+    symbol: string
+    action: string
+    reason: string
+    state?: string
+    submitted?: { ok: boolean; message: string } | null
+  }[]
 }
 
 const EMPTY: Book = {
@@ -161,8 +177,11 @@ export default function DailyTrendPage() {
     entryStyle: "",
   })
   const [pendingConfirm, setPendingConfirm] = useState<
-    "apply-all" | "evaluate-send" | "turn-on" | "turn-off" | null
+    "apply-all" | "evaluate-send" | "turn-on" | "turn-off" | "turn-off-selected" | null
   >(null)
+  const [pendingOff, setPendingOff] = useState<Book | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null)
+  const [evaluateOutcome, setEvaluateOutcome] = useState<ActionOutcome | null>(null)
   const [selectedSymbols, setSelectedSymbols] = useState<Set<string>>(() => new Set())
   const [rowEdits, setRowEdits] = useState<Record<string, DailyTrendInlineRowPatch>>({})
   const [visibleColumns, setVisibleColumns] = useState<DailyTrendTableColumnId[]>(() =>
@@ -272,17 +291,6 @@ export default function DailyTrendPage() {
       const next = new Set(current)
       if (on) next.add(symbol)
       else next.delete(symbol)
-      return next
-    })
-  }
-
-  function toggleAllVisible(on: boolean) {
-    setSelectedSymbols(current => {
-      const next = new Set(current)
-      for (const book of books) {
-        if (on) next.add(book.symbol)
-        else next.delete(book.symbol)
-      }
       return next
     })
   }
@@ -546,11 +554,14 @@ export default function DailyTrendPage() {
         open={pendingConfirm === "evaluate-send"}
         tone="attention"
         title="Evaluate and send?"
-        message="Send the daily-trend orders this evaluation wants?"
+        message="Send the daily-trend orders this evaluation wants? Saved execution is used. Report only sends nothing."
         confirmLabel="Evaluate and send"
-        onCancel={() => setPendingConfirm(null)}
-        onConfirm={async () => {
+        outcome={evaluateOutcome}
+        onCancel={() => {
           setPendingConfirm(null)
+          setEvaluateOutcome(null)
+        }}
+        onConfirm={async () => {
           setBusy(true)
           try {
             const result = await fetchJson<Payload>("/api/daily-trend", {
@@ -560,9 +571,19 @@ export default function DailyTrendPage() {
             })
             setDecisions(result.decisions ?? [])
             await mutate()
-            showMessage("Evaluate-and-send finished", "success")
+            setEvaluateOutcome(
+              dailyTrendEvaluateNotice({
+                execute: true,
+                active: result.active !== false,
+                savedExecution: result.execution ?? data?.config.execution ?? "report",
+                decisions: result.decisions ?? [],
+              })
+            )
           } catch (error) {
-            showMessage(error instanceof Error ? error.message : "Evaluate failed", "error")
+            setEvaluateOutcome({
+              severity: "error",
+              text: error instanceof Error ? error.message : "Evaluate failed",
+            })
           } finally {
             setBusy(false)
           }
@@ -581,13 +602,63 @@ export default function DailyTrendPage() {
       />
       <ConfirmAction
         open={pendingConfirm === "turn-off"}
-        title="Turn all symbols off?"
-        message={`Turn all ${bookCount} symbols off? Off is fully dark: no new buy and no stop. Shares already at the broker stay there.`}
+        tone="attention"
+        title={symbolOffConfirm((data?.books ?? []).map(book => book.symbol)).title}
+        message={symbolOffConfirm((data?.books ?? []).map(book => book.symbol)).message}
         confirmLabel="Turn all off"
         onCancel={() => setPendingConfirm(null)}
         onConfirm={async () => {
           setPendingConfirm(null)
           await setEverySymbol(false)
+        }}
+      />
+      <ConfirmAction
+        open={pendingConfirm === "turn-off-selected"}
+        tone="attention"
+        title={symbolOffConfirm([...selectedSymbols]).title}
+        message={symbolOffConfirm([...selectedSymbols]).message}
+        confirmLabel="Turn off"
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={async () => {
+          setPendingConfirm(null)
+          await setSelectedEnabled(false)
+        }}
+      />
+      <ConfirmAction
+        open={Boolean(pendingOff)}
+        tone="attention"
+        title={pendingOff ? symbolOffConfirm([pendingOff.symbol]).title : "Turn off?"}
+        message={pendingOff ? symbolOffConfirm([pendingOff.symbol]).message : ""}
+        confirmLabel="Turn off"
+        onCancel={() => setPendingOff(null)}
+        onConfirm={async () => {
+          const book = pendingOff
+          setPendingOff(null)
+          if (book) await saveBook({ ...book, enabled: false })
+        }}
+      />
+      <ConfirmAction
+        open={Boolean(pendingRemove)}
+        tone="attention"
+        title={pendingRemove ? removeDailyTrendConfirm(pendingRemove).title : "Remove?"}
+        message={pendingRemove ? removeDailyTrendConfirm(pendingRemove).message : ""}
+        confirmLabel="Remove from list"
+        onCancel={() => setPendingRemove(null)}
+        onConfirm={async () => {
+          const symbol = pendingRemove
+          setPendingRemove(null)
+          if (!symbol) return
+          try {
+            await fetchJson("/api/daily-trend", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "remove-book", symbol }),
+            })
+            await mutate()
+            showMessage(`${symbol} removed from the list. Shares at the broker stay.`, "info")
+          } catch (error) {
+            showMessage(error instanceof Error ? error.message : "Could not remove", "error")
+          }
         }}
       />
       <Stack spacing={3}>
@@ -611,13 +682,13 @@ export default function DailyTrendPage() {
           {runtime ? (
             <StrategyPermissionLine
               strategyKey="DAILY_TREND"
-              engineOn={runtime.active}
+              engineOn={data?.config.active ?? false}
               pageExecutionLabel={
-                runtime.execution === "report"
-                  ? "Report only"
-                  : runtime.execution === "manual"
-                    ? "Manual send"
-                    : "Auto"
+                data?.config.execution === "manual"
+                  ? "Manual send"
+                  : data?.config.execution === "auto"
+                    ? "Auto"
+                    : "Report only"
               }
             />
           ) : (
@@ -630,28 +701,53 @@ export default function DailyTrendPage() {
           </PageSection>
         ) : (
           <PageSection title="Engine & execution">
+            {data?.config
+              ? (() => {
+                  const note = unsavedRuntimeNote(
+                    { active: data.config.active, execution: data.config.execution },
+                    { active: runtime.active, execution: runtime.execution }
+                  )
+                  return note ? (
+                    <Alert severity="warning" sx={{ mb: 1.5 }}>
+                      {note}
+                    </Alert>
+                  ) : null
+                })()
+              : null}
             <DailyTrendEngineToolbar
               runtime={runtime}
+              sendEnabled={data?.config.execution !== "report"}
               busy={busy}
               pull={pull ?? null}
               onPatch={patch => setConfig({ ...runtime, ...patch })}
               onSave={() => void saveRuntime()}
               onPullHistory={() => void pullHistory()}
               onPullMissing={() => void pullHistory(true)}
-              onEvaluate={() =>
-                void fetchJson<Payload>("/api/daily-trend", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "evaluate", execute: false }),
-                }).then(result => {
-                  setDecisions(result.decisions ?? [])
-                  showMessage(
-                    "Evaluation finished. No orders were required in report mode.",
-                    "success"
-                  )
-                })
-              }
-              onEvaluateSend={() => setPendingConfirm("evaluate-send")}
+              onEvaluate={() => {
+                void (async () => {
+                  try {
+                    const result = await fetchJson<Payload>("/api/daily-trend", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "evaluate", execute: false }),
+                    })
+                    setDecisions(result.decisions ?? [])
+                    const notice = dailyTrendEvaluateNotice({
+                      execute: false,
+                      active: result.active !== false,
+                      savedExecution: result.execution ?? data?.config.execution ?? "report",
+                      decisions: result.decisions ?? [],
+                    })
+                    showMessage(notice.text, notice.severity)
+                  } catch (error) {
+                    showMessage(error instanceof Error ? error.message : "Evaluate failed", "error")
+                  }
+                })()
+              }}
+              onEvaluateSend={() => {
+                setEvaluateOutcome(null)
+                setPendingConfirm("evaluate-send")
+              }}
             />
           </PageSection>
         )}
@@ -696,9 +792,9 @@ export default function DailyTrendPage() {
           ) : null}
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
             Bulk patch: fill only fields to change. Blank leaves each symbol unchanged. Apply to all
-            writes every symbol. Save selected also applies filled bulk fields to checked rows
-            (inline cells win over bulk for budget, EMA, and buffer). Turn selected on/off changes
-            engine only. Does not change pause, status, or stop.
+            writes every symbol. Checked rows show unsaved budget, EMA, and buffer until Save
+            selected. Turn selected off is fully dark for those symbols: no new buy and no stop. The
+            stored stop price is kept. Pause is separate and still allows the stop.
           </Typography>
           <Box
             sx={{
@@ -776,7 +872,7 @@ export default function DailyTrendPage() {
             <Button
               variant="outlined"
               disabled={busy || selectedSymbols.size === 0}
-              onClick={() => void setSelectedEnabled(false)}
+              onClick={() => setPendingConfirm("turn-off-selected")}
             >
               Turn selected off ({selectedSymbols.size})
             </Button>
@@ -866,11 +962,24 @@ export default function DailyTrendPage() {
                     <Checkbox
                       size="small"
                       indeterminate={
-                        selectedSymbols.size > 0 && selectedSymbols.size < books.length
+                        pageBooks.some(book => selectedSymbols.has(book.symbol)) &&
+                        !pageBooks.every(book => selectedSymbols.has(book.symbol))
                       }
-                      checked={books.length > 0 && selectedSymbols.size === books.length}
-                      onChange={(_, checked) => toggleAllVisible(checked)}
-                      slotProps={{ input: { "aria-label": "Select all visible symbols" } }}
+                      checked={
+                        pageBooks.length > 0 &&
+                        pageBooks.every(book => selectedSymbols.has(book.symbol))
+                      }
+                      onChange={(_, checked) => {
+                        setSelectedSymbols(current => {
+                          const next = new Set(current)
+                          for (const book of pageBooks) {
+                            if (checked) next.add(book.symbol)
+                            else next.delete(book.symbol)
+                          }
+                          return next
+                        })
+                      }}
+                      slotProps={{ input: { "aria-label": "Select symbols on this page" } }}
                     />
                   </TableCell>
                   <Sortable
@@ -929,7 +1038,11 @@ export default function DailyTrendPage() {
                         <Switch
                           size="small"
                           checked={book.enabled}
-                          onChange={e => void saveBook({ ...book, enabled: e.target.checked })}
+                          slotProps={{ input: { "aria-label": `On ${book.symbol}` } }}
+                          onChange={e => {
+                            if (e.target.checked) void saveBook({ ...book, enabled: true })
+                            else setPendingOff(book)
+                          }}
                         />
                       </TableCell>
                       <TableCell
@@ -940,7 +1053,13 @@ export default function DailyTrendPage() {
                             <EditOutlinedIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title={book.paused ? "Resume" : "Pause"}>
+                        <Tooltip
+                          title={
+                            book.paused
+                              ? "Resume new buys. The stop still sells."
+                              : "Pause new buys. The stop still sells."
+                          }
+                        >
                           <IconButton
                             size="small"
                             onClick={() => void saveBook({ ...book, paused: !book.paused })}
@@ -952,19 +1071,11 @@ export default function DailyTrendPage() {
                             )}
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Remove">
+                        <Tooltip title="Remove from list. Shares at the broker stay.">
                           <IconButton
                             size="small"
-                            onClick={() =>
-                              void fetchJson("/api/daily-trend", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  action: "remove-book",
-                                  symbol: book.symbol,
-                                }),
-                              }).then(() => mutate())
-                            }
+                            aria-label={`Remove ${book.symbol}`}
+                            onClick={() => setPendingRemove(book.symbol)}
                           >
                             <DeleteOutlinedIcon fontSize="small" />
                           </IconButton>

@@ -12,6 +12,7 @@ import {
   Typography,
 } from "@mui/material"
 import { useEffect, useRef, useState } from "react"
+import type { ActionOutcome } from "../../lib/operatorActionCopy"
 import { color } from "../../src/tokens"
 import BookBadge from "../figures/BookBadge"
 
@@ -29,6 +30,8 @@ export type ConfirmActionProps = {
   defaultFocus?: "cancel" | "confirm"
   busy?: boolean
   error?: string | null
+  /** Set after the request returns. The confirm button hides so the result stays on this dialog. */
+  outcome?: ActionOutcome | null
   onConfirm: () => void | Promise<void>
   onCancel: () => void
 }
@@ -47,6 +50,7 @@ export default function ConfirmAction({
   defaultFocus = "cancel",
   busy,
   error,
+  outcome,
   onConfirm,
   onCancel,
 }: ConfirmActionProps) {
@@ -130,21 +134,28 @@ export default function ConfirmAction({
             {error}
           </Alert>
         ) : null}
+        {outcome ? (
+          <Alert severity={outcome.severity} sx={{ mt: 1.5 }}>
+            {outcome.text}
+          </Alert>
+        ) : null}
       </DialogContent>
       <DialogActions sx={{ flexWrap: "wrap", gap: 1, px: 2, pb: 2 }}>
         <Button ref={cancelRef} onClick={onCancel} disabled={working}>
-          {cancelLabel}
+          {outcome && cancelLabel === "Cancel" ? "Close" : cancelLabel}
         </Button>
-        <Button
-          ref={confirmRef}
-          color={confirmColor}
-          variant="contained"
-          sx={confirmSx}
-          disabled={working}
-          onClick={() => void handleConfirm()}
-        >
-          {working ? "Working…" : confirmLabel}
-        </Button>
+        {outcome ? null : (
+          <Button
+            ref={confirmRef}
+            color={confirmColor}
+            variant="contained"
+            sx={confirmSx}
+            disabled={working}
+            onClick={() => void handleConfirm()}
+          >
+            {working ? "Working…" : confirmLabel}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )

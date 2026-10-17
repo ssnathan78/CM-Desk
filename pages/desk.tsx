@@ -35,6 +35,7 @@ import {
 import fetchJson from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { formatIstDateTime } from "../lib/format"
+import { type ActionOutcome, chaseSquareOffCopy } from "../lib/operatorActionCopy"
 import type { FeedClearMode } from "../lib/trading/feedWindow"
 import { type HistoryPreset, historyRange } from "../lib/trading/historyRange"
 import { groupStrategyRealized } from "../lib/trading/todayGroups"
@@ -97,7 +98,12 @@ export default function DeskPage() {
   const setTab = (next: DeskTab) => setDeskRoute(viewForTab(next), next)
   const setView = (nextView: DeskView) => setDeskRoute(nextView, defaultTabForView(nextView))
   const [reconciling, setReconciling] = useState(false)
-  const [reconMsg, setReconMsg] = useState<string | null>(null)
+  const [reconMsg, setReconMsg] = useState<{
+    text: string
+    severity: "success" | "error"
+  } | null>(null)
+  const [actionOutcome, setActionOutcome] = useState<ActionOutcome | null>(null)
+  const [chaseFlatten, setChaseFlatten] = useState<string | null>(null)
   const [phantomClear, setPhantomClear] = useState<{
     id: string
     symbol: string
@@ -180,7 +186,8 @@ export default function DeskPage() {
           <PositionRowActions
             symbol={row.tradingsymbol}
             qty={Number(row.quantity)}
-            onSquareOff={() =>
+            onSquareOff={() => {
+              setActionOutcome(null)
               setFlattenRow({
                 id: row.id,
                 symbol: row.tradingsymbol,
@@ -188,15 +195,16 @@ export default function DeskPage() {
                 book: String(row.provenance || "—"),
                 strategy: String(row.strategy || ""),
               })
-            }
-            onClearPhantom={() =>
+            }}
+            onClearPhantom={() => {
+              setActionOutcome(null)
               setPhantomClear({
                 id: row.id,
                 symbol: row.tradingsymbol,
                 qty: Number(row.quantity),
                 book: String(row.provenance || "—"),
               })
-            }
+            }}
           />
         ) : null
       ),
@@ -240,8 +248,8 @@ export default function DeskPage() {
   return (
     <Layout title="Desk" maxWidth="xl">
       {reconMsg ? (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setReconMsg(null)}>
-          {reconMsg}
+        <Alert severity={reconMsg.severity} sx={{ mb: 2 }} onClose={() => setReconMsg(null)}>
+          {reconMsg.text}
         </Alert>
       ) : null}
       <ConfirmAction
@@ -275,7 +283,10 @@ export default function DeskPage() {
             if (clearOpen.feed === "signals") await mutateSignals()
             else await mutateAlerts()
           } catch (e) {
-            setReconMsg(e instanceof Error ? e.message : "Clear failed")
+            setReconMsg({
+              text: e instanceof Error ? e.message : "Clear failed",
+              severity: "error",
+            })
           } finally {
             setClearOpen(null)
           }
@@ -287,9 +298,12 @@ export default function DeskPage() {
         title="Clear the paper book?"
         message="Removes paper and mock orders, fills, trades, decisions, flat paper positions, and the activity tied to them. Live and reconciled rows stay. Realized profit that a live position still carries from an earlier paper cycle is removed. Square off any open paper position and cancel working paper orders first. The broker is not contacted."
         confirmLabel="Clear paper book"
-        onCancel={() => setPaperClearOpen(false)}
-        onConfirm={async () => {
+        outcome={paperClearOpen ? actionOutcome : null}
+        onCancel={() => {
           setPaperClearOpen(false)
+          setActionOutcome(null)
+        }}
+        onConfirm={async () => {
           try {
             const result = await fetchJson<{ counts: Record<string, number> }>(
               "/api/desk/positions",
@@ -300,9 +314,10 @@ export default function DeskPage() {
               }
             )
             const c = result.counts
-            setReconMsg(
-              `Cleared paper book: ${c.orders ?? 0} orders, ${c.trades ?? 0} trades, ${c.positionsReset ?? 0} live rows reset`
-            )
+            setActionOutcome({
+              severity: "success",
+              text: `Cleared paper book: ${c.orders ?? 0} orders, ${c.trades ?? 0} trades, ${c.positionsReset ?? 0} live rows reset. The broker was not contacted.`,
+            })
             await Promise.all([
               mutatePositions(),
               mutatePortfolio(),
@@ -311,7 +326,10 @@ export default function DeskPage() {
               mutateActivity(),
             ])
           } catch (e) {
-            setReconMsg(e instanceof Error ? e.message : "Clear paper book failed")
+            setActionOutcome({
+              severity: "error",
+              text: e instanceof Error ? e.message : "Clear paper book failed",
+            })
           }
         }}
       />
@@ -325,7 +343,11 @@ export default function DeskPage() {
             : ""
         }
         confirmLabel="Square off"
-        onCancel={() => setFlattenRow(null)}
+        outcome={flattenRow ? actionOutcome : null}
+        onCancel={() => {
+          setFlattenRow(null)
+          setActionOutcome(null)
+        }}
         onConfirm={async () => {
           if (!flattenRow) return
           try {
@@ -335,13 +357,14 @@ export default function DeskPage() {
               body: JSON.stringify({ positionId: flattenRow.id }),
             })
             const notice = flattenOperatorNotice(result, `Squared off ${flattenRow.symbol}`)
-            setReconMsg(notice.text)
+            setActionOutcome(notice)
             await mutatePositions()
             await mutatePortfolio()
           } catch (e) {
-            setReconMsg(e instanceof Error ? e.message : "Square off failed")
-          } finally {
-            setFlattenRow(null)
+            setActionOutcome({
+              severity: "error",
+              text: e instanceof Error ? e.message : "Square off failed",
+            })
           }
         }}
       />
@@ -355,7 +378,11 @@ export default function DeskPage() {
             : ""
         }
         confirmLabel="Clear phantom"
-        onCancel={() => setPhantomClear(null)}
+        outcome={phantomClear ? actionOutcome : null}
+        onCancel={() => {
+          setPhantomClear(null)
+          setActionOutcome(null)
+        }}
         onConfirm={async () => {
           if (!phantomClear) return
           try {
@@ -368,13 +395,50 @@ export default function DeskPage() {
                 confirm: "CLEAR",
               }),
             })
-            setReconMsg(`Cleared phantom ${phantomClear.symbol}`)
+            setActionOutcome({
+              severity: "success",
+              text: `Cleared phantom ${phantomClear.symbol}. No Kite order was sent.`,
+            })
             await mutatePositions()
             await mutatePortfolio()
           } catch (e) {
-            setReconMsg(e instanceof Error ? e.message : "Clear phantom failed")
-          } finally {
-            setPhantomClear(null)
+            setActionOutcome({
+              severity: "error",
+              text: e instanceof Error ? e.message : "Clear phantom failed",
+            })
+          }
+        }}
+      />
+      <ConfirmAction
+        open={Boolean(chaseFlatten)}
+        tone="attention"
+        title={chaseSquareOffCopy(chaseFlatten).title}
+        message={chaseSquareOffCopy(chaseFlatten).message}
+        confirmLabel="Square off"
+        outcome={chaseFlatten ? actionOutcome : null}
+        onCancel={() => {
+          setChaseFlatten(null)
+          setActionOutcome(null)
+        }}
+        onConfirm={async () => {
+          if (!chaseFlatten) return
+          try {
+            const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ strategy: "CHASE", instrument: chaseFlatten }),
+            })
+            const notice = flattenOperatorNotice(
+              result,
+              `${chaseFlatten} squared off. Other Chase books stay.`
+            )
+            setActionOutcome(notice)
+            await Promise.all([mutatePositions(), mutatePortfolio()])
+          } catch (e) {
+            setActionOutcome({
+              severity: "error",
+              text: e instanceof Error ? e.message : "Square off failed",
+            })
           }
         }}
       />
@@ -410,7 +474,10 @@ export default function DeskPage() {
           todayRows={todayRows}
           realizedRows={realizedRows}
           portfolio={p}
-          onChaseSquareOff={() => setDeskRoute("books", "positions")}
+          onChaseSquareOff={instrument => {
+            setActionOutcome(null)
+            setChaseFlatten(instrument)
+          }}
           onEmergencyDone={async () => {
             await Promise.all([mutatePortfolio(), mutatePositions(), mutateOrders()])
           }}
@@ -439,10 +506,14 @@ export default function DeskPage() {
           onHistoryPreset={setHistoryPreset}
           onHistoryFrom={setHistoryFrom}
           onHistoryTo={setHistoryTo}
-          onClearPaper={() => setPaperClearOpen(true)}
+          onClearPaper={() => {
+            setActionOutcome(null)
+            setPaperClearOpen(true)
+          }}
           onPositionDetail={setPositionDetail}
           onSquareOffDetail={() => {
             if (!positionDetail) return
+            setActionOutcome(null)
             setFlattenRow({
               id: positionDetail.id,
               symbol: positionDetail.tradingsymbol,
@@ -453,6 +524,7 @@ export default function DeskPage() {
           }}
           onClearPhantomDetail={() => {
             if (!positionDetail) return
+            setActionOutcome(null)
             setPhantomClear({
               id: positionDetail.id,
               symbol: positionDetail.tradingsymbol,
@@ -489,7 +561,10 @@ export default function DeskPage() {
           reconCols={reconCols}
           tradeBook={tradeBook}
           onTradeBook={setTradeBook}
-          onClearPaper={() => setPaperClearOpen(true)}
+          onClearPaper={() => {
+            setActionOutcome(null)
+            setPaperClearOpen(true)
+          }}
           onHistoryPreset={setHistoryPreset}
           onHistoryFrom={setHistoryFrom}
           onHistoryTo={setHistoryTo}
@@ -515,17 +590,24 @@ export default function DeskPage() {
                 brokerOrdersSeen: number
                 mismatches: number
               }>("/api/desk/reconcile", { method: "POST" })
-              setReconMsg(
-                `Reconciled: ${result.appliedFills} fills applied, ${result.brokerOrdersSeen} broker orders, ${result.mismatches} mismatches`
-              )
+              setReconMsg({
+                text: `Reconciled: ${result.appliedFills} fills applied, ${result.brokerOrdersSeen} broker orders, ${result.mismatches} mismatches`,
+                severity: "success",
+              })
               await mutatePortfolio()
             } catch (e) {
-              setReconMsg(e instanceof Error ? e.message : "Reconcile failed")
+              setReconMsg({
+                text: e instanceof Error ? e.message : "Reconcile failed",
+                severity: "error",
+              })
             } finally {
               setReconciling(false)
             }
           }}
-          onPaperClear={() => setPaperClearOpen(true)}
+          onPaperClear={() => {
+            setActionOutcome(null)
+            setPaperClearOpen(true)
+          }}
           onChaseResetDone={() => mutatePortfolio()}
           onReconcileChanged={async () => {
             await Promise.all([

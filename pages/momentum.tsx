@@ -4,6 +4,7 @@ import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
+  Alert,
   Box,
   Button,
   Chip,
@@ -13,14 +14,14 @@ import {
   Skeleton,
   Stack,
   Table,
-  Tooltip,
-  Typography,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
   TableSortLabel,
   TextField,
+  Tooltip,
+  Typography,
 } from "@mui/material"
 import Link from "next/link"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
@@ -32,18 +33,19 @@ import {
   SettingsSwitchField,
 } from "../components/forms/SettingsFields"
 import Layout from "../components/Layout"
-import MomentumPlannedOrdersPanel from "../components/momentum/MomentumPlannedOrdersPanel"
 import ConfirmAction from "../components/lib/ConfirmAction"
 import PageSection from "../components/lib/PageSection"
 import ScrollTable from "../components/lib/ScrollTable"
 import StrategyTablePagination from "../components/lib/StrategyTablePagination"
 import TableColumnMenu from "../components/lib/TableColumnMenu"
 import { useSnackbar } from "../components/lib/useSnackbar"
+import MomentumPlannedOrdersPanel from "../components/momentum/MomentumPlannedOrdersPanel"
 import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import fetchJson from "../lib/fetchJson"
 import { MOMENTUM_FIELD_HELP } from "../lib/momentum/fieldHelp"
 import { diffRebalancePreview } from "../lib/momentum/rebalanceDiff"
 import { DEFAULT_MOMENTUM_CONFIG, type MomentumConfig } from "../lib/momentum/types"
+import { cashSubmitNotice, unsavedRuntimeNote } from "../lib/operatorActionCopy"
 import type { ColumnDef } from "../lib/ui/columnVisibility"
 import {
   defaultVisibleIds,
@@ -324,6 +326,9 @@ export default function MomentumPage() {
         orders?: Report["orders"]
         preview?: boolean
         message?: string
+        results?: Array<{ symbol: string; side: string; ok: boolean; message: string }>
+        dayMarked?: boolean
+        capitalReduced?: boolean
       }>("/api/momentum", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -343,7 +348,20 @@ export default function MomentumPage() {
         lastPreviewRef.current = null
       }
       await mutate()
-      showMessage(result.message || ok, result.message ? "info" : "success")
+      if (
+        body.execute === true &&
+        (body.action === "rebalance" || body.action === "deploy" || body.action === "trim")
+      ) {
+        const notice = cashSubmitNotice({
+          action: body.action,
+          results: Array.isArray(result.results) ? result.results : [],
+          dayMarked: Boolean(result.dayMarked),
+          capitalReduced: Boolean(result.capitalReduced),
+        })
+        showMessage(notice.text, notice.severity)
+      } else {
+        showMessage(result.message || ok, result.message ? "info" : "success")
+      }
       return result
     } catch (error) {
       showMessage(error instanceof Error ? error.message : "Request failed", "error")
@@ -453,13 +471,13 @@ export default function MomentumPage() {
           {config ? (
             <StrategyPermissionLine
               strategyKey="MOMENTUM"
-              engineOn={config.active}
+              engineOn={data?.config.active ?? false}
               pageExecutionLabel={
-                config.execution === "report"
-                  ? "Report only"
-                  : config.execution === "manual"
-                    ? "Manual send"
-                    : "Auto on rebalance day"
+                data?.config.execution === "manual"
+                  ? "Manual send"
+                  : data?.config.execution === "auto"
+                    ? "Auto on rebalance day"
+                    : "Report only"
               }
               extra={
                 config.rebalance === "adhoc"
@@ -702,6 +720,21 @@ export default function MomentumPage() {
                 </Box>
               </AccordionDetails>
             </Accordion>
+            {data?.config
+              ? (() => {
+                  const saved = data?.config
+                  if (!saved) return null
+                  const note = unsavedRuntimeNote(
+                    { active: saved.active, execution: saved.execution },
+                    { active: config.active, execution: config.execution }
+                  )
+                  return note ? (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      {note}
+                    </Alert>
+                  ) : null
+                })()
+              : null}
             <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
               <Button variant="contained" disabled={busy} onClick={() => void save()}>
                 Save
@@ -709,7 +742,7 @@ export default function MomentumPage() {
               <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory()}>
                 {pullWatch?.running
                   ? `Pulling ${pullWatch.done} of ${pullWatch.total || "…"}`
-                  : "Pull history now"}
+                  : "Save and pull history"}
               </Button>
               <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory(true)}>
                 Retry missing
@@ -724,7 +757,7 @@ export default function MomentumPage() {
               </Button>
               <Button
                 color="warning"
-                disabled={busy || config.execution === "report"}
+                disabled={busy || data?.config.execution === "report"}
                 onClick={() => setPendingOrder("rebalance")}
               >
                 Send rebalance
@@ -771,7 +804,7 @@ export default function MomentumPage() {
                           disabled={
                             busy ||
                             data?.config.weighting !== "drift" ||
-                            config.execution === "report"
+                            data?.config.execution === "report"
                           }
                           onClick={() => setPendingOrder("deploy")}
                         >
@@ -791,9 +824,7 @@ export default function MomentumPage() {
                         helperText={MOMENTUM_FIELD_HELP.trimPct}
                         helperPlacement="tooltip"
                         value={trimPct}
-                        onChange={value =>
-                          setTrimPct(Math.min(99, Math.max(1, Math.round(value))))
-                        }
+                        onChange={value => setTrimPct(Math.min(99, Math.max(1, Math.round(value))))}
                       />
                       <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
                         <Button
@@ -812,7 +843,7 @@ export default function MomentumPage() {
                           disabled={
                             busy ||
                             data?.config.weighting !== "drift" ||
-                            config.execution === "report"
+                            data?.config.execution === "report"
                           }
                           onClick={() => setPendingOrder("trim")}
                         >
@@ -826,8 +857,8 @@ export default function MomentumPage() {
                     color="text.secondary"
                     sx={{ mt: 1.5, display: "block" }}
                   >
-                    Only when Weights is Let winners run. Deploy and trim build their own order list;
-                    they do not replace the ranked rebalance preview on Universe &amp; orders.
+                    Only when Weights is Let winners run. Deploy and trim build their own order
+                    list; they do not replace the ranked rebalance preview on Universe &amp; orders.
                   </Typography>
                 </AccordionDetails>
               </Accordion>
@@ -1180,7 +1211,9 @@ function ToolbarFilterField({
   return (
     <Box sx={sx}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, mb: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">{label}</Typography>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
         {helper ? (
           <Tooltip title={helper}>
             <IconButton size="small" aria-label={`About ${label}`} sx={{ p: 0.25 }}>

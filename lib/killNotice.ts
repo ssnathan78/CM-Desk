@@ -3,7 +3,23 @@ export function killOperatorNotice(input: {
   liveLeftOpen: boolean
   chasePaused: boolean
   deskHalted: boolean
+  flattenFailed?: boolean
 }): { severity: "success" | "error"; text: string } | null {
+  if (input.flattenFailed) {
+    const halt = input.deskHalted
+      ? "The desk is halted."
+      : "The desk halt was not saved. New entries are not blocked."
+    const pause =
+      input.scope === "all"
+        ? input.chasePaused
+          ? " Chase is paused."
+          : " Chase was not paused."
+        : " Chase was not paused."
+    return {
+      severity: "error",
+      text: `Flatten did not run. Open books were left as they were. ${halt}${pause}`,
+    }
+  }
   if (!input.deskHalted) {
     return {
       severity: "error",
@@ -29,6 +45,25 @@ export function killOperatorNotice(input: {
     }
   }
   return null
+}
+
+/** Always has text, so the Kill dialog can stay open on both success and failure. */
+export function killDialogNotice(input: Parameters<typeof killOperatorNotice>[0]): {
+  severity: "success" | "error"
+  text: string
+} {
+  const problem = killOperatorNotice(input)
+  if (problem) return problem
+  if (input.scope === "all") {
+    return {
+      severity: "success",
+      text: "Kill finished. Open books that could be flattened were flattened. Chase is paused. The desk is halted.",
+    }
+  }
+  return {
+    severity: "success",
+    text: "Kill finished. Today's straddles and strangles that could be flattened were flattened. Chase was not paused. The desk is halted.",
+  }
 }
 
 /** Kill is not done until the halt row is stored. A pause failure is reported on its own. */

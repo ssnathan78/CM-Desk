@@ -17,17 +17,18 @@ import {
   type ChaseTableColumnId,
 } from "../lib/chase/chaseTableColumns"
 import { CHASE_INDEX_ORDER, type ChaseBookConfig, defaultChaseBook } from "../lib/chaseDefaults"
+import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
+import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
+import { useChaseSettings } from "../lib/hooks/useChaseSettings"
+import { useDeskStatus } from "../lib/hooks/useDeskStatus"
+import { type ActionOutcome, chaseSquareOffCopy } from "../lib/operatorActionCopy"
 import {
   defaultVisibleIds,
   readVisibleColumns,
   writeVisibleColumns,
 } from "../lib/ui/columnVisibility"
-import { paginateSlice } from "../lib/ui/tablePagination"
-import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
-import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
-import { useChaseSettings } from "../lib/hooks/useChaseSettings"
-import { useDeskStatus } from "../lib/hooks/useDeskStatus"
 import { labelFor } from "../lib/ui/labels"
+import { paginateSlice } from "../lib/ui/tablePagination"
 import useUser from "../lib/useUser"
 
 const ChasePlanPage = () => {
@@ -43,7 +44,8 @@ const ChasePlanPage = () => {
     showMessage(`${labelFor(instrument)}: ${text}`, severity)
   }
   const [resetInstrument, setResetInstrument] = useState<string | null>(null)
-  const [flattenOpen, setFlattenOpen] = useState(false)
+  const [flattenTarget, setFlattenTarget] = useState<string | "ALL" | null>(null)
+  const [flattenOutcome, setFlattenOutcome] = useState<ActionOutcome | null>(null)
   const [removeTarget, setRemoveTarget] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [matches, setMatches] = useState<string[]>([])
@@ -70,12 +72,6 @@ const ChasePlanPage = () => {
     [books, tablePage, rowsPerPage]
   )
 
-  const patchBook = (instrument: string, patch: Partial<ChaseBookConfig>) => {
-    setBooks(current =>
-      current.map(row => (row.instrument === instrument ? { ...row, ...patch } : row))
-    )
-  }
-
   const saveBook = async (instrument: string, patch: Partial<ChaseBookConfig> = {}) => {
     const current = books.find(book => book.instrument === instrument)
     const next = { ...current, ...patch, instrument }
@@ -89,6 +85,7 @@ const ChasePlanPage = () => {
       const verb = patch.paused === true ? "Paused" : patch.paused === false ? "Resumed" : "Saved"
       bookToast(instrument, `${verb}.`, "success")
       await mutate()
+      return true
     } catch (e) {
       const err = e as FetchJsonError
       bookToast(
@@ -96,29 +93,35 @@ const ChasePlanPage = () => {
         (err.data as { error?: string })?.error || err.message || "Could not save.",
         "error"
       )
+      return false
     }
   }
 
   const squareOffChase = async () => {
-    setFlattenOpen(false)
+    const instrument = flattenTarget === "ALL" ? null : flattenTarget
     try {
       const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategy: "CHASE" }),
+        body: JSON.stringify(
+          instrument ? { strategy: "CHASE", instrument } : { strategy: "CHASE" }
+        ),
       })
       const notice = flattenOperatorNotice(
         result,
-        "Chase squared off. The next hourly job can take a fresh signal."
+        instrument
+          ? `${instrument} squared off. Other Chase books stay. The next hourly job can take a fresh signal on this book.`
+          : "Every Chase book was squared off. The next hourly job can take a fresh signal."
       )
-      showMessage(notice.text, notice.severity)
+      setFlattenOutcome(notice)
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      showMessage(
-        (err.data as { error?: string })?.error || err.message || "Could not square off Chase.",
-        "error"
-      )
+      setFlattenOutcome({
+        severity: "error",
+        text:
+          (err.data as { error?: string })?.error || err.message || "Could not square off Chase.",
+      })
     }
   }
 
@@ -237,7 +240,14 @@ const ChasePlanPage = () => {
             <Button component={Link} href="/help/chase" size="small">
               Guide
             </Button>
-            <Button color="warning" variant="outlined" onClick={() => setFlattenOpen(true)}>
+            <Button
+              color="warning"
+              variant="outlined"
+              onClick={() => {
+                setFlattenOutcome(null)
+                setFlattenTarget("ALL")
+              }}
+            >
               Square off all Chase books…
             </Button>
           </Stack>
@@ -298,16 +308,16 @@ const ChasePlanPage = () => {
             executionMode={executionMode}
             visibleColumns={visibleColumns}
             onRowClick={instrument => setEditInstrument(instrument)}
-            onEngineChange={(instrument, enabled) => {
-              patchBook(instrument, { enabled })
-              void saveBook(instrument, { enabled })
-            }}
+            onEngineChange={(instrument, enabled) => void saveBook(instrument, { enabled })}
             onPauseChange={(instrument, paused) => void saveBook(instrument, { paused })}
             onMenuAction={(instrument, action) => {
               if (action === "edit") setEditInstrument(instrument)
               if (action === "reset") setResetInstrument(instrument)
               if (action === "remove") setRemoveTarget(instrument)
-              if (action === "square") setFlattenOpen(true)
+              if (action === "square") {
+                setFlattenOutcome(null)
+                setFlattenTarget(instrument)
+              }
             }}
           />
           <StrategyTablePagination
@@ -327,8 +337,8 @@ const ChasePlanPage = () => {
             if (!editInstrument) return
             setDrawerSaving(true)
             try {
-              await saveBook(editInstrument, patch)
-              setEditInstrument(null)
+              const saved = await saveBook(editInstrument, patch)
+              if (saved) setEditInstrument(null)
             } finally {
               setDrawerSaving(false)
             }
@@ -349,13 +359,17 @@ const ChasePlanPage = () => {
             />
           ))}
         <ConfirmAction
-          open={flattenOpen}
+          open={flattenTarget !== null}
           tone="attention"
-          title="Square off Chase?"
-          message="This flattens every Chase futures book and returns Chase to AWAITING_SIGNAL. The next hourly job can still take a new signal. It does not pause Chase or halt the desk. A live book is refused while the market is closed: the position and its stop stay. Paper still flattens."
+          title={chaseSquareOffCopy(flattenTarget === "ALL" ? null : flattenTarget).title}
+          message={chaseSquareOffCopy(flattenTarget === "ALL" ? null : flattenTarget).message}
           confirmLabel="Square off"
+          outcome={flattenOutcome}
           onConfirm={() => void squareOffChase()}
-          onCancel={() => setFlattenOpen(false)}
+          onCancel={() => {
+            setFlattenTarget(null)
+            setFlattenOutcome(null)
+          }}
         />
         <ConfirmAction
           open={Boolean(removeTarget)}

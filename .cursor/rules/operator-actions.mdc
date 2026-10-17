@@ -1,0 +1,18 @@
+---
+description: Operator controls must match the write they perform. Confirms, toasts, and P&L labels come from the shared copy helpers.
+alwaysApply: true
+---
+
+# Operator actions
+
+Read [docs/AGENT_OPERATOR_ACTIONS.md](../../docs/AGENT_OPERATOR_ACTIONS.md) before adding or changing a button, switch, confirm, toast, filter, or P&L figure.
+
+- The sentence the operator reads lives in `lib/operatorActionCopy.ts`, `lib/flattenNotice.ts`, or `lib/killNotice.ts`. Do not invent a second success string in the click handler.
+- Keep the confirm dialog open until the reply. `ConfirmAction` `outcome` is that reply. Success means every announced order was accepted and the announced write happened.
+- `{ strategy: "CHASE" }` flattens every Chase book. One book sends `instrument` as well.
+- Momentum and Daily trend Engine / Execution are draft until Save. Send uses the saved row. Momentum **Save and pull history** writes the draft. Daily trend **Pull history now** does not.
+- Daily trend symbol off and Remove from the list do not sell and do not run the stop. Pause still allows the stop.
+- Chase reset is all-or-nothing (`planChaseSignalReset`). Unknown quantity changes nothing.
+- Kill reports `deskHalted`, `chasePaused`, and `flattenFailed` from what actually happened (`killDialogNotice`).
+- Closed today, open mark, and realized lifetime are different measures. Do not give them the same short name. Chase strategy totals are shown once, not on every book row.
+- A new control needs a hermetic test that fails if the old label or the old scope returns. `yarn unit-test`.

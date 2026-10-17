@@ -6,6 +6,8 @@ export const DAILY_TREND_FIELD_HELP = {
   bulkEntry: "Close cross vs break-high entry style. Blank leaves unchanged.",
   filter:
     "Narrows the book table below. Matches symbol, company name, or industry (case insensitive).",
-  signalView: "Qualifies shows only names whose signal currently passes the buy gate.",
-  addSymbol: "Search NSE cash symbols to add a new book row (starts with engine off until you turn it on).",
+  signalView:
+    "Qualifies shows names above the band, including Wait for the high and budget 0. It is not the same as a Buy chip.",
+  addSymbol:
+    "Search NSE cash symbols to add a new book row (starts with engine off until you turn it on).",
 } as const

@@ -67,6 +67,8 @@ export default function ConstituentChanges(props: {
             count={adds.length}
             summary={props.addSummary}
             busy={props.busy}
+            acceptLabel="Accept all"
+            dismissLabel="Skip these adds…"
             onAccept={() => props.onAcceptAll("ADD")}
             onDismiss={() => props.onDismissAll("ADD")}
           />
@@ -74,6 +76,8 @@ export default function ConstituentChanges(props: {
             count={removes.length}
             summary={props.removeSummary}
             busy={props.busy}
+            acceptLabel="Accept all"
+            dismissLabel="Keep these names…"
             onAccept={() => props.onAcceptAll("REMOVE")}
             onDismiss={() => props.onDismissAll("REMOVE")}
           />
@@ -151,6 +155,8 @@ function Side(props: {
   count: number
   summary: string
   busy: boolean
+  acceptLabel: string
+  dismissLabel: string
   onAccept: () => void
   onDismiss: () => void
 }) {
@@ -165,10 +171,10 @@ function Side(props: {
         {props.count}. {props.summary}
       </Typography>
       <Button size="small" disabled={props.busy} onClick={props.onAccept}>
-        Accept all
+        {props.acceptLabel}
       </Button>
       <Button size="small" disabled={props.busy} onClick={props.onDismiss}>
-        Dismiss all
+        {props.dismissLabel}
       </Button>
     </Stack>
   )

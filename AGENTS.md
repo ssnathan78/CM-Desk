@@ -110,6 +110,8 @@ Books, quantity, and P&L guard rails for agents: [docs/AGENT_BOOKS_AND_PNL.md](d
 
 Order send, modify, cancel, square-off, and Kill: [docs/AGENT_ORDER_SAFETY.md](docs/AGENT_ORDER_SAFETY.md).
 
+Operator buttons, confirms, toasts, filters, and P&L labels: [docs/AGENT_OPERATOR_ACTIONS.md](docs/AGENT_OPERATOR_ACTIONS.md). Copy lives in `lib/operatorActionCopy.ts`. A Chase square-off without `instrument` flattens every Chase book. Page Engine and Execution are draft until Save. Symbol off does not run the stop.
+
 Trading risk: [docs/TRADING_RISK_AUDIT.md](docs/TRADING_RISK_AUDIT.md). Pre-trade limits live in `lib/trading/riskEngine.ts` and cannot be bypassed by strategy code.
 
 Market simulation (clock, calendar, simulated exchange, scenario catalog): [docs/TRADING_SIMULATION_GUIDE.md](docs/TRADING_SIMULATION_GUIDE.md). Do not treat it as a PnL backtester.

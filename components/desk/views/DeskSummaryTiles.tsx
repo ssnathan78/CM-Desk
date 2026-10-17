@@ -70,10 +70,10 @@ export default function DeskSummaryTiles({
             Today · {todayOpen} open
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            closed
+            Closed today
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            mark
+            Open mark
           </Typography>
           {todayRows.map(row => (
             <Box key={row.id} sx={{ display: "contents" }}>
@@ -95,7 +95,7 @@ export default function DeskSummaryTiles({
         sx={deskTileSx}
       >
         <Typography variant="caption" color="text.secondary">
-          Realized
+          Realized lifetime
         </Typography>
         {realizedRows.map(row => (
           <Box
@@ -114,7 +114,7 @@ export default function DeskSummaryTiles({
         type="button"
         onClick={() => onNavigate("books", "positions")}
         title="Margin + open MTM is Kite available margin plus desk unrealized (average cost versus mark). It is not Kite equity and not Sessions net. Realized lifetime is stored on the position rows, not today's closed round-trips. Drawdown is the peak of that margin-plus-MTM figure minus the current one."
-        aria-label={`Cash ${formatInr(p?.availableCash)}. Realized lifetime ${formatInr(p?.realizedPnl)}. Unrealized ${formatInr(p?.unrealizedPnl)}. Margin plus open mark ${formatInr(p?.portfolioValue)}. Gross exposure ${formatInr(p?.grossExposure)}. Drawdown ${formatInr(p?.drawdown)}.`}
+        aria-label={`Cash ${formatInr(p?.availableCash)}. Realized lifetime ${formatInr(p?.realizedPnl)}. Open mark ${formatInr(p?.unrealizedPnl)}. Margin plus open mark ${formatInr(p?.portfolioValue)}. Gross exposure ${formatInr(p?.grossExposure)}. Drawdown ${formatInr(p?.drawdown)}.`}
         sx={{
           ...deskTileSx,
           display: "grid",
@@ -129,7 +129,7 @@ export default function DeskSummaryTiles({
             ["Margin + open MTM", formatInr(p?.portfolioValue)],
             ["Realized lifetime", formatInr(p?.realizedPnl)],
             ["Gross exposure", formatInr(p?.grossExposure)],
-            ["Unrealized", formatInr(p?.unrealizedPnl)],
+            ["Open mark", formatInr(p?.unrealizedPnl)],
             ["Drawdown", formatInr(p?.drawdown)],
           ] as const
         ).map(([label, value]) => (

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm"
 import type { KiteUser } from "../types/misc"
 import { resetChaseSignalState } from "./chaseReset"
+import { chaseUnderlyingFromSymbol } from "./chaseUniverse"
 import { INTRADAY_STRATEGIES } from "./constants"
 import { db } from "./drizzle"
 import { type FlattenOpenResult, liveFlattenSessionBlock } from "./flattenNotice"
@@ -50,6 +51,15 @@ async function selectRows(scope: FlattenScope, open: OpenRow[]): Promise<OpenRow
   if (scope.kind === "all") return live
   if (scope.kind === "intraday") return live.filter(row => isIntradayStrategy(row.strategy))
   if (scope.kind === "strategy") return live.filter(row => row.strategy === scope.strategy)
+  if (scope.kind === "chaseBook") {
+    return live.filter(row => {
+      if (row.strategy !== "CHASE") return false
+      const underlying =
+        chaseUnderlyingFromSymbol(row.tradingsymbol) ||
+        chaseInstrumentFromTradingsymbol(row.tradingsymbol)
+      return underlying === scope.instrument
+    })
+  }
   if (scope.kind === "position") return live.filter(row => row.id === scope.positionId)
   return live.filter(row => row.jobId === scope.jobId)
 }
@@ -229,7 +239,9 @@ export async function flattenOpenPositions(input: {
     }
   }
 
-  if (input.scope.kind === "strategy" && input.scope.strategy === "CHASE") {
+  if (input.scope.kind === "chaseBook") {
+    chaseInstruments.add(input.scope.instrument)
+  } else if (input.scope.kind === "strategy" && input.scope.strategy === "CHASE") {
     const { listChaseBooks } = await import("./chaseSettings")
     for (const book of await listChaseBooks()) {
       chaseInstruments.add(book.instrument)

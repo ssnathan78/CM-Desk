@@ -17,6 +17,7 @@ import useSWR from "swr"
 
 import { chaseStatusNeedsManagement } from "../../lib/chaseUniverse"
 import { useDeskStatus } from "../../lib/hooks/useDeskStatus"
+import { CHASE_GROUP_PNL_TITLE, intradaySwitchLabel } from "../../lib/operatorActionCopy"
 import type { RiskStrategyKey } from "../../lib/trading/riskEngine"
 import type { StrategyRealizedRow, TodayGroupRow } from "../../lib/trading/todayGroups"
 import { deriveStrategyDeskLine } from "../../lib/ui/deskStatus"
@@ -46,7 +47,8 @@ type BoardRow = {
   openMark: string
   closedToday: string
   realized: string
-  engineOn: boolean
+  engineLabel: string
+  showGroupPnl: boolean
   href: string
   showChaseSquareOff?: boolean
 }
@@ -73,7 +75,8 @@ function rowForGroup(
     openMark: group.openMark,
     closedToday: group.closedToday,
     realized: realizedRow?.realized ?? "0",
-    engineOn: strat?.enabled ?? false,
+    engineLabel: strat?.enabled ? "Desk on" : "Desk off",
+    showGroupPnl: true,
     href:
       key === "CHASE"
         ? "/chase"
@@ -129,12 +132,14 @@ export default function StrategyBoard({
       openMark: intraday.openMark,
       closedToday: intraday.closedToday,
       realized: realizedRow?.realized ?? "0",
-      engineOn: true,
+      engineLabel: intradaySwitchLabel(Boolean(straddle?.enabled), Boolean(strangle?.enabled)),
+      showGroupPnl: true,
       href: "/plan",
     })
   }
   const statuses = (chaseData?.statuses ?? []) as ChaseBookStatus[]
   const books = chaseData?.books ?? []
+  let chaseRow = 0
   for (const book of books) {
     const st = statuses.find(s => s.instrument === book.instrument)
     const netQty = st?.netQty ?? 0
@@ -159,10 +164,12 @@ export default function StrategyBoard({
       openMark: st?.openMark ?? "0",
       closedToday: todayRows.find(r => r.id === "chase")?.closedToday ?? "0",
       realized: chaseRealized?.realized ?? "0",
-      engineOn: book.enabled,
+      engineLabel: book.enabled ? "Book on" : "Book off",
+      showGroupPnl: chaseRow === 0,
       href: "/chase",
       showChaseSquareOff: netQty !== 0 && strat?.enabled !== false,
     })
+    chaseRow += 1
   }
   if (momentum) {
     rows.push(rowForGroup(momentum, "MOMENTUM", desk, realizedRows))
@@ -194,7 +201,7 @@ export default function StrategyBoard({
               >
                 Realized lifetime (₹)
               </TableCell>
-              <TableCell>Engine</TableCell>
+              <TableCell>Switch</TableCell>
               <TableCell />
             </TableRow>
           </TableHead>
@@ -237,13 +244,19 @@ export default function StrategyBoard({
                 <TableCell align="right">
                   <Figure kind="inr" value={row.openMark} pnl />
                 </TableCell>
-                <TableCell align="right">
-                  <Figure kind="inr" value={row.closedToday} pnl />
+                <TableCell
+                  align="right"
+                  title={row.showGroupPnl ? undefined : CHASE_GROUP_PNL_TITLE}
+                >
+                  {row.showGroupPnl ? <Figure kind="inr" value={row.closedToday} pnl /> : "—"}
                 </TableCell>
-                <TableCell align="right">
-                  <Figure kind="inr" value={row.realized} pnl />
+                <TableCell
+                  align="right"
+                  title={row.showGroupPnl ? undefined : CHASE_GROUP_PNL_TITLE}
+                >
+                  {row.showGroupPnl ? <Figure kind="inr" value={row.realized} pnl /> : "—"}
                 </TableCell>
-                <TableCell>{row.engineOn ? "Engine on" : "Engine off"}</TableCell>
+                <TableCell>{row.engineLabel}</TableCell>
                 <TableCell align="right">
                   <IconButton
                     size="small"
@@ -271,10 +284,10 @@ export default function StrategyBoard({
                 key="sq"
                 onClick={() => {
                   setMenu(null)
-                  onChaseSquareOff(r.chaseInstrument!)
+                  if (r.chaseInstrument) onChaseSquareOff(r.chaseInstrument)
                 }}
               >
-                Square off book…
+                Square off {r.chaseInstrument}…
               </MenuItem>
             ) : null,
           ]

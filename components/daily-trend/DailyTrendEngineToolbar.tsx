@@ -25,10 +25,13 @@ export default function DailyTrendEngineToolbar({
   onSave,
   onPullHistory,
   onPullMissing,
+  sendEnabled,
   onEvaluate,
   onEvaluateSend,
 }: {
   runtime: DailyTrendRuntimeConfig
+  /** Saved execution, not the unsaved menu. */
+  sendEnabled: boolean
   busy: boolean
   pull: {
     running: boolean
@@ -105,11 +108,7 @@ export default function DailyTrendEngineToolbar({
         <Button disabled={busy} onClick={onEvaluate}>
           Evaluate
         </Button>
-        <Button
-          color="warning"
-          disabled={busy || runtime.execution === "report"}
-          onClick={onEvaluateSend}
-        >
+        <Button color="warning" disabled={busy || !sendEnabled} onClick={onEvaluateSend}>
           Evaluate and send
         </Button>
       </Stack>

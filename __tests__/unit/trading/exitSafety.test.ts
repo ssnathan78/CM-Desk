@@ -164,6 +164,20 @@ describe("killOperatorNotice", () => {
     expect(killResponseStatus(true)).toBe(200)
   })
 
+  it("says flatten did not run when the flatten call threw", () => {
+    const notice = killOperatorNotice({
+      scope: "all",
+      liveLeftOpen: false,
+      chasePaused: true,
+      deskHalted: true,
+      flattenFailed: true,
+    })
+    expect(notice?.severity).toBe("error")
+    expect(notice?.text).toMatch(/Flatten did not run/i)
+    expect(notice?.text).toMatch(/Chase is paused/)
+    expect(notice?.text).toMatch(/desk is halted/i)
+  })
+
   it("stays quiet when an open-market kill halted and paused", () => {
     expect(
       killOperatorNotice({

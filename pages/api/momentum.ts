@@ -21,6 +21,7 @@ import {
 import { getMomentumReport } from "../../lib/momentum/storedReport"
 import { normalizeMomentumConfig } from "../../lib/momentum/types"
 import { normalizeNseCashSymbol } from "../../lib/nseCashSymbol"
+import { trimCapitalShouldReduce } from "../../lib/operatorActionCopy"
 import withSession from "../../lib/session"
 
 export default withSession(async (req, res) => {
@@ -130,7 +131,7 @@ export default withSession(async (req, res) => {
       const token = req.session.user.session?.access_token
       const results = await submitCashOrders({ accessToken: token, strategy: "MOMENTUM", orders })
       await markMomentumRebalance(istDate(new Date()))
-      return res.json({ results, orders })
+      return res.json({ results, orders, dayMarked: true, capitalReduced: false })
     }
     if (req.method === "POST" && (req.body?.action === "deploy" || req.body?.action === "trim")) {
       const trimming = req.body.action === "trim"
@@ -158,13 +159,15 @@ export default withSession(async (req, res) => {
       }
       const token = req.session.user.session?.access_token
       const results = await submitCashOrders({ accessToken: token, strategy: "MOMENTUM", orders })
-      if (trimming) {
+      let capitalReduced = false
+      if (trimming && trimCapitalShouldReduce(results)) {
         await saveMomentumConfig({
           ...snapshot.config,
           capitalInr: Math.floor(snapshot.config.capitalInr * (1 - trimPct / 100)),
         })
+        capitalReduced = true
       }
-      return res.json({ results, orders })
+      return res.json({ results, orders, dayMarked: false, capitalReduced })
     }
     return res.status(405).json({ error: "Method not allowed" })
   } catch (error) {
