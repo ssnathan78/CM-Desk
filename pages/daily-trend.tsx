@@ -27,6 +27,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 import DailyTrendBookDrawer from "../components/daily-trend/DailyTrendBookDrawer"
+import DailyTrendEngineToolbar from "../components/daily-trend/DailyTrendEngineToolbar"
 import {
   SettingsSelectField,
   SettingsSwitchField,
@@ -572,87 +573,30 @@ export default function DailyTrendPage() {
             <Skeleton height={120} />
           </PageSection>
         ) : (
-          <PageSection
-            title="Engine & execution"
-            description="Turn the strategy on, choose how orders are sent, and pull or evaluate history."
-          >
-            <Box sx={{ maxWidth: 720, mb: 1.5 }}>
-              <SettingsSwitchField
-                label="Engine on"
-                checked={runtime.active}
-                onChange={active => setConfig({ ...runtime, active })}
-              />
-              <SettingsSwitchField
-                label="Pull data daily"
-                checked={runtime.dataRefresh}
-                onChange={dataRefresh => setConfig({ ...runtime, dataRefresh })}
-              />
-              <SettingsSelectField
-                label="Execution"
-                value={runtime.execution}
-                onChange={execution =>
-                  setConfig({
-                    ...runtime,
-                    execution,
-                  })
-                }
-              >
-                <MenuItem value="report">Report only</MenuItem>
-                <MenuItem value="manual">Manual send</MenuItem>
-                <MenuItem value="auto">Auto</MenuItem>
-              </SettingsSelectField>
-            </Box>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-              <Button variant="contained" disabled={busy} onClick={() => void saveRuntime()}>
-                Save
-              </Button>
-              <Button disabled={busy || pull?.running} onClick={() => void pullHistory()}>
-                {pull?.running
-                  ? `Pulling ${pull.done} of ${pull.total || "…"}`
-                  : "Pull history now"}
-              </Button>
-              <Button disabled={busy || pull?.running} onClick={() => void pullHistory(true)}>
-                Retry missing
-              </Button>
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  void fetchJson<Payload>("/api/daily-trend", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "evaluate", execute: false }),
-                  }).then(result => {
-                    setDecisions(result.decisions ?? [])
-                    showMessage(
-                      "Evaluation finished. No orders were required in report mode.",
-                      "success"
-                    )
-                  })
-                }
-              >
-                Evaluate
-              </Button>
-              <Button
-                color="warning"
-                disabled={busy || runtime.execution === "report"}
-                onClick={() => setPendingConfirm("evaluate-send")}
-              >
-                Evaluate and send
-              </Button>
-            </Stack>
-            {pull && (pull.running || pull.shown) ? (
-              <Box sx={{ mt: 1.5 }}>
-                {pull.running ? (
-                  <LinearProgress
-                    variant={pull.total > 0 ? "determinate" : "indeterminate"}
-                    value={pull.total > 0 ? Math.round((100 * pull.done) / pull.total) : 0}
-                  />
-                ) : null}
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  {pull.message}
-                </Typography>
-              </Box>
-            ) : null}
+          <PageSection title="Engine & execution">
+            <DailyTrendEngineToolbar
+              runtime={runtime}
+              busy={busy}
+              pull={pull ?? null}
+              onPatch={patch => setConfig({ ...runtime, ...patch })}
+              onSave={() => void saveRuntime()}
+              onPullHistory={() => void pullHistory()}
+              onPullMissing={() => void pullHistory(true)}
+              onEvaluate={() =>
+                void fetchJson<Payload>("/api/daily-trend", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "evaluate", execute: false }),
+                }).then(result => {
+                  setDecisions(result.decisions ?? [])
+                  showMessage(
+                    "Evaluation finished. No orders were required in report mode.",
+                    "success"
+                  )
+                })
+              }
+              onEvaluateSend={() => setPendingConfirm("evaluate-send")}
+            />
           </PageSection>
         )}
         <PageSection
@@ -796,7 +740,7 @@ export default function DailyTrendPage() {
         />
         <PageSection
           title="Book table"
-          description="Checkbox and symbol stay fixed while you scroll; jump buttons reveal columns that slid underneath."
+          description="Wide table scrolls horizontally with the page; use jump buttons for price vs budget columns."
           flush
         >
           <Typography
@@ -810,7 +754,6 @@ export default function DailyTrendPage() {
           </Typography>
           <ScrollTable
             minWidth={1100}
-            maxHeight="calc(100vh - 240px)"
             scrollControls
             scrollStartLabel="Price & signals"
             scrollEndLabel="Budget & settings"

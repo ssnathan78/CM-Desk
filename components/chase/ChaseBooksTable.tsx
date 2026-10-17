@@ -106,7 +106,6 @@ export default function ChaseBooksTable({
   statuses,
   executionMode,
   showPriceCols,
-  rowNotice,
   onRowClick,
   onEngineChange,
   onPauseChange,
@@ -116,7 +115,6 @@ export default function ChaseBooksTable({
   statuses: ChaseStatusRow[]
   executionMode: "PAPER" | "LIVE"
   showPriceCols: boolean
-  rowNotice: Record<string, { text: string; severity: string }>
   onRowClick: (instrument: string) => void
   onEngineChange: (instrument: string, enabled: boolean) => void
   onPauseChange: (instrument: string, paused: boolean) => void
@@ -130,7 +128,12 @@ export default function ChaseBooksTable({
 
   return (
     <>
-      <ScrollTable minWidth={minWidth}>
+      <ScrollTable
+        minWidth={minWidth}
+        scrollControls
+        scrollStartLabel="Configuration"
+        scrollEndLabel="Runtime & controls"
+      >
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -171,7 +174,6 @@ export default function ChaseBooksTable({
               const st = statuses.find(s => s.instrument === book.instrument)
               const qty = st?.netQty ?? 0
               const flat = qty === 0
-              const notice = rowNotice[book.instrument]
               const diff = chaseConfigDiffFields(book, primary)
               return (
                 <TableRow
@@ -180,16 +182,10 @@ export default function ChaseBooksTable({
                   sx={{ cursor: "pointer", height: 32 }}
                   onClick={() => onRowClick(book.instrument)}
                 >
-                  <TableCell>
-                    <Typography variant="body2">{labelFor(book.instrument)}</Typography>
-                    {notice ? (
-                      <Typography
-                        variant="caption"
-                        color={notice.severity === "error" ? "error" : "success.main"}
-                      >
-                        {notice.text}
-                      </Typography>
-                    ) : null}
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>
+                    <Typography variant="body2" noWrap>
+                      {labelFor(book.instrument)}
+                    </Typography>
                   </TableCell>
                   <ConfigValueCell
                     field="emaPeriod"

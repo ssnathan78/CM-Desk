@@ -73,7 +73,7 @@ Ship to a server → `docs/DEPLOYMENT.md` (fast Droplet path: `yarn deploy:prod`
 Security → `docs/SECURITY_REVIEW.md`, `docs/SECURITY_FINDINGS.md`.  
 Commands/stack → `CLAUDE.md` and this file.
 
-Longer project map: [CLAUDE.md](CLAUDE.md). Desk UI routes: [docs/UI.md](docs/UI.md).
+Longer project map: [CLAUDE.md](CLAUDE.md). Desk UI routes: [docs/UI.md](docs/UI.md). UI building blocks: [docs/UI_COMPONENTS.md](docs/UI_COMPONENTS.md).
 
 Modernization patterns and backlog: [docs/CODEBASE_MODERNIZATION.md](docs/CODEBASE_MODERNIZATION.md).
 

@@ -12,7 +12,7 @@ import { useEffect, useState } from "react"
 import ChaseBookDrawer from "../components/chase/ChaseBookDrawer"
 import ChaseBooksTable from "../components/chase/ChaseBooksTable"
 import Layout from "../components/Layout"
-import { useActionNotice, useRowNotices } from "../components/lib/ActionNotice"
+import { useActionNotice } from "../components/lib/ActionNotice"
 import ConfirmAction from "../components/lib/ConfirmAction"
 import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
 import PageSection from "../components/lib/PageSection"
@@ -22,6 +22,7 @@ import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
 import { useDeskStatus } from "../lib/hooks/useDeskStatus"
+import { labelFor } from "../lib/ui/labels"
 import useUser from "../lib/useUser"
 
 const ChasePlanPage = () => {
@@ -32,9 +33,11 @@ const ChasePlanPage = () => {
   const [books, setBooks] = useState<ChaseBookConfig[]>(
     CHASE_INDEX_ORDER.map(instrument => defaultChaseBook(instrument, instrument === "NIFTY"))
   )
-  const { rows: rowNotice, showRow } = useRowNotices()
   const { showNotice: showSearchNotice, NoticeBanner: searchNotice } = useActionNotice()
   const { showMessage } = useSnackbar()
+  const bookToast = (instrument: string, text: string, severity: "success" | "error" | "info") => {
+    showMessage(`${labelFor(instrument)}: ${text}`, severity)
+  }
   const [resetInstrument, setResetInstrument] = useState<string | null>(null)
   const [flattenOpen, setFlattenOpen] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<string | null>(null)
@@ -66,11 +69,11 @@ const ChasePlanPage = () => {
       })
       if (saved.books?.length) setBooks(saved.books)
       const verb = patch.paused === true ? "Paused" : patch.paused === false ? "Resumed" : "Saved"
-      showRow(instrument, `${verb} ${instrument}.`, "success")
+      bookToast(instrument, `${verb}.`, "success")
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      showRow(
+      bookToast(
         instrument,
         (err.data as { error?: string })?.error || err.message || "Could not save.",
         "error"
@@ -109,15 +112,15 @@ const ChasePlanPage = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reset-signal", instrument }),
       })
-      showRow(
+      bookToast(
         instrument,
-        `${instrument} reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal.`,
+        "Reset to AWAITING_SIGNAL. The next hourly job can take a fresh signal.",
         "success"
       )
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      showRow(
+      bookToast(
         instrument,
         (err.data as { error?: string })?.error || err.message || "Could not reset Chase status.",
         "error"
@@ -150,7 +153,7 @@ const ChasePlanPage = () => {
       })
       if (saved.books?.length) setBooks(saved.books)
       setMatches(current => current.filter(name => name !== instrument))
-      showRow(instrument, "Added. Trade this book is off until you turn it on.", "success")
+      bookToast(instrument, "Added. Trade this book is off until you turn it on.", "success")
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
@@ -174,7 +177,7 @@ const ChasePlanPage = () => {
       await mutate()
     } catch (e) {
       const err = e as FetchJsonError
-      showRow(
+      bookToast(
         instrument,
         (err.data as { error?: string })?.error || err.message || "Could not remove.",
         "error"
@@ -200,11 +203,11 @@ const ChasePlanPage = () => {
   return (
     <Layout title="Chase" maxWidth="xl">
       <Stack spacing={3}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
-          <Box sx={{ flex: 1 }}>
-            <Typography color="text.secondary">
+        <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+          <Box sx={{ flex: 1, minWidth: 240 }}>
+            <Typography variant="body2" color="text.secondary">
               Futures trend-follow on hourly EMA. Overnight allowed. Rolls front month 15:00 IST on
-              expiry. <Link href="/help/chase">Guide</Link>
+              expiry.
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               {chaseDesk
@@ -212,9 +215,14 @@ const ChasePlanPage = () => {
                 : null}
             </Typography>
           </Box>
-          <Button color="warning" variant="outlined" onClick={() => setFlattenOpen(true)}>
-            Square off all Chase books…
-          </Button>
+          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+            <Button component={Link} href="/help/chase" size="small">
+              Guide
+            </Button>
+            <Button color="warning" variant="outlined" onClick={() => setFlattenOpen(true)}>
+              Square off all Chase books…
+            </Button>
+          </Stack>
         </Stack>
 
         <PageSection
@@ -275,7 +283,6 @@ const ChasePlanPage = () => {
             statuses={data.statuses ?? []}
             executionMode={executionMode}
             showPriceCols={showPrices}
-            rowNotice={rowNotice}
             onRowClick={instrument => setEditInstrument(instrument)}
             onEngineChange={(instrument, enabled) => {
               patchBook(instrument, { enabled })

@@ -2,6 +2,8 @@
 
 Operator-facing surfaces for the personal Kite desk (2026 layout). Behaviour rules for trading and risk are unchanged from `AGENTS.md` — this document is navigation and presentation only.
 
+**Component patterns** (snackbar, toolbars, tables, drawers, confirms): [UI_COMPONENTS.md](./UI_COMPONENTS.md).
+
 ## App shell
 
 - **Status rail** (every page, app bar): mode (MOCK / PAPER ONLY / LIVE), entries (halted / trading off / allowed), alerts count (errors + warnings), IST clock, halt / resume. Data: `GET /api/desk/status`.
@@ -45,7 +47,8 @@ E2E and unit tests that open templates should use `/templates` (optional `?type=
 
 - **`pages/desk.tsx`** — data hooks, confirms, summary tiles chrome.
 - **`components/desk/views/*`** — Now, Books, Why, Setup panels.
-- **Settings forms** (templates, Chase drawer, Risk limits, Momentum, Daily trend) use `FieldRow` / `SettingsFields`; data grids (rank table, symbol list) stay dense tables.
+- **Settings forms** (templates, Chase drawer, Risk limits, Momentum filters) use `FieldRow` / `SettingsFields`; **runtime toolbars** (Daily trend engine) use compact horizontal controls — see [UI_COMPONENTS.md](./UI_COMPONENTS.md).
+- **Strategy tables** (Chase, Momentum, Daily trend): `ScrollTable` with horizontal page scroll; optional jump buttons; no nested vertical `maxHeight` on the main grid.
 - **Outlined `PageSection` panels** (header band + body) group engine, risk, books, feeds, and tables on strategy pages (`/chase`, `/momentum`, `/daily-trend`, `/risk`, `/templates`, `/plan`, `/profile`) and Desk sub-views (Now board, Books, Why, Setup).
 - **Template editor** (`FormSection` on straddle/strangle): same header band as `PageSection`. On `md+`, grid order is Contract | Risk on row 1, Entry | Timing on row 2.
 - **Labels:** `labelFor` maps known codes; unknown `SNAKE_CASE` is title-cased via `humanizeCode`.
@@ -59,7 +62,7 @@ E2E and unit tests that open templates should use `/templates` (optional `?type=
 | Reconciliation story | Setup → Broker summary card |
 | Signal explainability | Why → Signals (`signalExplain`, labels) |
 | Momentum at scale | `/momentum` column menu, rebalance preview diff |
-| Daily trend inline edit | `/daily-trend` row select + inline budget/EMA/buffer |
+| Daily trend inline edit | `/daily-trend` row select + inline budget/EMA/buffer; engine/execution compact toolbar |
 | Chase books config at a glance | `/chase` Books table (EMA, buffer, protect, offset, open classify); amber = differs from primary enabled index |
 | Chase spark chart | Chase drawer, `GET /api/chase-settings/chart` |
 | Mobile operator sheet | Bottom nav **More** on small viewports |

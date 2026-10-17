@@ -885,7 +885,7 @@ export default function MomentumPage() {
               </Box>
             ) : null}
           </Box>
-          <ScrollTable minWidth={720}>
+          <ScrollTable minWidth={720} scrollControls>
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
