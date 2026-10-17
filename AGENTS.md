@@ -16,7 +16,11 @@ This file is for coding agents (Cursor, Claude, etc.). Humans should start at [R
 
 `server.js` is the real entrypoint (`yarn dev` / `yarn start`). It mounts Next.js and Bull Board at `/queues`. Do not recommend `next start` alone — workers would not start the same way.
 
-API session helper `lib/session.ts` **side-imports** queue processors, exit strategies, and watchers so workers start with the web process.
+`server.js` checks that Postgres matches `drizzle/meta/_journal.json` and exits if migrations are pending. It does not apply them. Docker runs `yarn migrate` before `yarn start`.
+
+Workers start from `lib/queue-processor/index.ts` (`startDeskProcess`), once, after that same check. Health (`/api/health`) awaits it, so a healthy process is consuming jobs. Do not start a second copy of the workers, and do not depend on the first page view to boot them.
+
+Process boundaries (duplicate orders, late entries, Chase restore, cash rebalance claim): [docs/PROCESS_RELIABILITY.md](docs/PROCESS_RELIABILITY.md).
 
 ## Docker
 

@@ -83,7 +83,10 @@ jest.mock("../lib/drizzleDbUtils", () => ({
   saveChaseSettings: jest.fn().mockResolvedValue({ lots: 1, paused: false }),
 }))
 
-jest.mock("../lib/queue-processor", () => ({}))
+jest.mock("../lib/queue-processor", () => ({
+  startDeskProcess: jest.fn().mockResolvedValue(undefined),
+  closeAllWorkers: jest.fn().mockResolvedValue(undefined),
+}))
 
 jest.mock("../lib/trading/riskGate", () => ({
   assertOrderAllowed: jest.fn().mockResolvedValue(undefined),
@@ -99,7 +102,13 @@ jest.mock("../lib/trading/ledger", () => ({
   applyUnappliedFills: jest.fn().mockResolvedValue(0),
   applyFillById: jest.fn().mockResolvedValue(false),
   recordAuditEvent: jest.fn().mockResolvedValue(undefined),
-  safeRecordOrderFromKiteProps: jest.fn().mockResolvedValue("mock-order"),
+  safeRecordOrderFromKiteProps: jest.fn().mockResolvedValue({
+    id: "mock-order",
+    created: true,
+    status: "PENDING",
+    brokerOrderId: null,
+    createdAt: new Date(),
+  }),
   ensureDefaultAccount: jest.fn().mockResolvedValue(undefined),
   lookupJobByTag: jest.fn().mockResolvedValue(null),
   getOpenOrders: jest.fn().mockResolvedValue([]),

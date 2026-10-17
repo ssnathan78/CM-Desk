@@ -343,6 +343,44 @@ export function decideChaseInPositionSync(input: {
   return "reset_empty"
 }
 
+/**
+ * A known flat book may clear LONG/SHORT. Unknown Kite quantity must not.
+ * Paper uses the ledger, so kiteQtyKnown is not required.
+ */
+export function mayResetEmptyChaseStatus(input: {
+  sync: "hold" | "wait_entry" | "reset_empty"
+  paperBook: boolean
+  kiteQtyKnown: boolean
+}): boolean {
+  if (input.sync !== "reset_empty") return false
+  if (!input.paperBook && !input.kiteQtyKnown) return false
+  return true
+}
+
+export const CHASE_CANDLE_MAX_AGE_SEC = 180
+
+export type ChaseWindowCandle = {
+  high: number
+  low: number
+  date?: string | number | Date | null
+}
+
+/** A stop touch anywhere in the fetched window counts, not only the last print. */
+export function chaseStopTouchedInWindow(input: {
+  side: "LONG" | "SHORT"
+  stoploss: number
+  candles: ChaseWindowCandle[]
+}): boolean {
+  const stop = Number(input.stoploss)
+  if (!Number.isFinite(stop)) return false
+  for (const candle of input.candles) {
+    if (!Number.isFinite(candle.high) || !Number.isFinite(candle.low)) continue
+    if (input.side === "LONG" && candle.low <= stop) return true
+    if (input.side === "SHORT" && candle.high >= stop) return true
+  }
+  return false
+}
+
 export function chasePendingStatusFor(side: "LONG" | "SHORT"): string {
   return side === "LONG" ? CHASE_STATUS.AWAITING_LONG : CHASE_STATUS.AWAITING_SHORT
 }

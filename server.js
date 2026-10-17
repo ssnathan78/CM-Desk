@@ -62,6 +62,14 @@ async function setupBullBoard(server) {
 }
 
 app.prepare().then(async () => {
+  const { assertMigrationsCurrent } = require("./lib/migrationGate")
+  try {
+    await assertMigrationsCurrent()
+  } catch (error) {
+    console.error("[boot] database is behind the journal. Not listening.", error)
+    process.exit(1)
+  }
+
   const server = express()
   server.use(express.json({ limit: "100kb" }))
   server.use(createSensitiveRouteLimiter())

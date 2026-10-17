@@ -6,16 +6,24 @@ import { submitCashOrders } from "./execute"
 import { pullCashHistory } from "./history"
 import { rankedSymbols } from "./rankStored"
 import {
+  claimMomentumRebalance,
   ensureNifty100Books,
   getMomentumState,
   holdingsFor,
   listLocks,
   listUniverse,
-  markMomentumRebalance,
 } from "./store"
 import { ordersAllowed, rebalanceDue } from "./types"
 
-let started = false
+function cashSchedulerStarted(): boolean {
+  const g = globalThis as typeof globalThis & { __cmDeskCashScheduler?: boolean }
+  return Boolean(g.__cmDeskCashScheduler)
+}
+
+function markCashSchedulerStarted() {
+  const g = globalThis as typeof globalThis & { __cmDeskCashScheduler?: boolean }
+  g.__cmDeskCashScheduler = true
+}
 
 export async function runCashSchedulerOnce(accessToken?: string | null) {
   const history = await pullCashHistory({ accessToken, force: false })
@@ -32,24 +40,51 @@ export async function runCashSchedulerOnce(accessToken?: string | null) {
     sessionOpen &&
     ordersAllowed({ execution: state.config.execution, executeRequested: false, due })
   ) {
-    const universe = await listUniverse()
-    const asOf = previousIstDate(new Date())
-    const plan = buildMomentumPlan({
-      symbols: await rankedSymbols(universe, state.config, asOf),
-      config: state.config,
-      holdings: await holdingsFor("MOMENTUM"),
-      locks: await listLocks(),
-      asOf,
-    })
-    const orders = executableOrders(plan, {
-      execution: state.config.execution,
-      executeRequested: false,
-      due,
-    })
-    if (orders.length) {
-      await submitCashOrders({ accessToken, strategy: "MOMENTUM", orders })
+    const claimed = await claimMomentumRebalance(today)
+    if (claimed) {
+      try {
+        const universe = await listUniverse()
+        const asOf = previousIstDate(new Date())
+        const plan = buildMomentumPlan({
+          symbols: await rankedSymbols(universe, state.config, asOf),
+          config: state.config,
+          holdings: await holdingsFor("MOMENTUM"),
+          locks: await listLocks(),
+          asOf,
+        })
+        const orders = executableOrders(plan, {
+          execution: state.config.execution,
+          executeRequested: false,
+          due,
+        })
+        const results = orders.length
+          ? await submitCashOrders({ accessToken, strategy: "MOMENTUM", orders })
+          : []
+        const failed = results.filter(row => !row.ok)
+        if (failed.length) {
+          const { recordOperatorAlert } = await import("../trading/alerts")
+          await recordOperatorAlert({
+            source: "STRATEGY",
+            code: "MOMENTUM_REBALANCE_FAILED",
+            severity: "ERROR",
+            summary: `Momentum rebalance claimed ${today} with ${failed.length} rejected order(s). This day will not be retried.`,
+            strategy: "MOMENTUM",
+            idempotencyKey: `alert:momentum-rebalance:${today}`,
+          })
+        }
+      } catch (error) {
+        logger.error("[cashScheduler] momentum rebalance failed after claim", error)
+        const { recordOperatorAlert } = await import("../trading/alerts")
+        await recordOperatorAlert({
+          source: "STRATEGY",
+          code: "MOMENTUM_REBALANCE_FAILED",
+          severity: "ERROR",
+          summary: `Momentum rebalance claimed ${today} and then failed. This day will not be retried.`,
+          strategy: "MOMENTUM",
+          idempotencyKey: `alert:momentum-rebalance:${today}`,
+        })
+      }
     }
-    await markMomentumRebalance(today)
   }
   const { evaluateDailyTrend } = await import("./trendRun")
   await evaluateDailyTrend({ execute: false, accessToken })
@@ -67,7 +102,7 @@ export async function runCashSchedulerOnce(accessToken?: string | null) {
 }
 
 export function startCashScheduler() {
-  if (started) return
+  if (cashSchedulerStarted()) return
   if (
     process.env.JEST_WORKER_ID ||
     process.env.SIMULATION === "true" ||
@@ -75,9 +110,14 @@ export function startCashScheduler() {
   ) {
     return
   }
-  started = true
+  markCashSchedulerStarted()
   const tick = () => {
-    void runCashSchedulerOnce().catch(error => logger.error("[cashScheduler]", error))
+    void runCashSchedulerOnce()
+      .then(async () => {
+        const { restoreChaseSchedulers } = await import("../queue")
+        await restoreChaseSchedulers()
+      })
+      .catch(error => logger.error("[cashScheduler]", error))
   }
   setTimeout(tick, 20_000)
   setInterval(tick, 60 * 60 * 1000)

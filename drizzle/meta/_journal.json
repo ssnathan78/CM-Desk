@@ -190,6 +190,13 @@
       "when": 1756980000026,
       "tag": "0025_strategy_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1756980000027,
+      "tag": "0026_one_open_job_per_template_day",
+      "breakpoints": true
     }
   ]
 }

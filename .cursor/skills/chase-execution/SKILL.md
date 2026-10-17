@@ -14,7 +14,8 @@ Three books can disagree: `chase_status`, ledger, Kite. Reconcile is not continu
 - If status is `AWAITING_SIGNAL` but qty remains → **adopt** LONG/SHORT from qty; do not fire the opposite entry.
 - Protective stop or market flatten already filled for **this** open book (`chaseCoverOrderQty` / `chaseEpisodeCoverFillQty`) → **no** second MARKET. An earlier fill the same day does not cover the new book.
 - 09:16 exit uses `planChaseMorningExit`: `purpose: FLATTEN`, status stays LONG/SHORT until qty is flat. A bare MARKET is an entry and halt will block it.
-- Kite qty unknown (`kiteQtyKnown: false`) → do not enter and do not clear LONG/SHORT. Unknown is not 0.
+- Kite qty unknown (`kiteQtyKnown: false`) → do not enter and do not clear LONG/SHORT. Unknown is not 0. `mayResetEmptyChaseStatus` is the gate.
+- Chase minute/hourly schedules are restored on boot, login, and the hourly pass from today's token. Do not swallow a failed `addToChaseQueue`.
 - Amend working SL in place (`placeSL`); do not leave the old trigger. Paper `placeSL` never calls `kite.modifyOrder`. A live amend or convert-to-market calls `assertLiveBrokerMutation` and only for a Chase-owned tag (`chaseMayTouchBrokerStop`).
 - 15:00 rollover uses `planChaseRollover`. Disabled, or live and market closed: skip, status stays, no Kite call. Paper does not touch Kite. Live: flatten the front month, then the next-month entry (`purpose: ENTRY`), then move `chase_status`. If either order throws, do not move status.
 - Halt / trading-disabled: still flatten/SL. Strategy disabled: fully dark.

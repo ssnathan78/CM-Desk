@@ -192,6 +192,8 @@ export function orderIntentKey(input: {
   stopPrice?: string | number | null
   limitPrice?: string | number | null
   retrySuffix?: string | null
+  /** Freeze-quantity slice. Omitted from the key when absent so existing keys stay valid. */
+  slice?: string | null
 }): string {
   const base = [
     input.tag || "",
@@ -203,7 +205,16 @@ export function orderIntentKey(input: {
     input.stopPrice == null ? "" : String(input.stopPrice),
     input.limitPrice == null ? "" : String(input.limitPrice),
   ].join(":")
-  return input.retrySuffix ? `${base}:${input.retrySuffix}` : `intent:${base}`
+  const withSlice = input.slice ? `${base}:slice:${input.slice}` : base
+  return input.retrySuffix ? `${withSlice}:${input.retrySuffix}` : `intent:${withSlice}`
+}
+
+export type RecordedIntent = {
+  id: string
+  created: boolean
+  status: string
+  brokerOrderId: string | null
+  createdAt: Date
 }
 
 export async function recordOrderIntent(input: {
@@ -225,7 +236,8 @@ export async function recordOrderIntent(input: {
   idempotencyKey?: string
   provenance?: Provenance
   metadata?: Record<string, unknown>
-}): Promise<{ id: string; created: boolean } | null> {
+  slice?: string | null
+}): Promise<RecordedIntent | null> {
   await ensureDefaultAccount()
   const hinted = strategyForOrder({ strategy: input.strategy, orderTag: input.orderTag })
   const job = input.jobId
@@ -244,6 +256,7 @@ export async function recordOrderIntent(input: {
       orderType: input.orderType,
       stopPrice: input.stopPrice,
       limitPrice: input.limitPrice,
+      slice: input.slice,
     })
 
   try {
@@ -256,7 +269,13 @@ export async function recordOrderIntent(input: {
       ) {
         return recordOrderIntent({ ...input, idempotencyKey: `${key}:r:${randomUUID()}` })
       }
-      return { id: existing[0].id, created: false }
+      return {
+        id: existing[0].id,
+        created: false,
+        status: existing[0].status,
+        brokerOrderId: existing[0].brokerOrderId ?? null,
+        createdAt: existing[0].createdAt,
+      }
     }
 
     const rows = await db
@@ -287,11 +306,17 @@ export async function recordOrderIntent(input: {
         metadata: input.metadata ?? {},
       })
       .onConflictDoNothing()
-      .returning({ id: orders.id })
+      .returning({
+        id: orders.id,
+        status: orders.status,
+        brokerOrderId: orders.brokerOrderId,
+        createdAt: orders.createdAt,
+      })
 
-    const id = rows[0]?.id ?? (await orderIdByKey(key))
+    const inserted = rows[0]
+    const id = inserted?.id ?? (await orderIdByKey(key))
     if (!id) return null
-    if (rows[0]?.id) {
+    if (inserted?.id) {
       await appendOrderEvent({
         orderId: id,
         fromStatus: null,
@@ -308,7 +333,24 @@ export async function recordOrderIntent(input: {
         idempotencyKey: `order-created:${id}`,
       })
     }
-    return { id, created: Boolean(rows[0]?.id) }
+    if (!inserted) {
+      const again = await db.select().from(orders).where(eq(orders.idempotencyKey, key)).limit(1)
+      if (!again[0]) return null
+      return {
+        id: again[0].id,
+        created: false,
+        status: again[0].status,
+        brokerOrderId: again[0].brokerOrderId ?? null,
+        createdAt: again[0].createdAt,
+      }
+    }
+    return {
+      id,
+      created: true,
+      status: inserted.status,
+      brokerOrderId: inserted.brokerOrderId ?? null,
+      createdAt: inserted.createdAt,
+    }
   } catch (e) {
     logger.error("[ledger.recordOrderIntent]", e)
     return null
@@ -1304,8 +1346,9 @@ export async function safeRecordOrderFromKiteProps(
     provenance?: Provenance
     decisionId?: string | null
     strategy?: string | null
+    slice?: string | null
   }
-): Promise<string | null> {
+): Promise<RecordedIntent | null> {
   if (!orderProps.tradingsymbol || !orderProps.quantity || !orderProps.transaction_type) return null
   try {
     const recorded = await recordOrderIntent({
@@ -1323,8 +1366,9 @@ export async function safeRecordOrderFromKiteProps(
       provenance: extras?.provenance,
       decisionId: extras?.decisionId,
       strategy: extras?.strategy,
+      slice: extras?.slice,
     })
-    return recorded?.id ?? null
+    return recorded
   } catch (e) {
     logger.error("[ledger.safeRecordOrderFromKiteProps]", e)
     return null

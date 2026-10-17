@@ -16,11 +16,47 @@ import {
 } from "../queue"
 import { jobExecutions } from "../schema"
 import { getCustomBackoffStrategies, logDeep, ms } from "../utils"
-import { isStaleTradingJob } from "./staleJobGuard"
+import { isLateTradingJob, isStaleTradingJob } from "./staleJobGuard"
 import { processTradingJob } from "./tradingJobProcessor"
 
 async function processJob(job: Job) {
   return processTradingJob(job.data)
+}
+
+/** Stops and the loss watcher are armed before the entry job is allowed to complete. */
+async function armEntryFollowUps(
+  job: Job,
+  result: { _nextTradingQueue?: string; isTargetEnabled?: boolean } | null
+) {
+  if (!result) return
+  if (job.data?.isAutoSquareOffEnabled) {
+    try {
+      await addToAutoSquareOffQueue({
+        initialJobData: job.data,
+        jobResponse: result,
+      })
+    } catch (e) {
+      logger.error("failed to enable auto square off", e)
+      const { recordOperatorAlert } = await import("../trading/alerts")
+      await recordOperatorAlert({
+        source: "JOB",
+        code: "ASO_ENABLE_FAILED",
+        severity: "WARN",
+        summary: e instanceof Error ? e.message : "Failed to enable auto square off",
+        jobId: typeof job.data?.id === "string" ? job.data.id : null,
+        strategy: typeof job.data?.strategy === "string" ? job.data.strategy : null,
+        instrument: typeof job.data?.instrument === "string" ? job.data.instrument : null,
+        idempotencyKey: `alert:aso:${job.data?.id || job.id}`,
+      })
+      throw e
+    }
+  }
+  if (result._nextTradingQueue) {
+    await addToNextQueue(job.data, result)
+  }
+  if (result.isTargetEnabled) {
+    await addToNextQueue(job.data, { ...result, _nextTradingQueue: TARGETPNL_Q_NAME })
+  }
 }
 
 const worker = new Worker(
@@ -28,42 +64,22 @@ const worker = new Worker(
   async job => {
     // console.log(`processing tradingQueue id ${job.id}`, omit(job.data, ['user']))
     const scheduledAt = dayjs(job.timestamp + (job.opts.delay ?? 0))
-    if (isStaleTradingJob(job.timestamp, job.opts.delay ?? 0)) {
+    const delayMs = job.opts.delay ?? 0
+    if (isStaleTradingJob(job.timestamp, delayMs)) {
       logger.info(
         `[tradingQueue] Discarding stale job ${job.id} scheduled for ${scheduledAt.toISOString()}`
       )
       throw new Error(`Stale trading job discarded — scheduled for ${scheduledAt.toISOString()}`)
     }
-    const result = await processJob(job)
-    // console.log(`processed tradingQueue id ${job.id}`, result)
-    const { isAutoSquareOffEnabled, strategy } = job.data
-    // can't enable auto square off for DOS
-    // because we don't know upfront how many orders would get punched
-    if (isAutoSquareOffEnabled) {
-      try {
-        // console.log('enabling auto square off...')
-        const asoResponse = await addToAutoSquareOffQueue({
-          //eslint-disable-line
-          initialJobData: job.data,
-          jobResponse: result,
-        })
-        // const { data, name } = asoResponse
-        // console.log('🟢 success enable auto square off', { data, name })
-      } catch (e) {
-        logger.error("🔴 failed to enable auto square off", e)
-        const { recordOperatorAlert } = await import("../trading/alerts")
-        await recordOperatorAlert({
-          source: "JOB",
-          code: "ASO_ENABLE_FAILED",
-          severity: "WARN",
-          summary: e instanceof Error ? e.message : "Failed to enable auto square off",
-          jobId: typeof job.data?.id === "string" ? job.data.id : null,
-          strategy: typeof job.data?.strategy === "string" ? job.data.strategy : null,
-          instrument: typeof job.data?.instrument === "string" ? job.data.instrument : null,
-          idempotencyKey: `alert:aso:${job.data?.id || job.id}`,
-        })
-      }
+    if (isLateTradingJob(job.timestamp, delayMs)) {
+      logger.info(
+        `[tradingQueue] Discarding late job ${job.id} scheduled for ${scheduledAt.toISOString()}`
+      )
+      throw new Error(`Late trading job discarded — scheduled for ${scheduledAt.toISOString()}`)
     }
+    const result = await processJob(job)
+    await armEntryFollowUps(job, result)
+    // console.log(`processed tradingQueue id ${job.id}`, result)
     return result
   },
   {
@@ -80,14 +96,6 @@ worker.on("completed", async job => {
   const { data, returnvalue } = job
   try {
     logDeep(returnvalue)
-    // console.log(`[tradingQueue] worker is completed ${job.returnvalue}`)
-    if (job.returnvalue?._nextTradingQueue) {
-      addToNextQueue(data, returnvalue) //adds SL orders
-    }
-    if (returnvalue?.isTargetEnabled) {
-      const targetreturn = { ...returnvalue, _nextTradingQueue: TARGETPNL_Q_NAME }
-      addToNextQueue(data, targetreturn) //keeps checking if target is reached.
-    }
   } catch (e) {
     logger.info("job return value", job.returnvalue)
     logger.error("failed inside trading queue worked completed event!", e)
@@ -151,10 +159,13 @@ worker.on("failed", async (job, err) => {
       .where(eq(jobExecutions.id, jobExecutionId))
 
     const { recordOperatorAlert } = await import("../trading/alerts")
-    const stale = String(err?.message || "").includes("Stale trading job discarded")
+    const message = String(err?.message || "")
+    const discarded =
+      message.includes("Stale trading job discarded") ||
+      message.includes("Late trading job discarded")
     await recordOperatorAlert({
       source: "JOB",
-      code: stale ? "JOB_DISCARDED" : "JOB_FAILED",
+      code: discarded ? "JOB_DISCARDED" : "JOB_FAILED",
       severity: "ERROR",
       summary: err?.message || "Trading job failed",
       jobId: jobExecutionId,

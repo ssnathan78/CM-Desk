@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { pool } from "../../lib/drizzle"
 import logger from "../../lib/logger"
 import { redisConnection } from "../../lib/queue"
+import { startDeskProcess } from "../../lib/queue-processor"
 
 function isHealthAuthorized(req: NextApiRequest): boolean {
   const token = process.env.HEALTH_CHECK_TOKEN?.trim()
@@ -27,9 +28,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(401).json({ error: "Unauthorized" })
   }
 
-  const checks: { postgres: string; redis: string } = {
+  const checks: { postgres: string; redis: string; workers: string } = {
     postgres: "ok",
     redis: "ok",
+    workers: "ok",
+  }
+
+  try {
+    await startDeskProcess()
+  } catch (e) {
+    logger.error("[health] workers not started", e)
+    checks.workers = "error"
   }
 
   try {
@@ -49,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     checks.redis = "error"
   }
 
-  const ok = checks.postgres === "ok" && checks.redis === "ok"
+  const ok = checks.postgres === "ok" && checks.redis === "ok" && checks.workers === "ok"
   const payload = {
     status: ok ? "ok" : "degraded",
     service: "cm-desk",

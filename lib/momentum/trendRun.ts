@@ -4,6 +4,8 @@ import {
   evaluateDailyLong,
   sharesForBudget,
 } from "../dailyTrend/engine"
+import { workingEntryCount } from "../trading/brokerPlace"
+import { getOpenOrders } from "../trading/ledger"
 import { istDate } from "./calendar"
 import { type SubmitResult, submitCashOrders } from "./execute"
 import {
@@ -28,6 +30,7 @@ export async function evaluateDailyTrend(args: { execute: boolean; accessToken?:
     executeRequested: args.execute,
     due: state.config.execution === "auto",
   })
+  const openOrders = allow ? await getOpenOrders() : []
   const decisions: Array<{
     symbol: string
     action: string
@@ -84,8 +87,16 @@ export async function evaluateDailyTrend(args: { execute: boolean; accessToken?:
       },
     })
     const entryBlocked = book.paused && decision.role === "ENTRY"
+    const working =
+      decision.action === "BUY" ? workingEntryCount(openOrders, book.symbol, "DAILY_TREND") : 0
     let result: SubmitResult | null = null
-    if (allow && !entryBlocked && decision.action !== "NONE" && decision.quantity > 0) {
+    if (
+      allow &&
+      !entryBlocked &&
+      working === 0 &&
+      decision.action !== "NONE" &&
+      decision.quantity > 0
+    ) {
       const limit =
         decision.action === "BUY"
           ? bar.close * (1 + state.config.limitBufferPercent / 100)
@@ -110,7 +121,14 @@ export async function evaluateDailyTrend(args: { execute: boolean; accessToken?:
     }
     if (allow) {
       const rejectedEntry = decision.role === "ENTRY" && result != null && !result.ok
-      const nextStatus = bookQty > 0 ? "LONG" : rejectedEntry ? "FLAT" : decision.state
+      const nextStatus =
+        bookQty > 0
+          ? "LONG"
+          : rejectedEntry
+            ? "FLAT"
+            : working > 0
+              ? "PENDING_LONG"
+              : decision.state
       await saveDailyTrendBook({
         ...book,
         status: nextStatus,

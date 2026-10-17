@@ -8,7 +8,10 @@ jest.mock("axios", () => ({
   },
 }))
 
-jest.mock("../lib/queue-processor", () => ({}))
+jest.mock("../lib/queue-processor", () => ({
+  startDeskProcess: jest.fn().mockResolvedValue(undefined),
+  closeAllWorkers: jest.fn().mockResolvedValue(undefined),
+}))
 
 jest.mock("../lib/queue", () => {
   const mockQueue = {

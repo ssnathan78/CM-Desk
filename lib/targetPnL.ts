@@ -118,6 +118,7 @@ const targetPnL = async ({
       await squareOffTag(orderTag!, kite)
     } catch (error) {
       logger.error("[targetPnL]error in squaring Off", error)
+      throw error
     }
     return Promise.resolve("[targetPnL] orders are squared off as loss has been breached")
     //Square off the tag

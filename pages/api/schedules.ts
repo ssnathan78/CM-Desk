@@ -10,6 +10,7 @@ import { mapPlanFromDb } from "../../lib/planMapper"
 import { jobExecutions, strategySchedules, strategyTemplates } from "../../lib/schema"
 import withSession from "../../lib/session"
 import { deleteSchedule, saveSchedule, templateToJobBody } from "../../lib/strategyTemplates"
+import { templateBlockedByJob } from "../../lib/trading/scheduleGuard"
 
 export default withSession(async (req: NextApiRequest, res: NextApiResponse) => {
   const user = req.session.user
@@ -29,10 +30,15 @@ export default withSession(async (req: NextApiRequest, res: NextApiResponse) => 
           and(eq(strategySchedules.dayOfWeek, day as never), eq(strategySchedules.enabled, true))
         )
       const jobs = await db
-        .select({ templateId: jobExecutions.templateId })
+        .select({ templateId: jobExecutions.templateId, status: jobExecutions.status })
         .from(jobExecutions)
         .where(istToday(jobExecutions.createdAt))
-      const queued = new Set(jobs.map(row => row.templateId).filter(Boolean))
+      const queued = new Set(
+        jobs
+          .filter(row => templateBlockedByJob(row.status))
+          .map(row => row.templateId)
+          .filter(Boolean)
+      )
       return res.json(
         rows
           .filter(row => !queued.has(row.schedule.templateId))

@@ -4,6 +4,7 @@ import dayjs from "dayjs"
 import IORedis from "ioredis"
 
 import logger from "./logger"
+import { followUpJobId, isDuplicateJobError } from "./trading/brokerPlace"
 import {
   getBackoffStrategy,
   getEntryAttemptsCount,
@@ -50,79 +51,91 @@ const allQueues = [
   chaseQueue, //For chase orders
 ]
 
-export async function addToNextQueue(jobData, jobResponse): Promise<Job | undefined> {
+function executionIdFrom(jobData): string | null {
+  const id = jobData?.id || jobData?.initialJobData?.id
+  return typeof id === "string" && id ? id : null
+}
+
+async function addQueueJob(queue: Queue, name: string, data: unknown, opts: JobsOptions) {
   try {
-    switch (jobResponse._nextTradingQueue) {
-      case ANCILLARY_Q_NAME: {
-        const marketClosing = dayjs().set("hours", 15).set("minutes", 30).set("seconds", 0)
-        return ancillaryQueue.add(
-          `${ANCILLARY_Q_NAME}_${randomUUID()}`,
-          {
-            initialJobData: jobData,
-            jobResponse,
-          },
-          {
-            delay: marketClosing.diff(dayjs()),
-          }
-        )
-      }
+    return await queue.add(name, data, opts)
+  } catch (error) {
+    if (opts.jobId && isDuplicateJobError(error)) return undefined
+    throw error
+  }
+}
 
-      case EXIT_TRADING_Q_NAME: {
-        // console.log('Adding job to exit trade queue', jobData)
-        const queueOptions = getQueueOptionsForExitStrategy(jobData.exitStrategy)
-        return exitTradesQueue.add(
-          `${EXIT_TRADING_Q_NAME}_${randomUUID()}`,
-          {
-            initialJobData: jobData,
-            jobResponse,
-          },
-          queueOptions
-        )
-      }
-      case TRADING_Q_NAME: {
-        const queueOptions: JobsOptions = {}
-        const { strategy, runNow, runAt } = jobData
-        const maxEntryAttempts = getEntryAttemptsCount({ strategy })
-        if (maxEntryAttempts) {
-          queueOptions.attempts = maxEntryAttempts
-          queueOptions.backoff = {
-            type: getBackoffStrategy({ strategy }),
-          }
+export async function addToNextQueue(jobData, jobResponse): Promise<Job | undefined> {
+  const executionId = executionIdFrom(jobData)
+  switch (jobResponse._nextTradingQueue) {
+    case ANCILLARY_Q_NAME: {
+      const marketClosing = dayjs().set("hours", 15).set("minutes", 30).set("seconds", 0)
+      return addQueueJob(
+        ancillaryQueue,
+        `${ANCILLARY_Q_NAME}_${randomUUID()}`,
+        {
+          initialJobData: jobData,
+          jobResponse,
+        },
+        {
+          delay: marketClosing.diff(dayjs()),
         }
-
-        if (!runNow) {
-          const delay = dayjs(runAt).diff(dayjs())
-          // console.log(`queueOptions.delay == ${Math.ceil(delay / 60000)} mins`)
-          queueOptions.delay = delay
-        }
-
-        return tradingQueue.add(`${TRADING_Q_NAME}_${randomUUID()}`, jobData, queueOptions)
-      }
-      case TARGETPNL_Q_NAME: {
-        logger.info(`[queue] added to ${TARGETPNL_Q_NAME}`)
-        return targetPnLQueue.add(
-          `${TARGETPNL_Q_NAME}_${randomUUID()}`, //Job name
-          {
-            initialJobData: jobData,
-            jobResponse,
-          },
-          {
-            attempts: Math.ceil(getTimeLeftInMarketClosingMs() / ms(3)),
-            backoff: {
-              type: "fixed",
-              delay: ms(4),
-            },
-          }
-        )
-      }
-
-      default: {
-        break
-      }
+      )
     }
-  } catch (e) {
-    logger.error("addToNextQueue error")
-    logger.info(e)
+
+    case EXIT_TRADING_Q_NAME: {
+      const queueOptions = getQueueOptionsForExitStrategy(jobData.exitStrategy)
+      if (executionId) queueOptions.jobId = followUpJobId("exit", executionId)
+      return addQueueJob(
+        exitTradesQueue,
+        `${EXIT_TRADING_Q_NAME}_${randomUUID()}`,
+        {
+          initialJobData: jobData,
+          jobResponse,
+        },
+        queueOptions
+      )
+    }
+    case TRADING_Q_NAME: {
+      const { strategy, runNow, runAt } = jobData
+      const queueOptions: JobsOptions = {
+        attempts: getEntryAttemptsCount({ strategy }) || 3,
+        backoff: {
+          type: getBackoffStrategy({ strategy }),
+          delay: ms(15),
+        },
+      }
+
+      if (!runNow) {
+        const delay = dayjs(runAt).diff(dayjs())
+        queueOptions.delay = delay
+      }
+
+      return addQueueJob(tradingQueue, `${TRADING_Q_NAME}_${randomUUID()}`, jobData, queueOptions)
+    }
+    case TARGETPNL_Q_NAME: {
+      logger.info(`[queue] added to ${TARGETPNL_Q_NAME}`)
+      return addQueueJob(
+        targetPnLQueue,
+        `${TARGETPNL_Q_NAME}_${randomUUID()}`,
+        {
+          initialJobData: jobData,
+          jobResponse,
+        },
+        {
+          attempts: Math.ceil(getTimeLeftInMarketClosingMs() / ms(3)),
+          backoff: {
+            type: "fixed",
+            delay: ms(4),
+          },
+          ...(executionId ? { jobId: followUpJobId("target", executionId) } : {}),
+        }
+      )
+    }
+
+    default: {
+      return undefined
+    }
   }
 }
 
@@ -140,7 +153,9 @@ export async function addToAutoSquareOffQueue({ initialJobData, jobResponse }) {
 
   const delay = dayjs(runAtTime).diff(dayjs())
   // console.log(`>>> auto square off scheduled for ${Math.ceil(delay / 60000)} minutes from now`)
-  return autoSquareOffQueue.add(
+  const executionId = executionIdFrom(initialJobData)
+  return addQueueJob(
+    autoSquareOffQueue,
     `${AUTO_SQUARE_OFF_Q_NAME}_${randomUUID()}`,
     {
       rawKiteOrdersResponse: squareOffOrders || rawKiteOrdersResponse,
@@ -149,20 +164,24 @@ export async function addToAutoSquareOffQueue({ initialJobData, jobResponse }) {
     },
     {
       delay,
+      ...(executionId ? { jobId: followUpJobId("aso", executionId) } : {}),
     }
   )
 }
 
 export async function addToCoSquareOff(user) {
+  const today = dayjs().format("YYYY-MM-DD")
   const marketClosingforEquity = dayjs().set("hours", 15).set("minutes", 10).set("seconds", 0)
   const delay = Math.max(0, marketClosingforEquity.diff(dayjs()))
-  return autoSquareOffQueue.add(
-    `${AUTO_SQUARE_OFF_Q_NAME}_${randomUUID()}`,
+  return addQueueJob(
+    autoSquareOffQueue,
+    `${AUTO_SQUARE_OFF_Q_NAME}_${today}`,
     {
       user,
     },
     {
       delay,
+      jobId: `co-${today}`,
     }
   )
 }
@@ -170,7 +189,7 @@ export async function addToAncillaryQueue(user) {
   const today = dayjs().format("YYYY-MM-DD")
   const marketClosing = dayjs().set("hours", 15).set("minutes", 30).set("seconds", 0)
 
-  return ancillaryQueue.add(`${ANCILLARY_Q_NAME}_${today}`, user, {
+  return addQueueJob(ancillaryQueue, `${ANCILLARY_Q_NAME}_${today}`, user, {
     delay: marketClosing.diff(dayjs()),
     jobId: `ancillary-${today}`,
   })
@@ -183,9 +202,8 @@ export const CHASE_EMA_SCHEDULER_ID = "chase-calculateEMA"
 export const CHASE_UPDATE_SL_SCHEDULER_ID = "chase-updateSL"
 
 export async function addToChaseQueue(user: any) {
+  const today = dayjs().format("YYYY-MM-DD")
   try {
-    const today = dayjs().format("YYYY-MM-DD")
-
     await chaseQueue.upsertJobScheduler(
       CHASE_EMA_SCHEDULER_ID,
       {
@@ -217,5 +235,18 @@ export async function addToChaseQueue(user: any) {
     return true
   } catch (e) {
     logger.error("[queue] addToChaseQueue error", e)
+    throw e
   }
+}
+
+/** Re-arm today's Chase schedules from the stored access token. Safe to call on every boot and login. */
+export async function restoreChaseSchedulers() {
+  const { getLatestAccessToken } = await import("./drizzleDbUtils")
+  const token = await getLatestAccessToken()
+  if (!token) {
+    logger.info("[queue] no access token for today — Chase schedules left unchanged")
+    return false
+  }
+  await addToChaseQueue({ session: { access_token: token } })
+  return true
 }

@@ -11,7 +11,7 @@ Personal algorithmic trading app for Indian markets via Zerodha Kite Connect.
 - **Broker:** Zerodha Kite Connect (`lib/kiteUtils.ts`)
 - **Auth:** iron-session encrypted cookie `cmdesk-kite-session` (`lib/session.ts`)
 - **Observability:** OpenTelemetry → optional Grafana Cloud (`otel.js`)
-- **Server:** Express (`server.js`) with Bull Board at `/queues`
+- **Server:** Express (`server.js`) with Bull Board at `/queues`. The process exits if SQL migrations are pending. Workers start from `lib/queue-processor` (`startDeskProcess`). Boundaries: [docs/PROCESS_RELIABILITY.md](docs/PROCESS_RELIABILITY.md)
 - **Package manager:** Yarn Berry **4.9.1** (`.yarn/releases/`, `nodeLinker: node-modules` in `.yarnrc.yml`). Use `yarn`, not `npm`.
 
 ## Commands

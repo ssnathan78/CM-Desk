@@ -29,6 +29,12 @@ import { formatThrownMessage } from "./kiteError"
 import logger from "./logger"
 import { aggregateFillsBySymbol } from "./pnl"
 import { jobExecutions, orders as ledgerOrders } from "./schema"
+import {
+  decideBrokerPlace,
+  isAmbiguousBrokerError,
+  matchingBrokerOrderId,
+  OrderAckUnknownError,
+} from "./trading/brokerPlace"
 import { chaseMayTouchBrokerStop } from "./trading/exitSafety"
 import {
   KitePositionsUnavailableError,
@@ -284,6 +290,8 @@ export type RiskAwarePlaceOrder = PlaceOrderParams & {
   ltp?: number
   ltpAt?: Date | null
   lots?: number | null
+  /** Distinguishes freeze-quantity slices so they do not share one ledger key. */
+  intentSlice?: string | null
 }
 
 function stripRiskMeta(order: RiskAwarePlaceOrder): PlaceOrderParams {
@@ -293,6 +301,7 @@ function stripRiskMeta(order: RiskAwarePlaceOrder): PlaceOrderParams {
     ltp: _ltp,
     ltpAt: _ltpAt,
     lots: _lots,
+    intentSlice: _intentSlice,
     ...rest
   } = order as RiskAwarePlaceOrder & Record<string, unknown>
   return rest as PlaceOrderParams
@@ -399,7 +408,7 @@ export async function placeOrder(
     }
   }
 
-  const ledgerOrderId = await safeRecordOrderFromKiteProps(
+  const recorded = await safeRecordOrderFromKiteProps(
     kiteOrder as {
       tradingsymbol?: string
       exchange?: string
@@ -416,13 +425,65 @@ export async function placeOrder(
       purpose: purpose as any,
       provenance,
       strategy: strategy ?? null,
+      slice: order.intentSlice,
     }
   )
-  if (!ledgerOrderId) {
+  if (!recorded) {
     const message = `Refusing ${kiteOrder.transaction_type || ""} ${kiteOrder.quantity || ""} ${kiteOrder.tradingsymbol || ""} — the order was not saved`
     logger.error(`[placeOrder] ${message}`)
     throw new Error(message)
   }
+  const ledgerOrderId = recorded.id
+  const ageMs = Math.max(0, Date.now() - new Date(recorded.createdAt).getTime())
+  let decision = decideBrokerPlace({
+    created: recorded.created,
+    status: recorded.status,
+    brokerOrderId: recorded.brokerOrderId,
+    ageMs,
+    brokerOrderIdFromBook: paperExecution ? null : undefined,
+  })
+  if (decision.action === "lookup") {
+    let fromBook: string | null = null
+    try {
+      const book = (await kite.getOrders()) as Parameters<typeof matchingBrokerOrderId>[0]
+      fromBook = matchingBrokerOrderId(book, {
+        tag: kiteOrder.tag,
+        tradingsymbol: kiteOrder.tradingsymbol,
+        quantity: kiteOrder.quantity,
+        product: kiteOrder.product,
+        transaction_type: kiteOrder.transaction_type,
+        exchange: kiteOrder.exchange,
+        order_type: kiteOrder.order_type,
+      })
+    } catch (lookupError) {
+      logger.warn("[placeOrder] broker book unavailable — not placing a second order", lookupError)
+      throw new OrderAckUnknownError()
+    }
+    decision = decideBrokerPlace({
+      created: recorded.created,
+      status: recorded.status,
+      brokerOrderId: recorded.brokerOrderId,
+      ageMs,
+      brokerOrderIdFromBook: fromBook,
+    })
+  }
+  if (decision.action === "reuse") {
+    if (decision.brokerOrderId && decision.brokerOrderId !== recorded.brokerOrderId) {
+      await markOrderSubmitted({
+        orderId: ledgerOrderId,
+        brokerOrderId: decision.brokerOrderId,
+        status: "SUBMITTED",
+        provenance,
+      })
+    }
+    logger.info("[placeOrder] reusing existing broker order", {
+      tradingsymbol: kiteOrder.tradingsymbol,
+      orderId: decision.brokerOrderId,
+      purpose,
+    })
+    return { order_id: decision.brokerOrderId }
+  }
+  if (decision.action === "wait") throw new OrderAckUnknownError()
   try {
     if (paperExecution) {
       const mockId = ledgerOrderId ? `paper:${ledgerOrderId}` : `paper:${Date.now()}`
@@ -487,10 +548,12 @@ export async function placeOrder(
     })
     return result
   } catch (e) {
+    if (e instanceof OrderAckUnknownError) throw e
     const message = formatThrownMessage(e)
+    const ambiguous = isAmbiguousBrokerError(e)
     await markOrderSubmitted({
       orderId: ledgerOrderId,
-      status: "FAILED",
+      status: ambiguous ? "UNKNOWN" : "FAILED",
       errorInfo: message,
       provenance,
     })
@@ -1228,7 +1291,15 @@ export const remoteOrderSuccessEnsurer = async (args: {
     })
 
     const orderResults: any = await allSettled(
-      freezeQtyOrders.map(order => remoteOrderSuccessEnsurer({ ...args, orderProps: order }))
+      freezeQtyOrders.map((order, idx) =>
+        remoteOrderSuccessEnsurer({
+          ...args,
+          orderProps: {
+            ...order,
+            intentSlice: order.intentSlice ? `${order.intentSlice}.${idx}` : String(idx),
+          },
+        })
+      )
     )
 
     const isSuccessful = orderResults.every(

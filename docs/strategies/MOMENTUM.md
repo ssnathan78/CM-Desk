@@ -119,7 +119,7 @@ The desk does not read the Zerodha balance before sending. A shortfall is Kite r
 
 | Mode | After a rejection |
 |---|---|
-| `auto` | The pass still marks this IST day done (`last_rebalance_on`), including when every order fails and when only some fail. Later hours the same day do not send again. The next automatic attempt is the next rebalance day. Names that never filled are still buys then, if they still qualify. |
+| `auto` | The pass claims this IST day (`last_rebalance_on`) before it sends, so a second process or a crash cannot send the basket twice. A rejected order stays claimed and is written to Alerts. Later hours the same day do not send again. The next automatic attempt is the next rebalance day. Names that never filled are still buys then, if they still qualify. |
 | `manual` | **Send rebalance** can be clicked again the same day. The once-a-day mark blocks only the scheduler. The page’s success message does not mean every order was accepted. |
 | `report` | Nothing is sent. |
 

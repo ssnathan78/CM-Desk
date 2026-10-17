@@ -19,8 +19,10 @@ import {
   chaseSideFromNetQty,
   chaseSideHasPosition,
   chaseSlBreachMayClearStatus,
+  chaseStopTouchedInWindow,
   decideChaseInPositionSync,
   isChaseWorkingBrokerStatus,
+  mayResetEmptyChaseStatus,
   planChaseMorningExit,
   planChaseSlBreachFlatten,
 } from "../chaseFill"
@@ -313,18 +315,29 @@ async function ensureChaseEntryFilled(args: {
   }
 }
 
+async function resolveChaseAccessToken(jobUser: { session?: { access_token?: string } } | null) {
+  const { getLatestAccessToken } = await import("../drizzleDbUtils")
+  const latest = await getLatestAccessToken()
+  if (latest) return latest
+  return jobUser?.session?.access_token || null
+}
+
 async function processCalculateEMA(job: Job) {
   const { user } = job.data as any
   logger.info(`[processCalculateEMA] job ${job.id}`)
 
-  if (!user) {
-    logger.error("[processCalculateEMA] missing user payload")
-    return null
-  }
-
-  const accessToken = user?.session?.access_token
+  const accessToken = await resolveChaseAccessToken(user)
   if (!accessToken) {
-    logger.error("[processCalculateEMA] no access token in job data")
+    logger.error("[processCalculateEMA] no access token")
+    const { recordOperatorAlert } = await import("../trading/alerts")
+    await recordOperatorAlert({
+      source: "CHASE",
+      code: "CHASE_NO_TOKEN",
+      severity: "ERROR",
+      summary: "Chase EMA did not run — no access token for today",
+      strategy: "CHASE",
+      idempotencyKey: `alert:chase-token:ema:${new Date().toISOString().slice(0, 13)}`,
+    })
     return null
   }
 
@@ -494,9 +507,19 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
   }
 
   const { user } = job.data as any
-  const accessToken = user?.session?.access_token
+  const accessToken = await resolveChaseAccessToken(user)
   if (!accessToken) {
-    logger.error("[processUpdateSL] no access token in job data")
+    logger.error("[processUpdateSL] no access token")
+    const { recordOperatorAlert } = await import("../trading/alerts")
+    await recordOperatorAlert({
+      source: "CHASE",
+      code: "CHASE_NO_TOKEN",
+      severity: "ERROR",
+      summary: "Chase stop check did not run — no access token for today",
+      strategy: "CHASE",
+      instrument: tradingsymbol,
+      idempotencyKey: `alert:chase-token:sl:${tradingsymbol}:${new Date().toISOString().slice(0, 16)}`,
+    })
     return null
   }
 
@@ -1177,10 +1200,31 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       return null
     }
     const candleAgeSec = (nowIst.valueOf() - dayjs(candle.date).valueOf()) / 1000
-    if (Number.isFinite(candleAgeSec) && candleAgeSec > 180) {
+    const windowCandles = candles.map(row => ({
+      high: row.high,
+      low: row.low,
+      date: row.date,
+    }))
+    const longTouched =
+      currentStatus === CHASE_STATUS.LONG &&
+      chaseStopTouchedInWindow({ side: "LONG", stoploss: stoploss ?? 0, candles: windowCandles })
+    const shortTouched =
+      currentStatus === CHASE_STATUS.SHORT &&
+      chaseStopTouchedInWindow({ side: "SHORT", stoploss: stoploss ?? 0, candles: windowCandles })
+    if (Number.isFinite(candleAgeSec) && candleAgeSec > 180 && !longTouched && !shortTouched) {
       logger.warn(
         `[processUpdateSL] stale candle ${Math.round(candleAgeSec)}s old — not trading on it`
       )
+      const { recordOperatorAlert } = await import("../trading/alerts")
+      await recordOperatorAlert({
+        source: "CHASE",
+        code: "CHASE_STALE_CANDLE",
+        severity: "WARN",
+        summary: `Chase stop check skipped — candle for ${tradingsymbol} is ${Math.round(candleAgeSec)}s old`,
+        strategy: "CHASE",
+        instrument: tradingsymbol,
+        idempotencyKey: `alert:chase-stalecandle:${tradingsymbol}:${nowIst.format("YYYY-MM-DDTHH:mm")}`,
+      })
       return null
     }
 
@@ -1324,7 +1368,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       return "place_flatten" as const
     }
 
-    if (currentStatus === CHASE_STATUS.SHORT && candle.high >= (stoploss ?? 0)) {
+    if (shortTouched) {
       logger.info(`[processUpdateSL] SL breached SHORT for ${tradingsymbol}`)
       const plan = await flattenChase("BUY")
       const book = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
@@ -1365,7 +1409,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       })
       if (!success) logger.error("[processUpdateSL] error updating chase_status:", error)
       return { signal: "TRANSACTION_ALERT", stoploss }
-    } else if (currentStatus === CHASE_STATUS.LONG && candle.low <= (stoploss ?? 0)) {
+    } else if (longTouched) {
       logger.info(`[processUpdateSL] SL breached LONG for ${tradingsymbol}`)
       const plan = await flattenChase("SELL")
       const book = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
@@ -1578,7 +1622,13 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       } else if (sync === "hold" && stoploss) {
         const exitSide = side === "LONG" ? "SELL" : "BUY"
         await placeSL(tradingsymbol, exitSide, chaseFlattenQty(book.netQty), accessToken, stoploss)
-      } else if (sync === "reset_empty") {
+      } else if (
+        mayResetEmptyChaseStatus({
+          sync,
+          paperBook: book.paperBook,
+          kiteQtyKnown: book.kiteQtyKnown,
+        })
+      ) {
         logger.warn(
           `[processUpdateSL] ${side} with no fill — reverting to AWAITING_SIGNAL (will not punch lots)`
         )

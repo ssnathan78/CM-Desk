@@ -1,4 +1,4 @@
-import { asc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, sql } from "drizzle-orm"
 import type { DailyTrendBulkPatch } from "../dailyTrend/engine"
 import { loadNifty100 } from "../dailyTrend/nifty100"
 import { db } from "../drizzle"
@@ -99,6 +99,25 @@ export async function markMomentumRebalance(day: string): Promise<void> {
     .update(momentumSettings)
     .set({ lastRebalanceOn: day, updatedAt: new Date() })
     .where(eq(momentumSettings.id, 1))
+}
+
+/**
+ * One pass owns the IST day. The claim is taken before any order is sent.
+ * A rejected basket stays claimed so the day is not retried. A second process
+ * sees the claim and does not send again.
+ */
+export async function claimMomentumRebalance(day: string): Promise<boolean> {
+  const rows = await db
+    .update(momentumSettings)
+    .set({ lastRebalanceOn: day, updatedAt: new Date() })
+    .where(
+      and(
+        eq(momentumSettings.id, 1),
+        sql`${momentumSettings.lastRebalanceOn} is distinct from ${day}`
+      )
+    )
+    .returning({ id: momentumSettings.id })
+  return rows.length > 0
 }
 
 export async function readMomentumReportCache(): Promise<{

@@ -1,0 +1,16 @@
+---
+description: Process boundaries for orders, queues, Chase schedules, and startup. A restart during the session is normal.
+alwaysApply: true
+---
+
+# Process reliability
+
+Read [docs/PROCESS_RELIABILITY.md](../../docs/PROCESS_RELIABILITY.md) before changing orders, queues, schedules, Chase startup, cash rebalance, or `server.js`.
+
+- `placeOrder` reuses a working intent. A missing broker ack waits (`OrderAckUnknownError`). A network error is `UNKNOWN`, not `FAILED`. Do not call Kite again from a retry helper.
+- Arm stops, square-off, and the loss watcher inside the entry job, with a stable job id (`exit-`, `target-`, `aso-` + execution id), before the entry is completed.
+- A same-day entry more than 3 minutes late is discarded. Explicit Run now is not late. Same-day square-off still runs.
+- Chase schedules are restored on boot, login, and the hourly pass from today's access token. Unknown Kite quantity does not clear LONG/SHORT.
+- Momentum claims the IST day before sending and does not retry that day. A working daily-trend buy blocks a second buy.
+- Pending migrations: do not start workers and do not listen. Do not auto-apply SQL from `server.js`.
+- New behaviour needs a failing test in `__tests__/unit/trading/processReliability.test.ts` or the nearest pure helper. Do not “fix” a double order by flattening a leftover 9:20 wing.

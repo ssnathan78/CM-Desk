@@ -1,10 +1,11 @@
 import dayjs from "dayjs"
-import { eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { customAlphabet } from "nanoid"
 import type { KiteUser } from "../types/misc"
 import type { SUPPORTED_TRADE_CONFIG } from "../types/trade"
 import { JOB_EXECUTION_STATUS } from "./constants"
 import { db } from "./drizzle"
+import { istToday } from "./drizzleIst"
 import { mapJobExecutionInsert, mapJobExecutionQueuePayload } from "./jobExecutionMapper"
 import logger from "./logger"
 import { addToChaseQueue, addToNextQueue, TRADING_Q_NAME } from "./queue"
@@ -62,19 +63,58 @@ export async function enqueueTradeJob(user: KiteUser, body: Record<string, unkno
       .where(eq(tradePlans.id, planRef))
     if (!plan) planRef = null
   }
-  const inserted = await db
-    .insert(jobExecutions)
-    .values({
-      ...mapJobExecutionInsert({
-        ...body,
-        templateId,
-        planRef,
-      }),
-      orderTag,
-      status: JOB_EXECUTION_STATUS.PENDING,
-      createdAt: new Date(),
-    })
-    .returning()
+  if (templateId) {
+    const [open] = await db
+      .select()
+      .from(jobExecutions)
+      .where(
+        and(
+          eq(jobExecutions.templateId, templateId),
+          istToday(jobExecutions.createdAt),
+          inArray(jobExecutions.status, ["PENDING", "QUEUE", "EXECUTING"])
+        )
+      )
+      .limit(1)
+    if (open) return { ok: true as const, job: open }
+  }
+  let inserted: (typeof jobExecutions.$inferSelect)[]
+  try {
+    inserted = await db
+      .insert(jobExecutions)
+      .values({
+        ...mapJobExecutionInsert({
+          ...body,
+          templateId,
+          planRef,
+        }),
+        orderTag,
+        status: JOB_EXECUTION_STATUS.PENDING,
+        createdAt: new Date(),
+      })
+      .returning()
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: string }).code)
+        : error && typeof error === "object" && "cause" in error
+          ? String((error as { cause?: { code?: string } }).cause?.code || "")
+          : ""
+    if (templateId && code === "23505") {
+      const [open] = await db
+        .select()
+        .from(jobExecutions)
+        .where(
+          and(
+            eq(jobExecutions.templateId, templateId),
+            istToday(jobExecutions.createdAt),
+            inArray(jobExecutions.status, ["PENDING", "QUEUE", "EXECUTING"])
+          )
+        )
+        .limit(1)
+      if (open) return { ok: true as const, job: open }
+    }
+    throw error
+  }
 
   const executionData = inserted[0]
   if (!executionData) throw new Error("Failed to insert job execution")

@@ -77,12 +77,23 @@ function pullLabel(scope: CashPullScope): string {
 }
 
 let pullProgress: CashPullProgress = { ...idlePull }
-let pullActive: Promise<{
+
+type CashPullRun = Promise<{
   skipped: boolean
   reason?: string
   pulled: number
   errors: string[]
-}> | null = null
+}>
+
+function currentPull(): CashPullRun | null {
+  const g = globalThis as typeof globalThis & { __cmDeskCashPull?: CashPullRun | null }
+  return g.__cmDeskCashPull ?? null
+}
+
+function setCurrentPull(run: CashPullRun | null) {
+  const g = globalThis as typeof globalThis & { __cmDeskCashPull?: CashPullRun | null }
+  g.__cmDeskCashPull = run
+}
 
 export function cashPullProgress(): CashPullProgress {
   return { ...pullProgress }
@@ -139,7 +150,7 @@ export function startCashHistoryPull(args: {
   scope: CashPullScope
   onlyMissing?: boolean
 }): { started: boolean; progress: CashPullProgress } {
-  if (pullActive) return { started: false, progress: cashPullProgress() }
+  if (currentPull()) return { started: false, progress: cashPullProgress() }
   pullProgress = {
     running: true,
     done: 0,
@@ -151,9 +162,9 @@ export function startCashHistoryPull(args: {
     shown: true,
   }
   const run = pullCashHistoryNow(args).finally(() => {
-    pullActive = null
+    setCurrentPull(null)
   })
-  pullActive = run
+  setCurrentPull(run)
   return { started: true, progress: cashPullProgress() }
 }
 
@@ -162,13 +173,13 @@ export async function pullCashHistory(args: {
   force?: boolean
   scope?: CashPullScope
 }): Promise<{ skipped: boolean; reason?: string; pulled: number; errors: string[] }> {
-  if (pullActive) {
+  if (currentPull()) {
     return { skipped: true, reason: "a history pull is already running", pulled: 0, errors: [] }
   }
   const run = pullCashHistoryNow(args).finally(() => {
-    pullActive = null
+    setCurrentPull(null)
   })
-  pullActive = run
+  setCurrentPull(run)
   return run
 }
 

@@ -71,12 +71,12 @@ export default withSession(async (req, res) => {
     })
 
     try {
+      logger.info("[redirect_url_kite] refreshing today's schedules")
+      await addToAncillaryQueue(user)
+      await addToCoSquareOff(user)
+      await addToChaseQueue(user)
       const existingAccessToken = await checksameToken(user.session.access_token!)
       if (!existingAccessToken) {
-        logger.info("[redirect_url_kite] first token of the day — scheduling ancillary jobs")
-        await addToAncillaryQueue(user)
-        await addToCoSquareOff(user)
-        await addToChaseQueue(user)
         await storeAccessToken(user.session.access_token!)
       }
     } catch (queueError) {
