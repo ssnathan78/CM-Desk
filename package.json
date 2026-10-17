@@ -45,7 +45,7 @@
     "bullmq": "^6.3.4",
     "dayjs": "^1.10.4",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.4",
     "express": "^5.2.1",
     "ioredis": "^6.0.0",
     "iron-session": "^9.0.1",
