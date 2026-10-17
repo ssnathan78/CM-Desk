@@ -1,6 +1,6 @@
 ---
 description: Distinguish Trading enabled, desk Halt, and strategy disabled; flatten/SL still work except when the strategy is off.
-globs: lib/trading/riskEngine.ts,lib/trading/riskSettings.ts,lib/trading/riskGate.ts,lib/killDesk.ts,components/desk/RiskControls.tsx,pages/desk.tsx,pages/api/desk/risk.ts
+globs: lib/trading/riskEngine.ts,lib/trading/riskSettings.ts,lib/trading/riskGate.ts,lib/trading/exitSafety.ts,lib/killDesk.ts,lib/killNotice.ts,lib/kiteUtils.ts,components/desk/RiskControls.tsx,components/desk/EmergencyPanel.tsx,pages/desk.tsx,pages/api/desk/risk.ts,pages/api/kill-desk.ts
 alwaysApply: false
 ---
 
@@ -15,4 +15,6 @@ All of these block **ENTRY** only except strategy **disabled**:
 | Per-strategy Not halted off | `STRATEGY_HALTED` | allowed |
 | Strategy enabled off | `STRATEGY_DISABLED` | **blocked** |
 
-Halt is the loud kill (`KILL_SWITCH` audit). Resume is explicit and **forces `tradingEnabled` true**. Checkbox is quiet config. `evaluateOrder` is the only pre-trade gate—strategy code must not bypass it.
+Halt is the loud kill (`KILL_SWITCH` audit). Resume is explicit and **forces `tradingEnabled` true**. Checkbox is quiet config. `evaluateOrder` is the pre-trade gate for a new order. `kite.modifyOrder` and `kite.cancelOrder` on a stop call `assertLiveBrokerMutation` first. A live flatten while the market is closed is refused and the stop stays. `getRiskSettings` throws when the row cannot be read.
+
+Kill reports `chasePaused` and `deskHalted` only after those writes succeed. A failed halt is HTTP 500. The panel uses `killOperatorNotice`. Guide: [docs/AGENT_ORDER_SAFETY.md](../../docs/AGENT_ORDER_SAFETY.md).

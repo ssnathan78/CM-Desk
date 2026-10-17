@@ -143,9 +143,9 @@ Open-position count is an **execution cap** (do not open another book when this 
 | | |
 |--|--|
 | Protects | Risk DB/table unavailable |
-| Enforced | `getRiskSettings` returns halted + trading disabled on error |
-| Trigger | Entries rejected |
-| Tests | Implicit via fail-closed defaults |
+| Enforced | `getRiskSettings` throws `RiskSettingsUnavailableError`. Callers must not substitute Paper defaults |
+| Trigger | The order is not sent and is not paper-filled (`RISK_UNAVAILABLE` from `assertOrderAllowed`) |
+| Tests | `__tests__/unit/trading/riskSettingsFailClosed.test.ts` |
 
 ## Operator alerts (not the Orders blotter)
 
@@ -165,6 +165,18 @@ Open-position count is an **execution cap** (do not open another book when this 
 | Enforced | `/api/desk/reconcile` — records mismatches, does not place orders |
 | Trigger | Recon events on Desk → Activity |
 | Tests | Ledger integration + desk API |
+
+## Broker modify, square-off identity, and Kill
+
+Agent checklist, including how to add a new order path: [AGENT_ORDER_SAFETY.md](AGENT_ORDER_SAFETY.md).
+
+| | |
+|--|--|
+| Protects | A paper trail rewriting a live stop; a live flatten after the close that cancels the stop first; a square-off with no strategy paper-filling a live row; Kill announcing a pause or halt that was not saved |
+| Enforced | `assertLiveBrokerMutation` before `kite.modifyOrder` / `kite.cancelOrder` on a stop. `liveFlattenSessionBlock` on every live non-entry in `placeOrder`, and before auto square-off cancels stops. `resolveSquareOffBook` refuses a missing strategy. `protectiveOrderMatchesJob` requires the order tag. `runDeskKill` returns `chasePaused` and `deskHalted` from the writes that succeeded |
+| Trigger | `PAPER_BOOK`, `MARKET_CLOSED`, `STRATEGY_DISABLED`, `SQUARE_OFF_STRATEGY_REQUIRED`. Kill halt failure is HTTP 500 |
+| Config | Not a Desk toggle. The entry “require market hours” switch does not turn the live-flatten session block off |
+| Tests | `__tests__/unit/trading/exitSafety.test.ts`, `__tests__/unit/watchers.test.ts`, `__tests__/unit/criticalPaths.test.ts` |
 
 ## What is intentionally not a guardrail
 

@@ -14,5 +14,8 @@ Live punch needs **all three**: `MOCK_ORDERS=false`, Desk Allow live orders, str
 - Paper → Live: `prepareStrategyGoLive` archives paper, resets Chase status for every index.
 - Clear paper (`clearPaperBook`) deletes paper/mock ledger rows; does **not** send a broker order; refuses if paper is still open or a paper order is working.
 - Clear phantom zeros one leftover row; not a Kite flatten.
+- A paper book does not `kite.modifyOrder` or `kite.cancelOrder`. Square-off uses `resolveSquareOffBook`. A missing strategy is refused, not treated as Paper (that paper-fills a live row).
+
+Order gates: [docs/AGENT_ORDER_SAFETY.md](../../../docs/AGENT_ORDER_SAFETY.md).
 
 Replay: `yarn simulate -- --scenario chase-paper-to-live-open` (also straddle/strangle variants) and `chase-live-to-paper-open`.

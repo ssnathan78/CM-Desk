@@ -22,6 +22,11 @@ Happy path is not enough. Encode failures that lose money.
 | Same-day re-entry | Previous round-trip’s fill counted as cover for the new book |
 | Kite positions call failed | Treated as quantity 0 (entry, clear phantom, mode switch, “broker flat”) |
 | Fill insert failed | `orders.filled_qty` already advanced, so the snapshot never retries |
+| Live flatten while the market is closed | Stop cancelled, or a market cover sent |
+| Paper book | `kite.modifyOrder` / `kite.cancelOrder` |
+| Square-off with no strategy | Paper fill of a live row, or Kite qty stored as paper |
+| Risk settings read failed | Paper defaults and a filled exit that Kite never saw |
+| Kill all | `chasePaused` or `deskHalted` true when that write failed |
 
 ## Where
 
@@ -29,5 +34,6 @@ Happy path is not enough. Encode failures that lose money.
 - Tests: `__tests__/simulation/`, `__tests__/unit/trading/`
 - Replay: `yarn simulate -- --scenario <name>`
 - Always: `yarn unit-test` && `yarn sim-test`
+- Order send / modify / cancel / Kill: [docs/AGENT_ORDER_SAFETY.md](../../../docs/AGENT_ORDER_SAFETY.md)
 
 Simulation keeps `SIMULATION=true` and `MOCK_ORDERS=true` — never call Kite.

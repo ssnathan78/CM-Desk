@@ -12,6 +12,6 @@ Before finishing orders / risk / ledger / Chase / straddle / strangle / a new st
 2. Encode them in `lib/simulation/catalog.ts` + `__tests__/simulation/`.
 3. Hermetic matrices in `__tests__/unit/`. Run `yarn unit-test` and `yarn sim-test`.
 
-Minimum: reject-without-fill; flatten empty book must not use lots; paper↔live; halt still flattens; 9:20 leftover wing held; no double flatten after SL fill; failed Kite read is not qty 0; filled qty waits for the fill row. Rules: [docs/AGENT_BOOKS_AND_PNL.md](../../docs/AGENT_BOOKS_AND_PNL.md).
+Minimum: reject-without-fill; flatten empty book must not use lots; paper↔live; halt still flattens; 9:20 leftover wing held; no double flatten after SL fill; failed Kite read is not qty 0; filled qty waits for the fill row; paper book does not modify Kite; live flatten after the close leaves the stop; square-off with no strategy is refused; risk settings read failure throws; Kill does not claim a pause or halt that failed. Rules: [docs/AGENT_BOOKS_AND_PNL.md](../../docs/AGENT_BOOKS_AND_PNL.md), [docs/AGENT_ORDER_SAFETY.md](../../docs/AGENT_ORDER_SAFETY.md).
 
 New strategy: add `RISK_STRATEGY_KEYS`, Desk → Risk, sim actor that calls production `evaluateOrder`.

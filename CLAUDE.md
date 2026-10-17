@@ -69,6 +69,8 @@ Helpers: `lib/drizzleDbUtils.ts`. Init SQL: `drizzle/0000_init.sql`.
 
 Operator specs: [docs/strategies/README.md](docs/strategies/README.md).
 
+Agent order gates (who may send, modify, or cancel): [docs/AGENT_ORDER_SAFETY.md](docs/AGENT_ORDER_SAFETY.md). Books and P&L: [docs/AGENT_BOOKS_AND_PNL.md](docs/AGENT_BOOKS_AND_PNL.md).
+
 - `lib/strategies/atmStraddle.ts`
 - `lib/strategies/strangle.ts`
 - Chase: `lib/chaseSignal.ts`, `lib/queue-processor/chaseQueue.ts`

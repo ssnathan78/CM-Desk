@@ -14,3 +14,4 @@ Triple live gate: `MOCK_ORDERS=false` **and** `allowLiveOrders` **and** strategy
 - Clear paper book does not send a Kite order. Clear phantom zeros a ledger row only.
 - Do not punch paper on top of a real Kite book.
 - Paper on a live process (`MOCK_ORDERS=false`) must read Kite. A failed `getPositions` is unknown, not flat: do not enter, do not clear the live row, do not switch mode. `MOCK_ORDERS=true` has no broker book.
+- A paper book does not `kite.modifyOrder` or `kite.cancelOrder`. Square-off uses `resolveSquareOffBook`. A missing strategy is refused, not treated as Paper. See [docs/AGENT_ORDER_SAFETY.md](../../docs/AGENT_ORDER_SAFETY.md).

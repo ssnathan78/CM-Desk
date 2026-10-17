@@ -24,4 +24,8 @@ Halt logs `KILL_SWITCH`. Resume (`resumeDesk`) clears halt **and sets `tradingEn
 | Not halted unchecked | Entries blocked (`STRATEGY_HALTED`); flatten/SL still work |
 | Execution Paper / Live | Live still needs `MOCK_ORDERS=false` + Allow live orders |
 
-Kill-desk / `runDeskKill` aborts jobs then `haltDesk`. Resume is always **manual**.
+Kill-desk / `runDeskKill` aborts jobs then `haltDesk`. `chasePaused` and `deskHalted` are true only after those writes succeed. A failed halt is HTTP 500. The panel uses `killOperatorNotice`. Resume is always **manual**.
+
+`kite.modifyOrder` and `kite.cancelOrder` on a stop call `assertLiveBrokerMutation`. A live flatten while the market is closed is refused and the stop stays. `getRiskSettings` throws when the row cannot be read.
+
+Guide: [docs/AGENT_ORDER_SAFETY.md](../../../docs/AGENT_ORDER_SAFETY.md).

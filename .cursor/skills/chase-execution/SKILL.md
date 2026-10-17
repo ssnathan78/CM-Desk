@@ -15,7 +15,8 @@ Three books can disagree: `chase_status`, ledger, Kite. Reconcile is not continu
 - Protective stop or market flatten already filled for **this** open book (`chaseCoverOrderQty` / `chaseEpisodeCoverFillQty`) → **no** second MARKET. An earlier fill the same day does not cover the new book.
 - 09:16 exit uses `planChaseMorningExit`: `purpose: FLATTEN`, status stays LONG/SHORT until qty is flat. A bare MARKET is an entry and halt will block it.
 - Kite qty unknown (`kiteQtyKnown: false`) → do not enter and do not clear LONG/SHORT. Unknown is not 0.
-- Amend working SL in place (`placeSL`); do not leave the old trigger.
+- Amend working SL in place (`placeSL`); do not leave the old trigger. Paper `placeSL` never calls `kite.modifyOrder`. A live amend or convert-to-market calls `assertLiveBrokerMutation` and only for a Chase-owned tag (`chaseMayTouchBrokerStop`).
+- 15:00 rollover uses `planChaseRollover`. Disabled, or live and market closed: skip, status stays, no Kite call. Paper does not touch Kite. Live: flatten the front month, then the next-month entry (`purpose: ENTRY`), then move `chase_status`. If either order throws, do not move status.
 - Halt / trading-disabled: still flatten/SL. Strategy disabled: fully dark.
 - **Trade this index** (`enabled`): hourly EMA/signals only when on. Minute SL still runs if LONG/SHORT/AWAITING_*.
 - **Pause entries** (`paused`): no new punches; cancel pending entry; open book still trails. Disabled while the index is off.
@@ -26,4 +27,4 @@ Three books can disagree: `chase_status`, ledger, Kite. Reconcile is not continu
 - Open the dying front month on expiry day if still flat — enter next month.
 - Use paper qty when going live.
 
-Spec: `docs/strategies/CHASE.md`. Guard rails: [docs/AGENT_BOOKS_AND_PNL.md](../../../docs/AGENT_BOOKS_AND_PNL.md). Tests: `chaseAdversarial.test.ts`, `chaseFill.test.ts`.
+Spec: `docs/strategies/CHASE.md`. Guard rails: [docs/AGENT_BOOKS_AND_PNL.md](../../../docs/AGENT_BOOKS_AND_PNL.md), [docs/AGENT_ORDER_SAFETY.md](../../../docs/AGENT_ORDER_SAFETY.md). Tests: `chaseAdversarial.test.ts`, `chaseFill.test.ts`, `__tests__/unit/trading/exitSafety.test.ts`.

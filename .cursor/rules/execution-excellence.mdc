@@ -15,3 +15,9 @@ This desk loses real money if status, qty, and broker disagree.
 - After a protective stop **fills**, do not place a second MARKET flatten (that reverses into a new un-signaled position). Cover size is this open book (`chaseCoverOrderQty`); an earlier same-day fill does not count.
 - A flatten or stop must pass `purpose` `FLATTEN` / `SL` / `EXIT`. A bare MARKET is an entry, so halt blocks it. Do not mark the strategy flat until quantity is 0 (`planChaseMorningExit`).
 - A failed Kite position read is **unknown**, not 0. Do not enter, clear a live row, or report the broker flat. See [docs/AGENT_BOOKS_AND_PNL.md](../../docs/AGENT_BOOKS_AND_PNL.md).
+- A new order goes through `placeOrder`. A Kite modify or cancel of a stop goes through `assertLiveBrokerMutation`. A paper book does not call `kite.modifyOrder` or `kite.cancelOrder`.
+- Live flatten, SL, and exit while the market is closed are refused (`liveFlattenSessionBlock`). Do not cancel the stop first. Paper may still flatten. This does not follow the entry “require market hours” toggle.
+- Square-off calls `resolveSquareOffBook`. No strategy is a refuse, not Paper and not “size from Kite”. Cancel a stop only when `protectiveOrderMatchesJob` matches the tag.
+- `getRiskSettings` throws `RiskSettingsUnavailableError` when the row cannot be read. Do not substitute Paper defaults.
+- Kill sets `chasePaused` and `deskHalted` only after those writes succeed. The UI uses `killOperatorNotice`. Do not hard-code “Chase is paused”.
+- Implementation checklist: [docs/AGENT_ORDER_SAFETY.md](../../docs/AGENT_ORDER_SAFETY.md).

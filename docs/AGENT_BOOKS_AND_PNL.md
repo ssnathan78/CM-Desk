@@ -93,7 +93,7 @@ A closing fill with **no** open `trades` row still inserts a `CLOSED` trade via 
 
 1. Name the two figures or states that could disagree (status vs qty, ledger vs Kite, Sessions vs realized, cover qty vs an old fill). If you cannot name them, do not start.
 2. Read the strategy spec if the change touches Chase, straddle, or strangle. Do not “clean up” a leftover 9:20 wing or flatten an empty Chase book.
-3. Put the decision in an existing pure function if one already owns that rule (`planChaseMorningExit`, `chaseCoverOrderQty`, `chaseEpisodeCoverFillQty`, `commitBrokerFillProgress`, `unrealizedForPosition`, `kiteNetQuantity`, `planChaseSlBreachFlatten`, `evaluateOrder`). Do not copy the rule into a queue or a React component.
+3. Put the decision in an existing pure function if one already owns that rule (`planChaseMorningExit`, `planChaseRollover`, `chaseCoverOrderQty`, `chaseEpisodeCoverFillQty`, `commitBrokerFillProgress`, `unrealizedForPosition`, `kiteNetQuantity`, `planChaseSlBreachFlatten`, `evaluateOrder`, `resolveSquareOffBook`, `liveFlattenSessionBlock`). Do not copy the rule into a queue or a React component. Sending, modifying, cancelling, or refusing an order also follows [AGENT_ORDER_SAFETY.md](AGENT_ORDER_SAFETY.md).
 4. Add a unit test that fails if the bug returns. Prefer a table of inputs, not one happy path. Minimum when the change can hit them:
    - Rejected entry does not leave LONG/SHORT with qty 0.
    - Flat book flatten qty is 0, not configured lots.
@@ -118,3 +118,4 @@ A closing fill with **no** open `trades` row still inserts a `CLOSED` trade via 
 | Filled qty only after the fill row | `commitBrokerFillProgress` in `lib/trading/kiteMap.ts` | same invariants test |
 | Open unrealized and orphan close | `unrealizedForPosition`, `orphanCloseTradeFields` in `lib/trading/accounting.ts` | `__tests__/unit/trading/accounting.test.ts` |
 | Account labels | `components/desk/AccountStrip.tsx`, `components/desk/views/DeskSummaryTiles.tsx` | — |
+| Who may send, modify, or cancel an order | [AGENT_ORDER_SAFETY.md](AGENT_ORDER_SAFETY.md) | `__tests__/unit/trading/exitSafety.test.ts` |

@@ -44,6 +44,8 @@ CI runs lint, unit-test, sim-test, migrate, int-test, api-test, build, Playwrigh
 
 Before changing orders, fills, positions, Chase exits, paper/live, or a Desk P&L number, read [docs/AGENT_BOOKS_AND_PNL.md](docs/AGENT_BOOKS_AND_PNL.md).
 
+Before adding or changing a path that places, modifies, cancels, sizes, or refuses an order, read [docs/AGENT_ORDER_SAFETY.md](docs/AGENT_ORDER_SAFETY.md). `evaluateOrder` is the pre-trade gate. `kite.modifyOrder` / `kite.cancelOrder` on a stop still call `assertLiveBrokerMutation`. A square-off with no strategy is refused. A risk-settings read failure throws. Kill reports pause and halt only when those writes succeeded.
+
 - A failed Kite position read is **unknown**, not quantity 0. Do not enter, clear a live row, or switch Paper/Live on that read.
 - A flatten or stop is not an entry. Set `purpose` to `FLATTEN` / `SL` / `EXIT` or halt will block it. Do not mark the strategy flat until quantity is 0.
 - Cover size is this open book. Do not subtract an earlier same-day fill, and do not send a second market order after a cover has already filled.
@@ -72,6 +74,11 @@ Treat every change as if it can lose real money. Happy-path tests are not enough
 | Restart, duplicate working order, partial fill, gap through stop | Overfill, double entry, or status that disagrees with ledger qty. Order `filled_qty` must not advance until the fill row exists |
 | Protective stop or market flatten already filled for this open book | A second MARKET that reverses. Same-day re-entry must not look already covered by the previous fill |
 | Kite `getPositions` failed or `net` missing | Treating that as quantity 0 (clear phantom, “broker already flat”, Paper/Live switch, new entry) |
+| Live flatten or stop change while the market is closed | Cancelling the stop, or sending a regular market cover. Paper may still flatten |
+| `kite.modifyOrder` / `kite.cancelOrder` on a resting stop | Skipping `assertLiveBrokerMutation`. A paper book rewriting a Kite stop. Another strategy’s tag |
+| Square-off with no strategy | Paper-filling a live row, or sizing from Kite and storing a paper fill |
+| Risk settings row cannot be read | Returning Paper defaults and marking a live exit filled |
+| Kill all | Reporting Chase paused or the desk halted when that write failed |
 
 **New or changed strategy:** add it to `RISK_STRATEGY_KEYS` and Desk → Risk; add a sim **actor** that reuses production `evaluateOrder` (do not invent a second entry rule); add catalog cases for reject-without-phantom-status, paper↔live with an open book, flatten-empty-book, and halt vs flatten. Spec: [docs/strategies/README.md](docs/strategies/README.md). Sim how-to: [docs/TRADING_SIMULATION_GUIDE.md](docs/TRADING_SIMULATION_GUIDE.md).
 
@@ -94,6 +101,8 @@ Strategy specs (straddle, strangle, Chase) and rule-book vs chase-bot vs this ap
 Trading ledger (orders, fills, positions, trades, recon): [docs/TRADING_DOMAIN_MODEL.md](docs/TRADING_DOMAIN_MODEL.md). Do not collapse signal / order / fill / position / trade into one row.
 
 Books, quantity, and P&L guard rails for agents: [docs/AGENT_BOOKS_AND_PNL.md](docs/AGENT_BOOKS_AND_PNL.md).
+
+Order send, modify, cancel, square-off, and Kill: [docs/AGENT_ORDER_SAFETY.md](docs/AGENT_ORDER_SAFETY.md).
 
 Trading risk: [docs/TRADING_RISK_AUDIT.md](docs/TRADING_RISK_AUDIT.md). Pre-trade limits live in `lib/trading/riskEngine.ts` and cannot be bypassed by strategy code.
 
