@@ -1,0 +1,17 @@
+---
+description: Session, confirm, and live-arm boundaries for API routes and job payloads
+alwaysApply: true
+---
+
+# Session boundary
+
+Read [docs/AGENT_SESSION_BOUNDARY.md](../../docs/AGENT_SESSION_BOUNDARY.md) before adding a route, confirm, job edit, queue payload, or live-arm path.
+
+- `withSession` only loads the cookie. The handler rejects a missing user.
+- A browser `ConfirmAction` is not the check. Square-off, Kill, Allow live orders, and reconcile accept require the phrase in `lib/operatorConfirm.ts`.
+- Queued job identity stays on the row: strategy, lots, product, instrument, direction. `mapJobExecutionQueuePayload` stamps those from the row. Nested `extras` cannot carry lots, strategy, product, purpose, or quantity.
+- An entry larger than the stored lots times contract size is `JOB_LOTS`. Flatten and stop size from the open book.
+- Chase reset has no force bypass. Unknown or open quantity refuses the reset.
+- Reconcile accept writes a fill only for a strategy that already has a position or an order in that symbol.
+- Client error text is `safeErrorMessage`. Query text, bound parameters, stacks, and credentials stay in the log.
+- Live sending is the process mock flag, Desk Allow live orders, and that strategy’s Execution. The request body does not choose them.

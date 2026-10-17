@@ -2,7 +2,7 @@
 
 Read this before adding or changing any path that places, modifies, cancels, sizes, or refuses an order. Books and P&L rules are in [AGENT_BOOKS_AND_PNL.md](AGENT_BOOKS_AND_PNL.md). Strategy behaviour is in [docs/strategies/](strategies/README.md). This file is how an order is allowed to leave the desk.
 
-CM-Desk is a personal strategy desk. `evaluateOrder` in `lib/trading/riskEngine.ts` is the pre-trade gate. Strategy code, a queue, a watcher, and a React button do not get a second rule.
+CM-Desk is a personal strategy desk. `evaluateOrder` in `lib/trading/riskEngine.ts` is the pre-trade gate. Strategy code, a queue, a watcher, and a React button do not get a second rule. Who may call the route, and which fields a session may change, is [AGENT_SESSION_BOUNDARY.md](AGENT_SESSION_BOUNDARY.md).
 
 ## Conditions
 
@@ -137,7 +137,8 @@ A failed **Kite position** read is a different rule: unknown quantity, not 0. Se
    - Kill reports `chasePaused` and `deskHalted` from what actually succeeded.
 9. Add a named scenario in `lib/simulation/catalog.ts` when a sim actor already runs that code. If the actor does not (direct `kite.modifyOrder`, risk-row outage, Kill pause), the unit test of the production function is the gate. Say which one you ran.
 10. Run `yarn unit-test` and `yarn sim-test`. Risk settings and ledger writes also want `yarn api-test` / `yarn int-test` when Postgres is up.
-11. Update this file if the **rule** changed. A comment in the queue is not the rule.
+11. If the change squares off, kills, arms Allow live orders, edits a queued job, or attributes a fill, follow [AGENT_SESSION_BOUNDARY.md](AGENT_SESSION_BOUNDARY.md). The route checks the phrase and the stored job identity. The dialog alone does not.
+12. Update this file if the **rule** changed. A comment in the queue is not the rule.
 
 ## Where the code lives
 

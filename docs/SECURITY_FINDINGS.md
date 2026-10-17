@@ -20,6 +20,13 @@ Tracked findings from the security hardening pass. Threat model: [SECURITY_REVIE
 | SEC-14 | Low | CI | No dependency audit | `yarn npm audit` in `.github/workflows/ci.yml` | **Fixed** |
 | SEC-15 | Info | Docker Compose | Postgres/Redis on host ports | Documented in [DEPLOYMENT.md](DEPLOYMENT.md) | **Documented** |
 | SEC-16 | Medium | `scripts/rewrite-prod-env.py` | Rewrite dropped `HEALTH_CHECK_TOKEN` / `BIND_HOST` | Preserve those keys when present | **Fixed** |
+| SEC-17 | High | `editPendingJob` | A pending job’s strategy, lots, or product can be replaced, so placement follows another strategy’s live flag | Freeze those fields on the queued row | **Fixed** |
+| SEC-18 | High | `mapJobExecutionQueuePayload` | Nested extras can outgrow the stored lots on the worker payload | Stamp identity from the row; `JOB_LOTS` checks quantity | **Fixed** |
+| SEC-19 | High | Flatten and Kill routes | The confirm existed only in the browser | Require `lib/operatorConfirm.ts` phrases | **Fixed** |
+| SEC-20 | High | `PUT /api/desk/risk` | Allow live orders could turn on without a server confirm | `allowLiveArm` rejects the save without `ALLOW LIVE` | **Fixed** |
+| SEC-21 | Medium | Chase `reset-signal` | A client `force` flag cleared tracking of an open book | Reset always refuses open or unknown quantity | **Fixed** |
+| SEC-22 | Medium | `POST /api/desk/reconcile-strategy` | Any known strategy could receive a reconciled fill | Phrase plus an existing position or order in that symbol | **Fixed** |
+| SEC-23 | Medium | `safeErrorMessage`, `planApiErrorMessage` | Production errors could include the query and bound parameters | Fixed or short application text; details stay in the log | **Fixed** |
 
 ## Accepted by design
 

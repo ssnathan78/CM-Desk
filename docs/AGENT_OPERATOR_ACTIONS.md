@@ -6,6 +6,8 @@ CM-Desk is a strategy desk. The operator does not watch the market here. A contr
 
 The sentences the operator reads live in `lib/operatorActionCopy.ts`. A new confirm, toast, or label that decides what happened belongs in that file (or `lib/killNotice.ts` / `lib/flattenNotice.ts` for Kill and flatten), with a hermetic test in `__tests__/unit/operatorActionCopy.test.ts`. Do not write the sentence only inside a click handler.
 
+The API phrases for square-off, Kill, Allow live orders, and reconcile accept live in `lib/operatorConfirm.ts`. The dialog sends the phrase. The route rejects the action without it. See [AGENT_SESSION_BOUNDARY.md](AGENT_SESSION_BOUNDARY.md).
+
 ## Conditions
 
 | What the operator sees | What is stored |
