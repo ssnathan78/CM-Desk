@@ -1,4 +1,4 @@
-import { pendingMigrationTags } from "../../../lib/migrationGate.js"
+import { pendingMigrationTags, resolveMigrationsFolder } from "../../../lib/migrationGate.js"
 import { chaseStopTouchedInWindow, mayResetEmptyChaseStatus } from "../../../lib/chaseFill"
 import { isLateTradingJob, LATE_ENTRY_GRACE_MS } from "../../../lib/queue-processor/staleJobGuard"
 import {
@@ -285,5 +285,25 @@ describe("migration gate", () => {
   it("returns only journal entries newer than the last applied millis", () => {
     expect(pendingMigrationTags(entries, [1])).toEqual(["0001_next"])
     expect(pendingMigrationTags(entries, [2])).toEqual([])
+  })
+
+  it("uses the working directory when that journal exists", () => {
+    let calls = 0
+    const folder = resolveMigrationsFolder(undefined, () => {
+      calls += 1
+      return calls === 1
+    })
+    expect(calls).toBe(1)
+    expect(folder.replace(/\\/g, "/")).toMatch(/drizzle$/)
+  })
+
+  it("falls through when the working directory has no journal", () => {
+    let calls = 0
+    const folder = resolveMigrationsFolder(undefined, () => {
+      calls += 1
+      return calls === 2
+    })
+    expect(calls).toBe(2)
+    expect(folder.replace(/\\/g, "/")).toMatch(/drizzle$/)
   })
 })
