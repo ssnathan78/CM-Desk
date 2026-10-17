@@ -11,8 +11,12 @@
 import type { KiteUser } from "../../types/misc"
 import { syncGetKiteInstance } from "../kiteUtils"
 import logger from "../logger"
+import { isPaperStrategy } from "../trading/riskEngine"
+import { assertLiveBrokerMutation, strategyFromOrderTag } from "../trading/riskGate"
+import { getRiskSettings } from "../trading/riskSettings"
 import {
   finiteStateChecker,
+  isMockOrder,
   ms,
   orderStateChecker,
   RemoteRetryTimeoutError,
@@ -53,6 +57,28 @@ const sllWatcher = async ({ sllOrderId, user }: { sllOrderId: string; user: Kite
         // place market orders
         logger.info("🟢 [sllWatcher] squaring off open SLL order id", sllOrderId)
         try {
+          const tag = openOrder.tag as string | undefined
+          const strategy = await strategyFromOrderTag(tag)
+          const settings = await getRiskSettings()
+          const paperBook = isMockOrder() || !strategy || isPaperStrategy(settings, strategy)
+          if (paperBook) {
+            logger.error(
+              `[sllWatcher] refusing to convert kite order ${sllOrderId} while the book is paper`
+            )
+            return Promise.resolve(
+              `[sllWatcher] left kite order ${sllOrderId} unchanged — paper book`
+            )
+          }
+          await assertLiveBrokerMutation({
+            paperBook: false,
+            tradingsymbol: openOrder.tradingsymbol,
+            quantity: Number(openOrder.quantity),
+            transaction_type: openOrder.transaction_type,
+            order_type: "MARKET",
+            tag,
+            strategy,
+            role: "FLATTEN",
+          })
           await withRemoteRetry(() =>
             kite.modifyOrder(openOrder.variety, sllOrderId, {
               order_type: kite.ORDER_TYPE_MARKET,

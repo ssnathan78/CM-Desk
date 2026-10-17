@@ -51,6 +51,10 @@ jest.mock("../../lib/flattenOpen", () => ({
   }),
 }))
 
+jest.mock("../../lib/trading/riskSettings", () => ({
+  haltDesk: jest.fn().mockResolvedValue({}),
+}))
+
 describe("killDesk runDeskKill", () => {
   it("intraday scope does not pause chase", async () => {
     const { runDeskKill } = await import("../../lib/killDesk")
@@ -87,7 +91,30 @@ describe("killDesk runDeskKill", () => {
     const result = await runDeskKill("all", createTestUser())
     expect(result.liveLeftOpen).toBe(true)
     expect(result.chasePaused).toBe(true)
+    expect(result.deskHalted).toBe(true)
     expect(update).not.toHaveBeenCalled()
+  })
+
+  it("does not claim Chase is paused when the pause fails", async () => {
+    const { pauseAllChaseBooks } = await import("../../lib/chaseSettings")
+    const pause = pauseAllChaseBooks as jest.Mock
+    pause.mockRejectedValueOnce(new Error("db down"))
+    const { runDeskKill } = await import("../../lib/killDesk")
+    const { createTestUser } = await import("../support/sessionFactory")
+    const result = await runDeskKill("all", createTestUser())
+    expect(result.chasePaused).toBe(false)
+    expect(result.deskHalted).toBe(true)
+  })
+
+  it("does not claim the desk is halted when the halt fails", async () => {
+    const { haltDesk } = await import("../../lib/trading/riskSettings")
+    const halt = haltDesk as jest.Mock
+    halt.mockRejectedValueOnce(new Error("db down"))
+    const { runDeskKill } = await import("../../lib/killDesk")
+    const { createTestUser } = await import("../support/sessionFactory")
+    const result = await runDeskKill("intraday", createTestUser())
+    expect(result.deskHalted).toBe(false)
+    expect(result.chasePaused).toBe(false)
   })
 })
 

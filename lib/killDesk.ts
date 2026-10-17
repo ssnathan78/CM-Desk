@@ -47,10 +47,17 @@ export async function runDeskKill(scope: KillDeskScope, user: KiteUser) {
   const aborted = await abortTodaysJobExecutions(scope)
   const liveLeftOpen = flatten.skipped.some(row => row.reason === LIVE_FLATTEN_MARKET_CLOSED)
 
+  let chasePaused = false
   if (scope === "all") {
     try {
-      const { listChaseBooks, pauseAllChaseBooks } = await import("./chaseSettings")
+      const { pauseAllChaseBooks } = await import("./chaseSettings")
       await pauseAllChaseBooks()
+      chasePaused = true
+    } catch (e) {
+      logger.error("[runDeskKill] Chase pause failed", e)
+    }
+    try {
+      const { listChaseBooks } = await import("./chaseSettings")
       const books = await listChaseBooks()
       const names = books.map(book => book.instrument)
       const kept = flattenFailed
@@ -73,12 +80,14 @@ export async function runDeskKill(scope: KillDeskScope, user: KiteUser) {
     }
   }
 
+  let deskHalted = false
   try {
     const { haltDesk } = await import("./trading/riskSettings")
     await haltDesk(
       scope === "all" ? "Kill desk (all strategies including Chase)" : "Kill desk (intraday)",
       "USER"
     )
+    deskHalted = true
   } catch (e) {
     logger.error("[runDeskKill] could not persist desk halt", e)
   }
@@ -86,7 +95,10 @@ export async function runDeskKill(scope: KillDeskScope, user: KiteUser) {
   return {
     scope,
     aborted: aborted.length,
-    chasePaused: scope === "all",
+    chasePaused,
+    deskHalted,
     liveLeftOpen,
   }
 }
+
+export { killOperatorNotice, killResponseStatus } from "./killNotice"

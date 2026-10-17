@@ -101,13 +101,16 @@ export async function matchPaperWorkingStops(input: {
 
 export async function cancelPaperWorkingOrders(input: {
   tradingsymbol: string
-  side: string
+  side?: string
+  tag?: string
 }): Promise<number> {
+  if (!input.side && !input.tag) return 0
   const open = await getOpenOrders()
   let cancelled = 0
   for (const row of open) {
     if (row.tradingsymbol !== input.tradingsymbol) continue
-    if (row.side !== input.side) continue
+    if (input.side && row.side !== input.side) continue
+    if (input.tag && row.orderTag !== input.tag) continue
     if (!isSyntheticProvenance(ledgerProvenance(row.provenance))) continue
     logger.info(
       `[cancelPaperWorkingOrders] cancelling paper ${row.side} ${row.tradingsymbol} ${row.id}`

@@ -6,6 +6,7 @@ import { useState } from "react"
 
 import fetchJson, { type FetchJsonError } from "../../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../../lib/flattenNotice"
+import { killOperatorNotice } from "../../lib/killNotice"
 import { color } from "../../src/tokens"
 import ConfirmAction from "../lib/ConfirmAction"
 import { useSnackbar } from "../lib/useSnackbar"
@@ -53,22 +54,23 @@ export default function EmergencyPanel({ onDone }: { onDone: () => Promise<void>
         const notice = flattenOperatorNotice(result, "Open books squared off.")
         if (notice.severity === "error") showMessage(notice.text, "error")
       } else {
-        const result = await fetchJson<{ liveLeftOpen?: boolean; scope?: string }>(
-          "/api/kill-desk",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scope: pendingScope }),
-          }
-        )
-        if (result.liveLeftOpen) {
-          showMessage(
-            pendingScope === "all"
-              ? "Market is closed. Live books were left open with their stops. Chase is paused and the desk is halted."
-              : "Market is closed. Live intraday books were left open with their stops. The desk is halted. Chase was not paused.",
-            "error"
-          )
-        }
+        const result = await fetchJson<{
+          liveLeftOpen?: boolean
+          scope?: "intraday" | "all"
+          chasePaused?: boolean
+          deskHalted?: boolean
+        }>("/api/kill-desk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: pendingScope }),
+        })
+        const notice = killOperatorNotice({
+          scope: pendingScope,
+          liveLeftOpen: Boolean(result.liveLeftOpen),
+          chasePaused: Boolean(result.chasePaused),
+          deskHalted: result.deskHalted !== false,
+        })
+        if (notice) showMessage(notice.text, notice.severity)
       }
       setPendingScope(null)
       await onDone()

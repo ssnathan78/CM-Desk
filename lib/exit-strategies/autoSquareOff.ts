@@ -8,6 +8,7 @@ import type {
 import { STATUS_TRIGGER_PENDING, USER_OVERRIDE } from "../constants"
 import { db } from "../drizzle"
 import { patchDbTrade } from "../drizzleDbUtils"
+import { LIVE_FLATTEN_MARKET_CLOSED, liveFlattenSessionBlock } from "../flattenNotice"
 import {
   getCompletedOrdersbyTag,
   type PlaceOrderParams,
@@ -18,30 +19,64 @@ import {
 import logger from "../logger"
 import { jobExecutions } from "../schema"
 import { ledgerRowsForActiveBook, squareOffQtySource } from "../trading/bookSplit"
+import {
+  protectiveOrderMatchesJob,
+  resolveSquareOffBook,
+  SQUARE_OFF_STRATEGY_REQUIRED,
+} from "../trading/exitSafety"
 import { getOpenPositions } from "../trading/ledger"
-import { isPaperStrategy } from "../trading/riskEngine"
+import { cancelPaperWorkingOrders } from "../trading/paperExecution"
+import { strategyFromOrderTag } from "../trading/riskGate"
 import { getRiskSettings } from "../trading/riskSettings"
-import { isMockOrder, withRemoteRetry } from "../utils"
+import { isMarketOpen, isMockOrder, withRemoteRetry } from "../utils"
 
-export async function doDeletePendingOrders(orders: KiteOrder[], kite: any) {
+async function squareOffStrategy(input: {
+  strategy?: string | null
+  orderTag?: string | null
+}): Promise<string | null> {
+  if (input.strategy) return input.strategy
+  return strategyFromOrderTag(input.orderTag)
+}
+
+export async function doDeletePendingOrders(
+  orders: KiteOrder[],
+  kite: any,
+  context?: { strategy?: string | null; orderTag?: string | null }
+) {
+  const orderTag = context?.orderTag || orders.find(order => order.tag)?.tag || null
+  const strategy = await squareOffStrategy({ strategy: context?.strategy, orderTag })
+  const settings = await getRiskSettings()
+  const book = resolveSquareOffBook({
+    processMock: isMockOrder(),
+    strategy,
+    settings,
+  })
+  if (book.action === "refuse") {
+    logger.error(`[doDeletePendingOrders] ${book.reason}`)
+    return []
+  }
+  const sessionBlock = liveFlattenSessionBlock({
+    paperBook: book.action === "paper",
+    marketOpen: isMarketOpen(),
+  })
+  if (sessionBlock) {
+    logger.error(`[doDeletePendingOrders] ${sessionBlock}`)
+    return []
+  }
+  if (book.action === "paper") {
+    for (const order of orders) {
+      if (!order.tradingsymbol || !order.tag) continue
+      await cancelPaperWorkingOrders({ tradingsymbol: order.tradingsymbol, tag: order.tag })
+    }
+    return []
+  }
+
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
   const openOrders: KiteOrder[] = allOrders.filter(order => order.status === STATUS_TRIGGER_PENDING)
-
   const openOrdersForPositions = orders
-    .map(order =>
-      openOrders.find(
-        openOrder =>
-          openOrder.product === order.product && //MIS or NRML
-          openOrder.exchange === order.exchange && //NRML
-          openOrder.tradingsymbol === order.tradingsymbol &&
-          // reverse trade on same exchange + tradingsybol is not possible,
-          // so doing `abs`
-          Math.abs(openOrder.quantity) === Math.abs(order.quantity)
-      )
-    )
-    .filter(o => o)
+    .map(order => openOrders.find(openOrder => protectiveOrderMatchesJob(order, openOrder)))
+    .filter((order): order is KiteOrder => Boolean(order))
 
-  // some positions might have squared off during the day when the SL hit
   return Promise.all(
     openOrdersForPositions.map(async (openOrder: KiteOrder) =>
       withRemoteRetry(() => kite.cancelOrder(openOrder.variety, openOrder.order_id))
@@ -94,11 +129,29 @@ async function squareOffNet(args: {
 export async function doSquareOffPositions(
   orders: KiteOrder[],
   kite: any,
-  initialJobData: Partial<SUPPORTED_TRADE_CONFIG>
+  initialJobData: Partial<SUPPORTED_TRADE_CONFIG> & { strategy?: string | null }
 ) {
-  const strategy = (initialJobData as { strategy?: string }).strategy
+  const strategy = await squareOffStrategy({
+    strategy: initialJobData.strategy,
+    orderTag: initialJobData.orderTag,
+  })
   const settings = await getRiskSettings()
-  const paper = isMockOrder() || isPaperStrategy(settings, strategy)
+  const book = resolveSquareOffBook({
+    processMock: isMockOrder(),
+    strategy,
+    settings,
+  })
+  if (book.action === "refuse") {
+    throw new Error(book.reason || SQUARE_OFF_STRATEGY_REQUIRED)
+  }
+  const paper = book.action === "paper"
+  const sessionBlock = liveFlattenSessionBlock({
+    paperBook: paper,
+    marketOpen: isMarketOpen(),
+  })
+  if (sessionBlock) {
+    throw new Error(sessionBlock || LIVE_FLATTEN_MARKET_CLOSED)
+  }
   const net = await squareOffNet({ kite, paperBook: paper, strategy })
   //orders would always have +ve value and filter based on transaction_type
   const openPositionsForOrders = orders
@@ -168,15 +221,24 @@ export async function doSquareOffPositions(
 
 //Squares off the order after checking if the position is open
 async function squareOffOrder(order: KiteOrder, kite: any) {
-  const tagRows = order.tag
-    ? await db
-        .select({ strategy: jobExecutions.strategy })
-        .from(jobExecutions)
-        .where(eq(jobExecutions.orderTag, order.tag))
-    : []
-  const strategy = tagRows[0]?.strategy
+  const strategy = await strategyFromOrderTag(order.tag)
   const settings = await getRiskSettings()
-  const paper = isMockOrder() || (strategy ? isPaperStrategy(settings, strategy) : false)
+  const book = resolveSquareOffBook({
+    processMock: isMockOrder(),
+    strategy,
+    settings,
+  })
+  if (book.action === "refuse") {
+    throw new Error(book.reason || SQUARE_OFF_STRATEGY_REQUIRED)
+  }
+  const paper = book.action === "paper"
+  const sessionBlock = liveFlattenSessionBlock({
+    paperBook: paper,
+    marketOpen: isMarketOpen(),
+  })
+  if (sessionBlock) {
+    throw new Error(sessionBlock || LIVE_FLATTEN_MARKET_CLOSED)
+  }
   const net = await squareOffNet({ kite, paperBook: paper, strategy })
   const openPositionsforOrders = net.filter(
     position =>
@@ -220,33 +282,58 @@ export async function squareOffTag(
 ): Promise<any> {
   logger.info(`[autoSquareOff] squareOfforders ${orderTag} `)
   const execRows = await db
-    .select({ userOverride: jobExecutions.userOverride })
+    .select({ userOverride: jobExecutions.userOverride, strategy: jobExecutions.strategy })
     .from(jobExecutions)
     .where(eq(jobExecutions.orderTag, orderTag))
   if (!force && execRows[0]?.userOverride === USER_OVERRIDE.ABORT) {
     logger.error("Not squaring off as user aborted")
     return "Not squaring off"
   }
+  const settings = await getRiskSettings()
+  const book = resolveSquareOffBook({
+    processMock: isMockOrder(),
+    strategy: execRows[0]?.strategy,
+    settings,
+  })
+  if (book.action === "refuse") {
+    throw new Error(book.reason || SQUARE_OFF_STRATEGY_REQUIRED)
+  }
+  const sessionBlock = liveFlattenSessionBlock({
+    paperBook: book.action === "paper",
+    marketOpen: isMarketOpen(),
+  })
+  if (sessionBlock) {
+    logger.error(`[autoSquareOff] ${sessionBlock}`)
+    return sessionBlock
+  }
   const orderSummarybyTag = (await getCompletedOrdersbyTag(orderTag, kite)).filter(
     summary => summary.quantity !== 0
   )
+  if (book.action === "paper") {
+    for (const summary of orderSummarybyTag) {
+      if (!summary.tradingsymbol) continue
+      await cancelPaperWorkingOrders({ tradingsymbol: summary.tradingsymbol, tag: orderTag })
+    }
+  }
   const allOrders: KiteOrder[] = await withRemoteRetry(() => kite.getOrders())
   // orderSummarybyTag.filter(summary=>(summary.quantity!=0))
   //                   .forEach(async summary=>
   for (const summary of orderSummarybyTag) {
-    for (const openOrder of allOrders.filter(
-      order =>
-        order.status === STATUS_TRIGGER_PENDING &&
-        order.tag === orderTag &&
-        order.tradingsymbol === summary.tradingsymbol
-    )) {
-      logger.info(`Cancelling orderId ${openOrder.order_id} ; variety ${openOrder.variety}`)
-      await withRemoteRetry(() => kite.cancelOrder(openOrder.variety, openOrder.order_id))
-      /*
+    if (book.action !== "paper") {
+      for (const openOrder of allOrders.filter(
+        order =>
+          order.status === STATUS_TRIGGER_PENDING &&
+          order.tag === orderTag &&
+          order.tradingsymbol === summary.tradingsymbol
+      )) {
+        logger.info(`Cancelling orderId ${openOrder.order_id} ; variety ${openOrder.variety}`)
+        await withRemoteRetry(() => kite.cancelOrder(openOrder.variety, openOrder.order_id))
+        /*
                         await withRemoteRetry(async () =>
                 getInstrumentPrice(kite,current.tradingsymbol, 'NFO'));
                 */
-      //kite.cancelOrder(openOrder.variety, openOrder.order_id);
+        //kite.cancelOrder(openOrder.variety, openOrder.order_id);
+      }
     }
     /*allOrders.filter(order => (order.status === 'TRIGGER PENDING' && order.tag === orderTag))
                         .forEach(async (openOrder) => {
@@ -308,9 +395,45 @@ async function autoSquareOffStrat({
     return
   }
 
+  const bookStrategy = (initialJobData as { strategy?: string | null }).strategy
+  const settings = await getRiskSettings()
+  const book = resolveSquareOffBook({
+    processMock: isMockOrder(),
+    strategy: bookStrategy || (await strategyFromOrderTag(initialJobData.orderTag)),
+    settings,
+  })
+  if (book.action === "refuse") {
+    throw new Error(book.reason || SQUARE_OFF_STRATEGY_REQUIRED)
+  }
+  const sessionBlock = liveFlattenSessionBlock({
+    paperBook: book.action === "paper",
+    marketOpen: isMarketOpen(),
+  })
+  if (sessionBlock) {
+    logger.error(`[autoSquareOff] ${sessionBlock}`)
+    const { recordOperatorAlert } = await import("../trading/alerts")
+    await recordOperatorAlert({
+      source: "JOB",
+      code: "MARKET_CLOSED",
+      severity: "ERROR",
+      summary: sessionBlock,
+      jobId: initialJobData.id ?? null,
+      strategy: bookStrategy ?? null,
+      instrument:
+        typeof (initialJobData as { instrument?: string }).instrument === "string"
+          ? (initialJobData as { instrument?: string }).instrument
+          : null,
+      idempotencyKey: `alert:aso-closed:${initialJobData.id || initialJobData.orderTag}`,
+    })
+    return sessionBlock
+  }
+
   if (deletePendingOrders) {
     try {
-      await doDeletePendingOrders(completedOrders, kite)
+      await doDeletePendingOrders(completedOrders, kite, {
+        strategy: bookStrategy,
+        orderTag: initialJobData.orderTag,
+      })
       // console.log('🟢 deletePendingOrders success', res)
     } catch (e) {
       logger.error("🔴 deletePendingOrders failed")

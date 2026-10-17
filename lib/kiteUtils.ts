@@ -24,10 +24,12 @@ import {
 import { db } from "./drizzle"
 import { calculate40EMA } from "./ema"
 import { allSettled } from "./es6-promise"
+import { LIVE_FLATTEN_MARKET_CLOSED, liveFlattenSessionBlock } from "./flattenNotice"
 import { formatThrownMessage } from "./kiteError"
 import logger from "./logger"
 import { aggregateFillsBySymbol } from "./pnl"
 import { jobExecutions, orders as ledgerOrders } from "./schema"
+import { chaseMayTouchBrokerStop } from "./trading/exitSafety"
 import {
   KitePositionsUnavailableError,
   kiteNetQuantity,
@@ -43,14 +45,20 @@ import {
   syncTerminalKiteOrders,
 } from "./trading/ledger"
 import { cancelPaperWorkingOrders, shouldFillPaperOrderNow } from "./trading/paperExecution"
-import { executionProvenance, inferOrderRole, isPaperStrategy } from "./trading/riskEngine"
-import { assertOrderAllowed } from "./trading/riskGate"
+import {
+  executionProvenance,
+  inferOrderRole,
+  isPaperStrategy,
+  RiskRejectedError,
+} from "./trading/riskEngine"
+import { assertLiveBrokerMutation, assertOrderAllowed } from "./trading/riskGate"
 import { getRiskSettings } from "./trading/riskSettings"
 import { isSyntheticProvenance, ledgerProvenance } from "./trading/types"
 import {
   closest,
   delay,
   finiteStateChecker,
+  isMarketOpen,
   isMockOrder,
   millisecondsTill7,
   ms,
@@ -376,6 +384,20 @@ export async function placeOrder(
     ltp: role === "ENTRY" ? quote?.ltp : undefined,
     ltpAt: role === "ENTRY" ? quote?.at : undefined,
   })
+
+  if (!paperExecution && role !== "ENTRY") {
+    const sessionBlock = liveFlattenSessionBlock({
+      paperBook: false,
+      marketOpen: isMarketOpen(),
+    })
+    if (sessionBlock) {
+      throw new RiskRejectedError({
+        ok: false,
+        code: "MARKET_CLOSED",
+        message: sessionBlock || LIVE_FLATTEN_MARKET_CLOSED,
+      })
+    }
+  }
 
   const ledgerOrderId = await safeRecordOrderFromKiteProps(
     kiteOrder as {
@@ -1548,18 +1570,28 @@ export async function placeSL(
 ): Promise<void> {
   const kite = getKiteInstance(accessToken)
 
-  const kitePositions = (await kite.getPositions()) as any
   const paperBook = isMockOrder() || isPaperStrategy(await getRiskSettings(), "CHASE")
-  let position = kitePositions.net?.find(
-    (p: any) => p.tradingsymbol === tradingsymbol && Number(p.quantity) !== 0
-  )
-  if (!position && paperBook) {
+  let position: { tradingsymbol: string; quantity: number; product?: string | null } | undefined
+  if (paperBook) {
     const ledger = (await getOpenPositions()).find(p => {
-      if (p.tradingsymbol !== tradingsymbol || p.quantity === 0) return false
+      if (p.tradingsymbol !== tradingsymbol || Number(p.quantity) === 0) return false
+      if (p.strategy && p.strategy !== "CHASE") return false
       return isSyntheticProvenance(ledgerProvenance(p.provenance))
     })
     if (ledger) {
-      position = { tradingsymbol, quantity: ledger.quantity, product: ledger.product }
+      position = { tradingsymbol, quantity: Number(ledger.quantity), product: ledger.product }
+    }
+  } else {
+    const kitePositions = (await kite.getPositions()) as any
+    const kitePosition = kitePositions.net?.find(
+      (p: any) => p.tradingsymbol === tradingsymbol && Number(p.quantity) !== 0
+    )
+    if (kitePosition) {
+      position = {
+        tradingsymbol,
+        quantity: Number(kitePosition.quantity),
+        product: kitePosition.product,
+      }
     }
   }
   if (!position) {
@@ -1581,6 +1613,7 @@ export async function placeSL(
     const paperSl = (await getOpenOrders()).find(o => {
       if (o.tradingsymbol !== tradingsymbol || o.side !== transactionType) return false
       if (o.purpose !== "SL") return false
+      if (o.strategy && o.strategy !== "CHASE") return false
       return isSyntheticProvenance(ledgerProvenance(o.provenance))
     })
     if (paperSl) {
@@ -1605,26 +1638,84 @@ export async function placeSL(
       )
       return
     }
-  }
-  const orders = (await kite.getOrders()) as Order[]
-  await syncTerminalKiteOrders(orders)
-  const existingSL = orders.find(
-    o =>
-      o.tradingsymbol === tradingsymbol &&
-      o.transaction_type === transactionType &&
-      o.status === STATUS_TRIGGER_PENDING
-  )
-
-  if (existingSL && Number(existingSL.quantity) !== Number(quantity)) {
+  } else {
     try {
-      await kite.modifyOrder("regular", existingSL.order_id, {
+      await assertLiveBrokerMutation({
+        paperBook: false,
+        tradingsymbol,
         quantity,
-        trigger_price: stoploss,
-        price,
-      } as any)
-      logger.info(
-        `[placeSL] resized SL ${existingSL.order_id} from ${existingSL.quantity} to ${quantity} for ${tradingsymbol}`
+        transaction_type: transactionType,
+        order_type: "SL",
+        tag: "chase",
+        strategy: "CHASE",
+        role: "SL",
+      })
+    } catch (e) {
+      logger.warn(
+        `[placeSL] live stop left unchanged for ${tradingsymbol} — ${e instanceof Error ? e.message : e}`
       )
+      return
+    }
+  }
+  if (!paperBook) {
+    const orders = (await kite.getOrders()) as Order[]
+    await syncTerminalKiteOrders(orders)
+    const existingSL = orders.find(
+      o =>
+        o.tradingsymbol === tradingsymbol &&
+        o.transaction_type === transactionType &&
+        o.status === STATUS_TRIGGER_PENDING &&
+        chaseMayTouchBrokerStop(o.tag)
+    )
+
+    if (existingSL && Number(existingSL.quantity) !== Number(quantity)) {
+      try {
+        await kite.modifyOrder("regular", existingSL.order_id, {
+          quantity,
+          trigger_price: stoploss,
+          price,
+        } as any)
+        logger.info(
+          `[placeSL] resized SL ${existingSL.order_id} from ${existingSL.quantity} to ${quantity} for ${tradingsymbol}`
+        )
+        await amendWorkingStopPrices({
+          brokerOrderId: existingSL.order_id,
+          tradingsymbol,
+          side: transactionType,
+          purpose: "SL",
+          stopPrice: stoploss,
+          limitPrice: price,
+        })
+        return
+      } catch (e) {
+        logger.warn(
+          `[placeSL] could not resize SL ${existingSL.order_id} — cancelling to replace`,
+          e
+        )
+        await kite.cancelOrder(kite.VARIETY_REGULAR, existingSL.order_id)
+        logger.info(
+          `[placeSL] cancelled SL ${existingSL.order_id} qty ${existingSL.quantity} for ${tradingsymbol} — open book is ${quantity}`
+        )
+      }
+    } else if (existingSL) {
+      if (
+        chaseStopNeedsAmend(
+          { trigger_price: existingSL.trigger_price, price: existingSL.price },
+          { stop: stoploss, limit: price }
+        )
+      ) {
+        await kite.modifyOrder("regular", existingSL.order_id, {
+          trigger_price: stoploss,
+          price,
+        } as any)
+        logger.info(
+          `[placeSL] Modified SL order ${existingSL.order_id} to ${stoploss} for ${tradingsymbol}`
+        )
+      } else {
+        logger.info(
+          `[placeSL] live SL already at ${stoploss} for ${tradingsymbol} order=${existingSL.order_id}`
+        )
+      }
       await amendWorkingStopPrices({
         brokerOrderId: existingSL.order_id,
         tradingsymbol,
@@ -1634,41 +1725,7 @@ export async function placeSL(
         limitPrice: price,
       })
       return
-    } catch (e) {
-      logger.warn(`[placeSL] could not resize SL ${existingSL.order_id} — cancelling to replace`, e)
-      await kite.cancelOrder(kite.VARIETY_REGULAR, existingSL.order_id)
-      logger.info(
-        `[placeSL] cancelled SL ${existingSL.order_id} qty ${existingSL.quantity} for ${tradingsymbol} — open book is ${quantity}`
-      )
     }
-  } else if (existingSL) {
-    if (
-      chaseStopNeedsAmend(
-        { trigger_price: existingSL.trigger_price, price: existingSL.price },
-        { stop: stoploss, limit: price }
-      )
-    ) {
-      await kite.modifyOrder("regular", existingSL.order_id, {
-        trigger_price: stoploss,
-        price,
-      } as any)
-      logger.info(
-        `[placeSL] Modified SL order ${existingSL.order_id} to ${stoploss} for ${tradingsymbol}`
-      )
-    } else {
-      logger.info(
-        `[placeSL] live SL already at ${stoploss} for ${tradingsymbol} order=${existingSL.order_id}`
-      )
-    }
-    await amendWorkingStopPrices({
-      brokerOrderId: existingSL.order_id,
-      tradingsymbol,
-      side: transactionType,
-      purpose: "SL",
-      stopPrice: stoploss,
-      limitPrice: price,
-    })
-    return
   }
 
   const ltpKey = `NFO:${tradingsymbol}`

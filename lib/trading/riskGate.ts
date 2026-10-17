@@ -2,6 +2,7 @@ import { and, eq, gte, inArray, sql } from "drizzle-orm"
 import { now } from "../clock"
 import { USER_OVERRIDE } from "../constants"
 import { db } from "../drizzle"
+import { liveFlattenSessionBlock } from "../flattenNotice"
 import logger from "../logger"
 import { jobExecutions, orders } from "../schema"
 import { isMarketOpen, isMockOrder } from "../utils"
@@ -18,6 +19,63 @@ import {
 } from "./riskEngine"
 import { getRiskSettings } from "./riskSettings"
 import { isSyntheticProvenance } from "./types"
+
+/** Job tag → strategy. Chase orders use the tag `chase` and have no job row. */
+export async function strategyFromOrderTag(tag?: string | null): Promise<string | null> {
+  if (!tag) return null
+  if (tag.toLowerCase() === "chase") return "CHASE"
+  const rows = await db
+    .select({ strategy: jobExecutions.strategy })
+    .from(jobExecutions)
+    .where(eq(jobExecutions.orderTag, tag))
+    .limit(1)
+  return rows[0]?.strategy ?? null
+}
+
+/**
+ * A live modify/cancel (convert a stop to market, resize a stop) never goes
+ * through placeOrder. Paper books are refused here so they cannot rewrite a
+ * Kite order. Market-closed live exits are refused so the stop stays.
+ */
+export async function assertLiveBrokerMutation(input: {
+  tradingsymbol: string
+  quantity: number
+  transaction_type: string
+  order_type?: string
+  tag?: string
+  strategy?: string | null
+  role: "FLATTEN" | "SL" | "EXIT"
+  paperBook: boolean
+}): Promise<void> {
+  if (input.paperBook) {
+    throw new RiskRejectedError({
+      ok: false,
+      code: "PAPER_BOOK",
+      message: "A paper book cannot change a live broker order.",
+    })
+  }
+  const sessionBlock = liveFlattenSessionBlock({
+    paperBook: false,
+    marketOpen: isMarketOpen(),
+  })
+  if (sessionBlock) {
+    throw new RiskRejectedError({
+      ok: false,
+      code: "MARKET_CLOSED",
+      message: sessionBlock,
+    })
+  }
+  await assertOrderAllowed({
+    tradingsymbol: input.tradingsymbol,
+    quantity: input.quantity,
+    transaction_type: input.transaction_type,
+    order_type: input.order_type,
+    tag: input.tag,
+    strategy: input.strategy,
+    role: input.role,
+    purpose: input.role,
+  })
+}
 
 export async function assertOrderAllowed(input: {
   tradingsymbol?: string

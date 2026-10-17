@@ -55,6 +55,7 @@ import {
 } from "../kiteUtils"
 import logger from "../logger"
 import { CHASE_Q_NAME, redisConnection } from "../queue"
+import { chaseMayTouchBrokerStop, planChaseRollover } from "../trading/exitSafety"
 import {
   getOpenOrders,
   openRoundTripSize,
@@ -62,8 +63,11 @@ import {
   syncTerminalKiteOrders,
 } from "../trading/ledger"
 import { matchPaperWorkingStops } from "../trading/paperExecution"
+import { limitsFor } from "../trading/riskEngine"
+import { assertLiveBrokerMutation } from "../trading/riskGate"
+import { getRiskSettings } from "../trading/riskSettings"
 import { recordStrategySignal } from "../trading/signals"
-import { ms, postToSlack, toIst, withRemoteRetry } from "../utils"
+import { isMarketOpen, ms, postToSlack, toIst, withRemoteRetry } from "../utils"
 
 const OPEN_MINUTES = 9 * 60 + 16 // 9:16 AM IST
 const CLOSE_MINUTES = 15 * 60 + 29 // 3:29 PM IST
@@ -966,9 +970,123 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
     logger.info(
       `[processUpdateSL] Rollover to ${nextInstrument.tradingsymbol} with new SL ${newStoploss}`
     )
-    await postToSlack(
-      `:repeat: Action $chase: Transaction Alert, Rollover to :arrow_right: ${nextInstrument.tradingsymbol}, Chase is now *${currentStatus}* with stoploss: *${newStoploss}* :shield:`
-    )
+    const rolloverBook = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+    const rolloverNetQty = rolloverBook.netQty
+    const mustFlatten = isAutomated && quantity > 0 && rolloverNetQty !== 0
+    let rolledOpenQty = 0
+    let exitSide: "BUY" | "SELL" = "SELL"
+    if (mustFlatten) {
+      const risk = await getRiskSettings()
+      const gate = planChaseRollover({
+        paperBook: rolloverBook.paperBook,
+        marketOpen: isMarketOpen(),
+        strategyEnabled: limitsFor(risk, "CHASE").enabled,
+      })
+      if (gate.flatten === "skip") {
+        logger.warn(
+          `[processUpdateSL] rollover skipped for ${tradingsymbol} — ${gate.reason}. Status stays ${currentStatus}.`
+        )
+        return { signal: "ROLLOVER_BLOCKED", stoploss: newStoploss }
+      }
+      const openQty = chaseFlattenQty(rolloverNetQty)
+      const rolled = chaseRolloverOrderQty({
+        netQty: rolloverNetQty,
+        currentLotSize: lotSize,
+        nextLotSize: Number((nextInstrument as { lot_size?: number }).lot_size) || lotSize,
+      })
+      rolledOpenQty = rolled.openQty
+      const closingShort = rolloverNetQty < 0
+      exitSide = closingShort ? "BUY" : "SELL"
+      const entrySide = closingShort ? "SELL" : "BUY"
+      try {
+        if (gate.touchKite) {
+          const allOrders = (await kite.getOrders()) as Order[]
+          const pendingExit = allOrders.find(
+            o =>
+              o.tradingsymbol === tradingsymbol &&
+              o.transaction_type === exitSide &&
+              o.status === STATUS_TRIGGER_PENDING &&
+              chaseMayTouchBrokerStop(o.tag)
+          )
+          if (pendingExit?.order_id && Number(pendingExit.quantity) === openQty) {
+            await assertLiveBrokerMutation({
+              paperBook: false,
+              tradingsymbol,
+              quantity: openQty,
+              transaction_type: exitSide,
+              order_type: "MARKET",
+              tag: pendingExit.tag || "chase",
+              strategy: "CHASE",
+              role: "FLATTEN",
+            })
+            await kite.modifyOrder("regular", pendingExit.order_id, {
+              order_type: "MARKET",
+              market_protection: chaseConfig.marketProtectionPercent,
+            } as any)
+            logger.info(
+              `[processUpdateSL] Converted SL order ${pendingExit.order_id} to MARKET for ${tradingsymbol} rollover`
+            )
+          } else {
+            if (pendingExit?.order_id) {
+              await assertLiveBrokerMutation({
+                paperBook: false,
+                tradingsymbol,
+                quantity: openQty,
+                transaction_type: exitSide,
+                order_type: "MARKET",
+                tag: pendingExit.tag || "chase",
+                strategy: "CHASE",
+                role: "FLATTEN",
+              })
+              await kite.cancelOrder(kite.VARIETY_REGULAR, pendingExit.order_id)
+              logger.info(
+                `[processUpdateSL] cancelled rollover SL ${pendingExit.order_id} qty ${pendingExit.quantity} — open book is ${openQty}`
+              )
+            }
+            await placeKiteOrder(accessToken, {
+              tradingsymbol,
+              exchange: "NFO",
+              transaction_type: exitSide,
+              quantity: openQty,
+              order_type: "MARKET",
+              product: "NRML",
+              tag: "chase",
+              purpose: "FLATTEN",
+              strategy: "CHASE",
+            } as any)
+          }
+        } else {
+          await placeKiteOrder(accessToken, {
+            tradingsymbol,
+            exchange: "NFO",
+            transaction_type: exitSide,
+            quantity: openQty,
+            order_type: "MARKET",
+            product: "NRML",
+            tag: "chase",
+            purpose: "FLATTEN",
+            strategy: "CHASE",
+          } as any)
+        }
+        await placeKiteOrder(accessToken, {
+          tradingsymbol: nextInstrument.tradingsymbol,
+          exchange: "NFO",
+          transaction_type: entrySide,
+          quantity: rolled.openQty,
+          order_type: "MARKET",
+          product: "NRML",
+          tag: "chase",
+          purpose: "ENTRY",
+          strategy: "CHASE",
+        } as any)
+      } catch (e) {
+        logger.error(
+          `[processUpdateSL] rollover orders rejected for ${tradingsymbol} — status stays ${currentStatus}`,
+          e
+        )
+        return { signal: "ROLLOVER_BLOCKED", stoploss: newStoploss }
+      }
+    }
     const { success, error } = await updateChaseStatus({
       instrument: nfoSymbol,
       stoploss: newStoploss,
@@ -995,72 +1113,11 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
       transactionType: currentStatus === CHASE_STATUS.SHORT ? "SELL" : "BUY",
       averagePrice: emaResult.lastClose,
     })
-    if (isAutomated && quantity > 0) {
-      const rolloverNetQty = (await resolveChaseBookBreakdown(tradingsymbol, accessToken)).netQty
-      if (rolloverNetQty === 0) {
-        logger.info(
-          `[processUpdateSL] no open position for ${tradingsymbol} — skipping rollover orders`
-        )
-      } else {
-        const openQty = chaseFlattenQty(rolloverNetQty)
-        const rolled = chaseRolloverOrderQty({
-          netQty: rolloverNetQty,
-          currentLotSize: lotSize,
-          nextLotSize: Number((nextInstrument as { lot_size?: number }).lot_size) || lotSize,
-        })
-        const closingShort = rolloverNetQty < 0
-        const exitSide = closingShort ? "BUY" : "SELL"
-        const entrySide = closingShort ? "SELL" : "BUY"
-        const allOrders = (await kite.getOrders()) as Order[]
-        const pendingExit = allOrders.find(
-          o =>
-            o.tradingsymbol === tradingsymbol &&
-            o.transaction_type === exitSide &&
-            o.status === STATUS_TRIGGER_PENDING
-        )
-        if (pendingExit && Number(pendingExit.quantity) === openQty) {
-          await kite.modifyOrder("regular", pendingExit.order_id, {
-            order_type: "MARKET",
-            market_protection: chaseConfig.marketProtectionPercent,
-          } as any)
-          logger.info(
-            `[processUpdateSL] Converted SL order ${pendingExit.order_id} to MARKET for ${tradingsymbol} rollover`
-          )
-        } else {
-          if (pendingExit) {
-            await kite.cancelOrder(kite.VARIETY_REGULAR, pendingExit.order_id)
-            logger.info(
-              `[processUpdateSL] cancelled rollover SL ${pendingExit.order_id} qty ${pendingExit.quantity} — open book is ${openQty}`
-            )
-          }
-          await placeKiteOrder(accessToken, {
-            tradingsymbol,
-            exchange: "NFO",
-            transaction_type: exitSide,
-            quantity: openQty,
-            order_type: "MARKET",
-            product: "NRML",
-            tag: "chase",
-            purpose: "FLATTEN",
-          } as any)
-        }
-        await placeKiteOrder(accessToken, {
-          tradingsymbol: nextInstrument.tradingsymbol,
-          exchange: "NFO",
-          transaction_type: entrySide,
-          quantity: rolled.openQty,
-          order_type: "MARKET",
-          product: "NRML",
-          tag: "chase",
-        } as any)
-        await placeSL(
-          nextInstrument.tradingsymbol,
-          exitSide,
-          rolled.openQty,
-          accessToken,
-          newStoploss
-        )
-      }
+    await postToSlack(
+      `:repeat: Action $chase: Transaction Alert, Rollover to :arrow_right: ${nextInstrument.tradingsymbol}, Chase is now *${currentStatus}* with stoploss: *${newStoploss}* :shield:`
+    )
+    if (mustFlatten && rolledOpenQty > 0) {
+      await placeSL(nextInstrument.tradingsymbol, exitSide, rolledOpenQty, accessToken, newStoploss)
     }
     return { signal: "ROLLOVER", stoploss: newStoploss }
   }
@@ -1213,15 +1270,33 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
             o.transaction_type === side &&
             isChaseWorkingBrokerStatus(o.status)
         )
-        if (existingSL?.order_id) {
-          await kite.modifyOrder("regular", existingSL.order_id, {
-            order_type: "MARKET",
-            market_protection: chaseConfig.marketProtectionPercent,
-          } as any)
-          logger.info(
-            `[processUpdateSL] Converted working SL ${existingSL.order_id} to MARKET for ${tradingsymbol}`
-          )
-          return plan
+        if (existingSL?.order_id && chaseMayTouchBrokerStop(existingSL.tag)) {
+          try {
+            await assertLiveBrokerMutation({
+              paperBook: false,
+              tradingsymbol,
+              quantity: flattenQty,
+              transaction_type: side,
+              order_type: "MARKET",
+              tag: existingSL.tag || "chase",
+              strategy: "CHASE",
+              role: "FLATTEN",
+            })
+            await kite.modifyOrder("regular", existingSL.order_id, {
+              order_type: "MARKET",
+              market_protection: chaseConfig.marketProtectionPercent,
+            } as any)
+            logger.info(
+              `[processUpdateSL] Converted working SL ${existingSL.order_id} to MARKET for ${tradingsymbol}`
+            )
+            return plan
+          } catch (e) {
+            logger.error(
+              `[processUpdateSL] not converting the stop for ${tradingsymbol} — position and stop stay`,
+              e
+            )
+            return "skip_cover" as const
+          }
         }
         if (coverQty <= 0) {
           logger.info(

@@ -56,6 +56,14 @@ function rowToSettings(row: typeof riskSettings.$inferSelect | undefined): RiskS
   }
 }
 
+export class RiskSettingsUnavailableError extends Error {
+  code = "RISK_UNAVAILABLE"
+  constructor() {
+    super("Risk engine unavailable — fail closed")
+    this.name = "RiskSettingsUnavailableError"
+  }
+}
+
 export async function getMaxLotsForStrategy(strategy?: string | null): Promise<number> {
   const settings = await getRiskSettings()
   return limitsFor(settings, strategy).maxLots
@@ -67,13 +75,7 @@ export async function getRiskSettings(): Promise<RiskSettings> {
     return rowToSettings(rows[0])
   } catch (e) {
     logger.error("[riskSettings.get]", e)
-    return {
-      ...DEFAULT_RISK_SETTINGS,
-      tradingEnabled: false,
-      deskHalted: true,
-      haltReason: "risk settings unavailable",
-      strategies: defaultStrategyLimits(),
-    }
+    throw new RiskSettingsUnavailableError()
   }
 }
 

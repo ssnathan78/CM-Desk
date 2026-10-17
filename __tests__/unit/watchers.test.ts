@@ -22,8 +22,23 @@ jest.mock("../../lib/utils", () => {
     ms: (s: number) => s * 1000,
     orderStateChecker: jest.fn().mockReturnValue({ promise: Promise.resolve(), cancel: jest.fn() }),
     RemoteRetryTimeoutError,
+    isMockOrder: jest.fn(() => false),
+    isMarketOpen: jest.fn(() => true),
   }
 })
+
+jest.mock("../../lib/trading/riskSettings", () => ({
+  getRiskSettings: jest.fn().mockResolvedValue({}),
+}))
+
+jest.mock("../../lib/trading/riskEngine", () => ({
+  isPaperStrategy: jest.fn(() => false),
+}))
+
+jest.mock("../../lib/trading/riskGate", () => ({
+  strategyFromOrderTag: jest.fn().mockResolvedValue("ATM_STRADDLE"),
+  assertLiveBrokerMutation: jest.fn().mockResolvedValue(undefined),
+}))
 
 describe("slmWatcher", () => {
   it("resolves when order completes", async () => {
@@ -54,9 +69,55 @@ describe("sllWatcher", () => {
       STATUS_COMPLETE: "COMPLETE",
       STATUS_CANCELLED: "CANCELLED",
       ORDER_TYPE_MARKET: "MARKET",
-      getOrderHistory: jest
-        .fn()
-        .mockResolvedValue([{ status: "OPEN", variety: "regular", order_id: "sll-1" }]),
+      getOrderHistory: jest.fn().mockResolvedValue([
+        {
+          status: "OPEN",
+          variety: "regular",
+          order_id: "sll-1",
+          tag: "straddle-1",
+          tradingsymbol: "NIFTY26OCT25000CE",
+          quantity: 65,
+          transaction_type: "BUY",
+        },
+      ]),
+      modifyOrder: jest.fn().mockResolvedValue({}),
+    }
+    const { syncGetKiteInstance } = require("../../lib/kiteUtils")
+    syncGetKiteInstance.mockReturnValue(kite)
+
+    const { isMockOrder } = require("../../lib/utils")
+    isMockOrder.mockReturnValue(false)
+    const { assertLiveBrokerMutation } = require("../../lib/trading/riskGate")
+    const sllWatcher = (await import("../../lib/watchers/sllWatcher")).default
+    const result = await sllWatcher({ sllOrderId: "sll-1", user: createTestUser() })
+    expect(assertLiveBrokerMutation).toHaveBeenCalledWith(
+      expect.objectContaining({ role: "FLATTEN", strategy: "ATM_STRADDLE", paperBook: false })
+    )
+    expect(kite.modifyOrder).toHaveBeenCalled()
+    expect(String(result)).toContain("squared off")
+  })
+
+  it("does not convert a kite stop while the book is paper", async () => {
+    const { RemoteRetryTimeoutError, isMockOrder } = require("../../lib/utils")
+    const { finiteStateChecker } = require("../../lib/utils")
+    finiteStateChecker.mockRejectedValue(new RemoteRetryTimeoutError("timeout"))
+    isMockOrder.mockReturnValue(true)
+
+    const kite = {
+      STATUS_COMPLETE: "COMPLETE",
+      STATUS_CANCELLED: "CANCELLED",
+      ORDER_TYPE_MARKET: "MARKET",
+      getOrderHistory: jest.fn().mockResolvedValue([
+        {
+          status: "OPEN",
+          variety: "regular",
+          order_id: "sll-1",
+          tag: "straddle-1",
+          tradingsymbol: "NIFTY26OCT25000CE",
+          quantity: 65,
+          transaction_type: "BUY",
+        },
+      ]),
       modifyOrder: jest.fn().mockResolvedValue({}),
     }
     const { syncGetKiteInstance } = require("../../lib/kiteUtils")
@@ -64,7 +125,8 @@ describe("sllWatcher", () => {
 
     const sllWatcher = (await import("../../lib/watchers/sllWatcher")).default
     const result = await sllWatcher({ sllOrderId: "sll-1", user: createTestUser() })
-    expect(kite.modifyOrder).toHaveBeenCalled()
-    expect(String(result)).toContain("squared off")
+    expect(kite.modifyOrder).not.toHaveBeenCalled()
+    expect(String(result)).toMatch(/paper book/i)
+    isMockOrder.mockReturnValue(false)
   })
 })
