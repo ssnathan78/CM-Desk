@@ -1,6 +1,6 @@
 import { Box, Button, Stack, TextField, Typography } from "@mui/material"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import ChaseBookDrawer from "../components/chase/ChaseBookDrawer"
 import ChaseBooksTable from "../components/chase/ChaseBooksTable"
 import Layout from "../components/Layout"
@@ -8,8 +8,21 @@ import { useActionNotice } from "../components/lib/ActionNotice"
 import ConfirmAction from "../components/lib/ConfirmAction"
 import { ChaseNotionalPreview } from "../components/lib/NotionalPreview"
 import PageSection from "../components/lib/PageSection"
+import StrategyTablePagination from "../components/lib/StrategyTablePagination"
+import TableColumnMenu from "../components/lib/TableColumnMenu"
 import { useSnackbar } from "../components/lib/useSnackbar"
+import {
+  CHASE_BOOK_COLUMNS,
+  CHASE_VISIBLE_COLUMNS_KEY,
+  type ChaseTableColumnId,
+} from "../lib/chase/chaseTableColumns"
 import { CHASE_INDEX_ORDER, type ChaseBookConfig, defaultChaseBook } from "../lib/chaseDefaults"
+import {
+  defaultVisibleIds,
+  readVisibleColumns,
+  writeVisibleColumns,
+} from "../lib/ui/columnVisibility"
+import { paginateSlice } from "../lib/ui/tablePagination"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { useChaseSettings } from "../lib/hooks/useChaseSettings"
@@ -36,12 +49,26 @@ const ChasePlanPage = () => {
   const [matches, setMatches] = useState<string[]>([])
   const [editInstrument, setEditInstrument] = useState<string | null>(null)
   const [drawerSaving, setDrawerSaving] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState<ChaseTableColumnId[]>(() =>
+    defaultVisibleIds(CHASE_BOOK_COLUMNS)
+  )
+  const [tablePage, setTablePage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(50)
+
+  useEffect(() => {
+    setVisibleColumns(readVisibleColumns(CHASE_VISIBLE_COLUMNS_KEY, CHASE_BOOK_COLUMNS))
+  }, [])
 
   useEffect(() => {
     if (data?.books?.length) {
       setBooks(data.books)
     }
   }, [data])
+
+  const pageBooks = useMemo(
+    () => paginateSlice(books, tablePage, rowsPerPage),
+    [books, tablePage, rowsPerPage]
+  )
 
   const patchBook = (instrument: string, patch: Partial<ChaseBookConfig>) => {
     setBooks(current =>
@@ -252,13 +279,24 @@ const ChasePlanPage = () => {
 
         <PageSection
           title="Books"
-          description="Book column stays fixed while you scroll; jump buttons move configuration vs runtime. Row click or ⋮ → Edit opens the drawer."
+          description="Book column stays fixed while you scroll. Choose columns from the header menu. Row click or ⋮ → Edit opens the drawer."
           flush
+          actions={
+            <TableColumnMenu
+              columns={CHASE_BOOK_COLUMNS}
+              visible={visibleColumns}
+              onChange={cols => {
+                setVisibleColumns(cols)
+                writeVisibleColumns(CHASE_VISIBLE_COLUMNS_KEY, cols)
+              }}
+            />
+          }
         >
           <ChaseBooksTable
-            books={books}
+            books={pageBooks}
             statuses={data.statuses ?? []}
             executionMode={executionMode}
+            visibleColumns={visibleColumns}
             onRowClick={instrument => setEditInstrument(instrument)}
             onEngineChange={(instrument, enabled) => {
               patchBook(instrument, { enabled })
@@ -271,6 +309,13 @@ const ChasePlanPage = () => {
               if (action === "remove") setRemoveTarget(instrument)
               if (action === "square") setFlattenOpen(true)
             }}
+          />
+          <StrategyTablePagination
+            count={books.length}
+            page={tablePage}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setTablePage}
+            onRowsPerPageChange={setRowsPerPage}
           />
         </PageSection>
         <ChaseBookDrawer

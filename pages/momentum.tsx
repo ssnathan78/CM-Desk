@@ -1,17 +1,12 @@
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
-import ViewColumnOutlinedIcon from "@mui/icons-material/ViewColumnOutlined"
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
   Box,
   Button,
-  Checkbox,
   Chip,
-  IconButton,
   LinearProgress,
-  ListItemText,
-  Menu,
   MenuItem,
   Skeleton,
   Stack,
@@ -19,7 +14,6 @@ import {
   TableBody,
   TableCell,
   TableHead,
-  TablePagination,
   TableRow,
   TableSortLabel,
   TextField,
@@ -38,54 +32,54 @@ import Layout from "../components/Layout"
 import ConfirmAction from "../components/lib/ConfirmAction"
 import PageSection from "../components/lib/PageSection"
 import ScrollTable from "../components/lib/ScrollTable"
+import StrategyTablePagination from "../components/lib/StrategyTablePagination"
+import TableColumnMenu from "../components/lib/TableColumnMenu"
 import { useSnackbar } from "../components/lib/useSnackbar"
 import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import fetchJson from "../lib/fetchJson"
 import { diffRebalancePreview } from "../lib/momentum/rebalanceDiff"
 import { DEFAULT_MOMENTUM_CONFIG, type MomentumConfig } from "../lib/momentum/types"
+import type { ColumnDef } from "../lib/ui/columnVisibility"
+import {
+  defaultVisibleIds,
+  readVisibleColumns,
+  writeVisibleColumns,
+} from "../lib/ui/columnVisibility"
+import { paginateSlice } from "../lib/ui/tablePagination"
 import useUser from "../lib/useUser"
 
 const VISIBLE_COLUMNS_KEY = "momentum.visibleColumns"
 
-const MOMENTUM_TABLE_COLUMNS = [
-  { key: "rank", label: "Rank", defaultVisible: true },
-  { key: "symbol", label: "Symbol", defaultVisible: true },
-  { key: "score", label: "Score", defaultVisible: true },
-  { key: "pass", label: "Filters", defaultVisible: true },
-  { key: "weight", label: "Target", defaultVisible: true },
-  { key: "price", label: "Close", defaultVisible: false },
-  { key: "roc12", label: "ROC 12m", defaultVisible: false },
-  { key: "roc24", label: "ROC 24m", defaultVisible: false },
-  { key: "pctBelowHigh", label: "% below high", defaultVisible: false },
-  { key: "aboveSma", label: "Above SMA", defaultVisible: false },
-] as const
+type MomentumColumnKey =
+  | "rank"
+  | "symbol"
+  | "score"
+  | "pass"
+  | "weight"
+  | "price"
+  | "roc12"
+  | "roc24"
+  | "pctBelowHigh"
+  | "aboveSma"
 
-type MomentumColumnKey = (typeof MOMENTUM_TABLE_COLUMNS)[number]["key"]
+const MOMENTUM_TABLE_COLUMNS: ColumnDef<MomentumColumnKey>[] = [
+  { id: "rank", label: "Rank" },
+  { id: "symbol", label: "Symbol", locked: true },
+  { id: "score", label: "Score" },
+  { id: "pass", label: "Filters" },
+  { id: "weight", label: "Target" },
+  { id: "price", label: "Close", defaultVisible: false },
+  { id: "roc12", label: "ROC 12m", defaultVisible: false },
+  { id: "roc24", label: "ROC 24m", defaultVisible: false },
+  { id: "pctBelowHigh", label: "% below high", defaultVisible: false },
+  { id: "aboveSma", label: "Above SMA", defaultVisible: false },
+]
 
-function defaultVisibleColumns(): MomentumColumnKey[] {
-  return MOMENTUM_TABLE_COLUMNS.filter(col => col.defaultVisible).map(col => col.key)
-}
+const MOMENTUM_COLUMN_ORDER: MomentumColumnKey[] = MOMENTUM_TABLE_COLUMNS.map(col => col.id)
 
-function readVisibleColumns(): MomentumColumnKey[] {
-  if (typeof window === "undefined") return defaultVisibleColumns()
-  try {
-    const raw = window.localStorage.getItem(VISIBLE_COLUMNS_KEY)
-    if (!raw) return defaultVisibleColumns()
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return defaultVisibleColumns()
-    const allowed = new Set(MOMENTUM_TABLE_COLUMNS.map(col => col.key))
-    const cols = parsed.filter((key): key is MomentumColumnKey =>
-      allowed.has(key as MomentumColumnKey)
-    )
-    return cols.length ? cols : defaultVisibleColumns()
-  } catch {
-    return defaultVisibleColumns()
-  }
-}
-
-function writeVisibleColumns(cols: MomentumColumnKey[]) {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(VISIBLE_COLUMNS_KEY, JSON.stringify(cols))
+function momentumColumnsInOrder(visible: MomentumColumnKey[]): MomentumColumnKey[] {
+  const allowed = new Set(MOMENTUM_COLUMN_ORDER)
+  return visible.filter(id => allowed.has(id))
 }
 
 const SORTABLE_MOMENTUM_COLUMNS = new Set<MomentumColumnKey>([
@@ -97,7 +91,7 @@ const SORTABLE_MOMENTUM_COLUMNS = new Set<MomentumColumnKey>([
 ])
 
 function momentumColumnLabel(key: MomentumColumnKey) {
-  return MOMENTUM_TABLE_COLUMNS.find(col => col.key === key)?.label ?? key
+  return MOMENTUM_TABLE_COLUMNS.find(col => col.id === key)?.label ?? key
 }
 
 type ReportRow = {
@@ -143,11 +137,21 @@ export default function MomentumPage() {
   })
   const [draft, setDraft] = useState<MomentumConfig | null>(null)
   const [query, setQuery] = useState("")
-  const [view, setView] = useState<"all" | "pass" | "orders">("all")
+  const [view, setView] = useState<
+    | "all"
+    | "pass"
+    | "orders"
+    | "hold"
+    | "exclude"
+    | "locked"
+    | "unlocked"
+    | "hasTarget"
+  >("all")
   const [sortKey, setSortKey] = useState<"rank" | "symbol" | "score" | "pass" | "weight">("rank")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [busy, setBusy] = useState(false)
   const [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(50)
   const [trimPct, setTrimPct] = useState(10)
   const [pendingOrder, setPendingOrder] = useState<"rebalance" | "deploy" | "trim" | null>(null)
   const [previewOrders, setPreviewOrders] = useState<Report["orders"] | null>(null)
@@ -155,8 +159,9 @@ export default function MomentumPage() {
     null
   )
   const lastPreviewRef = useRef<Report["orders"] | null>(null)
-  const [visibleColumns, setVisibleColumns] = useState<MomentumColumnKey[]>(defaultVisibleColumns)
-  const [columnMenu, setColumnMenu] = useState<HTMLElement | null>(null)
+  const [visibleColumns, setVisibleColumns] = useState<MomentumColumnKey[]>(() =>
+    defaultVisibleIds(MOMENTUM_TABLE_COLUMNS)
+  )
   const [pullWatch, setPullWatch] = useState<{
     running: boolean
     done: number
@@ -181,26 +186,25 @@ export default function MomentumPage() {
     []
   )
   useEffect(() => {
-    setVisibleColumns(readVisibleColumns())
+    setVisibleColumns(readVisibleColumns(VISIBLE_COLUMNS_KEY, MOMENTUM_TABLE_COLUMNS))
   }, [])
 
-  function toggleColumn(key: MomentumColumnKey) {
-    setVisibleColumns(current => {
-      const has = current.includes(key)
-      const next = has ? current.filter(col => col !== key) : [...current, key]
-      const minimal = next.length > 0 ? next : (["symbol"] as MomentumColumnKey[])
-      writeVisibleColumns(minimal)
-      return minimal
-    })
-  }
+  const tableColumns = momentumColumnsInOrder(visibleColumns)
   const rows = useMemo(() => {
     const q = query.trim().toUpperCase()
     const targets = new Set((data?.targets ?? []).map(row => row.symbol))
     const orders = new Set((data?.orders ?? []).map(row => row.symbol))
+    const lockBySymbol = new Map((data?.locks ?? []).map(lock => [lock.symbol, lock]))
     const all = (data?.rows ?? []).filter(row => {
       if (q && !row.symbol.includes(q) && !(row.name || "").toUpperCase().includes(q)) return false
+      const lock = lockBySymbol.get(row.symbol)
       if (view === "pass") return row.filterPass
       if (view === "orders") return targets.has(row.symbol) || orders.has(row.symbol)
+      if (view === "hold") return lock?.mode === "HOLD_WEIGHT"
+      if (view === "exclude") return lock?.mode === "EXCLUDE"
+      if (view === "locked") return Boolean(lock)
+      if (view === "unlocked") return !lock
+      if (view === "hasTarget") return targets.has(row.symbol)
       return true
     })
     const dir = sortDir === "asc" ? 1 : -1
@@ -234,9 +238,11 @@ export default function MomentumPage() {
       if (typeof left === "number" && typeof right === "number") return (left - right) * dir
       return String(left).localeCompare(String(right)) * dir
     })
-  }, [data?.orders, data?.rows, data?.targets, query, sortDir, sortKey, view])
-  const rankPage = rows.length === 0 ? 0 : Math.min(page, Math.ceil(rows.length / 50) - 1)
-  const pageRows = rows.slice(rankPage * 50, rankPage * 50 + 50)
+  }, [data?.locks, data?.orders, data?.rows, data?.targets, query, sortDir, sortKey, view])
+  const pageRows = useMemo(
+    () => paginateSlice(rows, page, rowsPerPage),
+    [rows, page, rowsPerPage]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -800,6 +806,16 @@ export default function MomentumPage() {
           title="Universe & orders"
           description="Filter the ranked list, preview rebalance diff, and export."
           flush
+          actions={
+            <TableColumnMenu
+              columns={MOMENTUM_TABLE_COLUMNS}
+              visible={visibleColumns}
+              onChange={cols => {
+                setVisibleColumns(cols)
+                writeVisibleColumns(VISIBLE_COLUMNS_KEY, cols)
+              }}
+            />
+          }
         >
           <Box sx={{ px: 2, pb: 1 }}>
             <Stack
@@ -822,39 +838,31 @@ export default function MomentumPage() {
                 label="Show"
                 value={view}
                 onChange={e => {
-                  setView(e.target.value as "all" | "pass" | "orders")
+                  setView(
+                    e.target.value as
+                      | "all"
+                      | "pass"
+                      | "orders"
+                      | "hold"
+                      | "exclude"
+                      | "locked"
+                      | "unlocked"
+                      | "hasTarget"
+                  )
                   setPage(0)
                 }}
-                sx={{ minWidth: 220 }}
+                sx={{ minWidth: 240 }}
               >
                 <MenuItem value="all">All names</MenuItem>
                 <MenuItem value="pass">Pass the filters</MenuItem>
                 <MenuItem value="orders">In the order diff</MenuItem>
+                <MenuItem value="hasTarget">Has target weight</MenuItem>
+                <MenuItem value="hold">Hold lock</MenuItem>
+                <MenuItem value="exclude">Exclude lock</MenuItem>
+                <MenuItem value="locked">Any lock</MenuItem>
+                <MenuItem value="unlocked">No lock</MenuItem>
               </TextField>
               <Button onClick={() => exportMomentum(rows, data)}>Export this view</Button>
-              <IconButton
-                aria-label="Choose columns"
-                onClick={event => setColumnMenu(event.currentTarget)}
-                size="small"
-              >
-                <ViewColumnOutlinedIcon fontSize="small" />
-              </IconButton>
-              <Menu
-                anchorEl={columnMenu}
-                open={Boolean(columnMenu)}
-                onClose={() => setColumnMenu(null)}
-              >
-                {MOMENTUM_TABLE_COLUMNS.map(col => (
-                  <MenuItem key={col.key} dense onClick={() => toggleColumn(col.key)}>
-                    <Checkbox
-                      size="small"
-                      checked={visibleColumns.includes(col.key)}
-                      tabIndex={-1}
-                    />
-                    <ListItemText primary={col.label} />
-                  </MenuItem>
-                ))}
-              </Menu>
             </Stack>
             <Typography variant="body2" color="text.secondary">
               {(previewOrders ?? data?.orders ?? []).length} planned. Last pull{" "}
@@ -885,11 +893,11 @@ export default function MomentumPage() {
               </Box>
             ) : null}
           </Box>
-          <ScrollTable minWidth={720} scrollControls>
+          <ScrollTable minWidth={720}>
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  {visibleColumns.map(key => (
+                  {tableColumns.map(key => (
                     <TableCell key={key} sortDirection={sortKey === key ? sortDir : false}>
                       {SORTABLE_MOMENTUM_COLUMNS.has(key) ? (
                         <TableSortLabel
@@ -931,7 +939,7 @@ export default function MomentumPage() {
                   const lock = data?.locks.find(item => item.symbol === row.symbol)
                   return (
                     <TableRow key={row.symbol}>
-                      {visibleColumns.map(key => (
+                      {tableColumns.map(key => (
                         <TableCell key={key} sx={key === "pass" ? { maxWidth: 280 } : undefined}>
                           {key === "rank" ? (
                             (row.rank ?? "—")
@@ -1049,13 +1057,12 @@ export default function MomentumPage() {
               </TableBody>
             </Table>
           </ScrollTable>
-          <TablePagination
-            component="div"
+          <StrategyTablePagination
             count={rows.length}
-            page={rankPage}
-            onPageChange={(_event, next) => setPage(next)}
-            rowsPerPage={50}
-            rowsPerPageOptions={[50]}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setPage}
+            onRowsPerPageChange={setRowsPerPage}
           />
           <Typography
             variant="caption"

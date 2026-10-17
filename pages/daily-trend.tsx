@@ -32,6 +32,8 @@ import Layout from "../components/Layout"
 import ConfirmAction from "../components/lib/ConfirmAction"
 import PageSection from "../components/lib/PageSection"
 import ScrollTable from "../components/lib/ScrollTable"
+import StrategyTablePagination from "../components/lib/StrategyTablePagination"
+import TableColumnMenu from "../components/lib/TableColumnMenu"
 import { useSnackbar } from "../components/lib/useSnackbar"
 import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import {
@@ -40,7 +42,19 @@ import {
   mergeDailyTrendBookSave,
   parseOptionalDailyTrendBulkForm,
 } from "../lib/dailyTrend/engine"
+import {
+  DAILY_TREND_TABLE_COLUMNS,
+  DAILY_TREND_VISIBLE_COLUMNS_KEY,
+  type DailyTrendTableColumnId,
+  dailyTrendColumnsInOrder,
+} from "../lib/dailyTrend/tableColumns"
 import fetchJson from "../lib/fetchJson"
+import {
+  defaultVisibleIds,
+  readVisibleColumns,
+  writeVisibleColumns,
+} from "../lib/ui/columnVisibility"
+import { paginateSlice } from "../lib/ui/tablePagination"
 import useUser from "../lib/useUser"
 
 type Book = {
@@ -150,7 +164,18 @@ export default function DailyTrendPage() {
   >(null)
   const [selectedSymbols, setSelectedSymbols] = useState<Set<string>>(() => new Set())
   const [rowEdits, setRowEdits] = useState<Record<string, DailyTrendInlineRowPatch>>({})
+  const [visibleColumns, setVisibleColumns] = useState<DailyTrendTableColumnId[]>(() =>
+    defaultVisibleIds(DAILY_TREND_TABLE_COLUMNS)
+  )
+  const [tablePage, setTablePage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(50)
   const runtime = data ? (config ?? data.config) : null
+
+  useEffect(() => {
+    setVisibleColumns(
+      readVisibleColumns(DAILY_TREND_VISIBLE_COLUMNS_KEY, DAILY_TREND_TABLE_COLUMNS)
+    )
+  }, [])
 
   function bulkPatchFromBar(): DailyTrendBulkPatch | { error: string } {
     const parsed = parseOptionalDailyTrendBulkForm(bulk)
@@ -388,6 +413,7 @@ export default function DailyTrendPage() {
       setSortKey(key)
       setSortDir(key === "marketCapCr" || key === "enabled" || key === "signal" ? "desc" : "asc")
     }
+    setTablePage(0)
   }
 
   const books = useMemo(() => {
@@ -425,6 +451,12 @@ export default function DailyTrendPage() {
       return String(left).localeCompare(String(right)) * dir
     })
   }, [data?.books, filter, signalView, sortDir, sortKey])
+
+  const tableCols = dailyTrendColumnsInOrder(visibleColumns)
+  const pageBooks = useMemo(
+    () => paginateSlice(books, tablePage, rowsPerPage),
+    [books, tablePage, rowsPerPage]
+  )
 
   useEffect(() => {
     if (!data?.pull?.running) return
@@ -712,12 +744,18 @@ export default function DailyTrendPage() {
             <SettingsTextField
               label="Filter symbol, name, or industry"
               value={filter}
-              onChange={setFilter}
+              onChange={value => {
+                setFilter(value)
+                setTablePage(0)
+              }}
             />
             <SettingsSelectField<"all" | "qualifies">
               label="Signal"
               value={signalView}
-              onChange={setSignalView}
+              onChange={value => {
+                setSignalView(value)
+                setTablePage(0)
+              }}
             >
               <MenuItem value="all">All names</MenuItem>
               <MenuItem value="qualifies">Qualifies</MenuItem>
@@ -730,13 +768,24 @@ export default function DailyTrendPage() {
           busy={busy}
           onClose={() => setEditBook(null)}
           onSave={async book => {
-            await saveBook({ ...editBook!, ...book, symbol: editBook!.symbol })
+            if (!editBook) return
+            await saveBook({ ...editBook, ...book, symbol: editBook.symbol })
           }}
         />
         <PageSection
           title="Book table"
-          description="Wide table scrolls horizontally with the page; use jump buttons for price vs budget columns."
+          description="Wide table scrolls horizontally with the page. Choose optional columns from the header menu."
           flush
+          actions={
+            <TableColumnMenu
+              columns={DAILY_TREND_TABLE_COLUMNS}
+              visible={visibleColumns}
+              onChange={cols => {
+                setVisibleColumns(cols)
+                writeVisibleColumns(DAILY_TREND_VISIBLE_COLUMNS_KEY, cols)
+              }}
+            />
+          }
         >
           <Typography
             variant="caption"
@@ -745,14 +794,9 @@ export default function DailyTrendPage() {
           >
             Market cap refreshes about 20 names an hour from Screener. Hover Close or Mcap for
             session dates. Select rows for budget, EMA period, and buffer; use Edit for exit buffer
-            and entry. Jump to Price & signals after scrolling to budget columns.
+            and entry.
           </Typography>
-          <ScrollTable
-            minWidth={1100}
-            scrollControls
-            scrollStartLabel="Price & signals"
-            scrollEndLabel="Budget & settings"
-          >
+          <ScrollTable minWidth={1100}>
             <Table stickyHeader size="small" sx={{ "& td, & th": { px: 1, py: 0.5 } }}>
               <TableHead>
                 <TableRow>
@@ -789,101 +833,24 @@ export default function DailyTrendPage() {
                       boxShadow: "8px 0 8px -8px rgba(0,0,0,0.5)",
                     }}
                   />
-                  <Sortable
-                    label="State"
-                    sortKey="status"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Close"
-                    sortKey="close"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="EMA"
-                    sortKey="ema"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Signal"
-                    sortKey="signal"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Stop"
-                    sortKey="stop"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Name"
-                    sortKey="name"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Industry"
-                    sortKey="industry"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Mcap ₹ cr"
-                    sortKey="marketCapCr"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Budget"
-                    sortKey="budgetInr"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="EMA"
-                    sortKey="emaPeriod"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Buffer"
-                    sortKey="bufferPercent"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Exit"
-                    sortKey="exitBufferPercent"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
-                  <Sortable
-                    label="Entry"
-                    sortKey="entryStyle"
-                    active={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                  />
+                  {tableCols.map(colId => {
+                    const meta = DAILY_TREND_TABLE_COLUMNS.find(c => c.id === colId)
+                    const columnSortKey = DAILY_TREND_COLUMN_SORT[colId]
+                    return (
+                      <Sortable
+                        key={colId}
+                        label={meta?.label ?? colId}
+                        sortKey={columnSortKey}
+                        active={sortKey}
+                        dir={sortDir}
+                        onSort={toggleSort}
+                      />
+                    )
+                  })}
                 </TableRow>
               </TableHead>
               <TableBody>
-                {books.map(book => {
+                {pageBooks.map(book => {
                   const selected = selectedSymbols.has(book.symbol)
                   const patch = rowPatch(book)
                   return (
@@ -951,87 +918,22 @@ export default function DailyTrendPage() {
                       >
                         {book.symbol}
                       </TableCell>
-                      <TableCell>{book.paused ? "paused" : book.status}</TableCell>
-                      <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
-                        <CellWithTip
-                          tip={closeCellTip(book)}
-                          align="right"
-                          label={book.close == null ? "—" : formatPx(book.close)}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        {book.ema == null ? "—" : formatPx(book.ema)}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          size="small"
-                          color={book.signalBuy ? "success" : "default"}
-                          label={book.signal ?? "—"}
-                        />
-                      </TableCell>
-                      <TableCell>{book.stop ?? "—"}</TableCell>
-                      <TableCell>{book.name || "—"}</TableCell>
-                      <TableCell>{book.industry || "—"}</TableCell>
-                      <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
-                        <CellWithTip
-                          tip={
-                            book.marketCapAsOf
-                              ? `Market cap as of ${book.marketCapAsOf}`
-                              : undefined
-                          }
-                          align="right"
-                          label={formatCr(book.marketCapCr)}
-                        />
-                      </TableCell>
-                      <TableCell align="right">
-                        {selected ? (
-                          <TextField
-                            size="small"
-                            type="number"
-                            value={patch.budgetInr}
-                            onChange={e => patchRow(book.symbol, book, "budgetInr", e.target.value)}
-                            sx={{ width: 96, "& .MuiInputBase-root": { py: 0.25 } }}
-                          />
-                        ) : (
-                          formatCr(book.budgetInr)
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {selected ? (
-                          <TextField
-                            size="small"
-                            type="number"
-                            value={patch.emaPeriod}
-                            onChange={e => patchRow(book.symbol, book, "emaPeriod", e.target.value)}
-                            sx={{ width: 72, "& .MuiInputBase-root": { py: 0.25 } }}
-                          />
-                        ) : (
-                          book.emaPeriod
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {selected ? (
-                          <TextField
-                            size="small"
-                            type="number"
-                            value={patch.bufferPercent}
-                            onChange={e =>
-                              patchRow(book.symbol, book, "bufferPercent", e.target.value)
-                            }
-                            sx={{ width: 72, "& .MuiInputBase-root": { py: 0.25 } }}
-                          />
-                        ) : (
-                          book.bufferPercent
-                        )}
-                      </TableCell>
-                      <TableCell>{book.exitBufferPercent}</TableCell>
-                      <TableCell>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
+                      {tableCols.map(colId =>
+                        dailyTrendDataCell(colId, book, selected, patch, patchRow)
+                      )}
                     </TableRow>
                   )
                 })}
               </TableBody>
             </Table>
           </ScrollTable>
+          <StrategyTablePagination
+            count={books.length}
+            page={tablePage}
+            rowsPerPage={rowsPerPage}
+            onPageChange={setTablePage}
+            onRowsPerPageChange={setRowsPerPage}
+          />
         </PageSection>
         {(decisions ?? []).length > 0 ? (
           <PageSection title="Last evaluation">
@@ -1048,6 +950,138 @@ export default function DailyTrendPage() {
       </Stack>
     </Layout>
   )
+}
+
+const DAILY_TREND_COLUMN_SORT: Record<DailyTrendTableColumnId, SortKey> = {
+  status: "status",
+  close: "close",
+  ema: "ema",
+  signal: "signal",
+  stop: "stop",
+  name: "name",
+  industry: "industry",
+  marketCapCr: "marketCapCr",
+  budgetInr: "budgetInr",
+  emaPeriod: "emaPeriod",
+  bufferPercent: "bufferPercent",
+  exitBufferPercent: "exitBufferPercent",
+  entryStyle: "entryStyle",
+}
+
+function dailyTrendDataCell(
+  colId: DailyTrendTableColumnId,
+  book: Book,
+  selected: boolean,
+  patch: { budgetInr: number; emaPeriod: number; bufferPercent: number },
+  patchRow: (
+    symbol: string,
+    book: Book,
+    field: "budgetInr" | "emaPeriod" | "bufferPercent",
+    raw: string
+  ) => void
+) {
+  switch (colId) {
+    case "status":
+      return <TableCell key={colId}>{book.paused ? "paused" : book.status}</TableCell>
+    case "close":
+      return (
+        <TableCell key={colId} align="right" sx={{ whiteSpace: "nowrap" }}>
+          <CellWithTip
+            tip={closeCellTip(book)}
+            align="right"
+            label={book.close == null ? "—" : formatPx(book.close)}
+          />
+        </TableCell>
+      )
+    case "ema":
+      return (
+        <TableCell key={colId} align="right">
+          {book.ema == null ? "—" : formatPx(book.ema)}
+        </TableCell>
+      )
+    case "signal":
+      return (
+        <TableCell key={colId}>
+          <Chip
+            size="small"
+            color={book.signalBuy ? "success" : "default"}
+            label={book.signal ?? "—"}
+          />
+        </TableCell>
+      )
+    case "stop":
+      return <TableCell key={colId}>{book.stop ?? "—"}</TableCell>
+    case "name":
+      return <TableCell key={colId}>{book.name || "—"}</TableCell>
+    case "industry":
+      return <TableCell key={colId}>{book.industry || "—"}</TableCell>
+    case "marketCapCr":
+      return (
+        <TableCell key={colId} align="right" sx={{ whiteSpace: "nowrap" }}>
+          <CellWithTip
+            tip={book.marketCapAsOf ? `Market cap as of ${book.marketCapAsOf}` : undefined}
+            align="right"
+            label={formatCr(book.marketCapCr)}
+          />
+        </TableCell>
+      )
+    case "budgetInr":
+      return (
+        <TableCell key={colId} align="right">
+          {selected ? (
+            <TextField
+              size="small"
+              type="number"
+              value={patch.budgetInr}
+              onChange={e => patchRow(book.symbol, book, "budgetInr", e.target.value)}
+              sx={{ width: 96, "& .MuiInputBase-root": { py: 0.25 } }}
+            />
+          ) : (
+            formatCr(book.budgetInr)
+          )}
+        </TableCell>
+      )
+    case "emaPeriod":
+      return (
+        <TableCell key={colId}>
+          {selected ? (
+            <TextField
+              size="small"
+              type="number"
+              value={patch.emaPeriod}
+              onChange={e => patchRow(book.symbol, book, "emaPeriod", e.target.value)}
+              sx={{ width: 72, "& .MuiInputBase-root": { py: 0.25 } }}
+            />
+          ) : (
+            book.emaPeriod
+          )}
+        </TableCell>
+      )
+    case "bufferPercent":
+      return (
+        <TableCell key={colId}>
+          {selected ? (
+            <TextField
+              size="small"
+              type="number"
+              value={patch.bufferPercent}
+              onChange={e => patchRow(book.symbol, book, "bufferPercent", e.target.value)}
+              sx={{ width: 72, "& .MuiInputBase-root": { py: 0.25 } }}
+            />
+          ) : (
+            book.bufferPercent
+          )}
+        </TableCell>
+      )
+    case "exitBufferPercent":
+      return <TableCell key={colId}>{book.exitBufferPercent}</TableCell>
+    case "entryStyle":
+      return (
+        <TableCell key={colId}>{book.entryStyle === "BREAK_HIGH" ? "High" : "Close"}</TableCell>
+      )
+    default:
+      return null
+  }
 }
 
 function formatPx(value: number): string {

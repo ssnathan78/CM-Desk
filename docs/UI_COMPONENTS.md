@@ -47,7 +47,7 @@ The **app bar title** comes from `Layout title="…"` (e.g. “Chase”, “Mome
 `components/lib/PageSection.tsx` — outlined panel with a header band (title, optional description, optional `actions` slot) and body.
 
 - Use **`flush`** when the main child is a table (no side padding on the table; small top pad only).
-- Put table **jump buttons**, toggles, or “+ Prices” in **`actions`** (Chase Books section).
+- Put **column chooser** (`TableColumnMenu`), toggles, or export in **`actions`** (Chase / Momentum / Daily trend book sections).
 
 Examples: Chase “Books”, Daily trend “Book table”, Desk Books positions.
 
@@ -76,23 +76,23 @@ Chase: app bar title only; **Guide** sits next to “Square off all Chase books�
 
 | Component | File | Use for |
 |-----------|------|---------|
-| **ScrollTable** | `components/lib/ScrollTable.tsx` | Wide, many-column grids on strategy pages (Chase books, Momentum rank, Daily trend book). Horizontal scroll on the **page**; optional **jump buttons**. |
+| **ScrollTable** | `components/lib/ScrollTable.tsx` | Wide, many-column grids on strategy pages (Chase books, Momentum rank, Daily trend book). Horizontal scroll on the **page** (no jump bar). |
+| **TableColumnMenu** | `components/lib/TableColumnMenu.tsx` | Column visibility + ↑↓ reorder in `PageSection` `actions`. Persists order in `lib/ui/columnVisibility.ts`. |
+| **StrategyTablePagination** | `components/lib/StrategyTablePagination.tsx` | Shared footer: 10 / 20 / 50 / 100 / All (`lib/ui/tablePagination.ts`). |
 | **RecordTable** | `components/records/RecordTable.tsx` | Desk Books (positions, orders, trades, sessions). TanStack columns; row click opens drawer. |
 
-**Do not** set `maxHeight` on `ScrollTable` for normal strategy books — that creates a nested vertical scroll cage. Let the page scroll; use **`scrollControls`** for horizontal jumps.
+**Do not** set `maxHeight` on `ScrollTable` for normal strategy books — that creates a nested vertical scroll cage. Let the page scroll vertically; use the column menu to hide optional fields.
 
 ### ScrollTable props
 
 | Prop | Purpose |
 |------|---------|
 | `minWidth` | Forces horizontal scroll when viewport is narrower (e.g. 1100). |
-| `scrollControls` | Shows “jump start / jump end” buttons when content overflows horizontally. |
-| `scrollStartLabel` / `scrollEndLabel` | Operator-facing names (e.g. Daily trend: “Price & signals” / “Budget & settings”; Chase: “Configuration” / “Runtime & controls”). |
 | `maxHeight` | Avoid on strategy tables unless you have a rare embedded panel need. |
 
 ### Sticky columns
 
-Daily trend pins checkbox/symbol columns with local `pin()` helpers and `position: sticky`. Chase/Momentum rely on horizontal scroll + jump buttons instead of many sticky columns.
+Daily trend pins checkbox/symbol columns with local `pin()` helpers and `position: sticky`. Chase pins the **Book** column. Momentum pins the **Lock** actions column on the right.
 
 ### Desk RecordTable row clicks
 
@@ -211,7 +211,7 @@ Shows engine vs **Desk → Risk** enabled, execution mode, and page execution la
 
 - **Config at a glance:** EMA, buffer, protect, offset, open classify columns (`ChaseBooksTable` + `lib/chase/chaseBookCompare.ts`).
 - **Amber cell:** value differs from first **enabled** book in index order.
-- **Frozen book column** + jump **Configuration** / **Runtime & prices** (like Daily trend symbol column).
+- **Frozen book column**; optional columns via header **Columns** menu.
 - **Toasts:** book actions via `bookToast()` → snackbar, not text in the Book cell.
 
 ---
@@ -229,7 +229,8 @@ Shows engine vs **Desk → Risk** enabled, execution mode, and page execution la
 | Concern | Pattern |
 |---------|---------|
 | Wide data grid | `PageSection` + `flush` + `ScrollTable` |
-| Horizontal overflow | Page scroll + optional `scrollControls` |
+| Horizontal overflow | Page scroll; hide columns via `TableColumnMenu` |
+| Pagination | `StrategyTablePagination` (default 50 rows) |
 | Vertical overflow | **No** inner `maxHeight` on main book table |
 | Guide | `Button component={Link}` to `/help/…`, not grey inline link |
 | Save engine settings | Toolbar or explicit Save; Chase engine/pause save immediately on switch |

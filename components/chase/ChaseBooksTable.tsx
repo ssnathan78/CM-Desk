@@ -18,11 +18,15 @@ import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 
 import {
-  type ChaseConfigField,
   chaseConfigDiffFields,
   chaseConfigPrimaryBook,
   chaseOpenClassifyShortLabel,
+  type ChaseConfigField,
 } from "../../lib/chase/chaseBookCompare"
+import {
+  chaseColumnsInOrder,
+  type ChaseTableColumnId,
+} from "../../lib/chase/chaseTableColumns"
 import type { ChaseBookConfig } from "../../lib/chaseDefaults"
 import { labelFor } from "../../lib/ui/labels"
 import { color } from "../../src/tokens"
@@ -39,8 +43,6 @@ export type ChaseStatusRow = {
   averageEntryPrice?: string | null
   markPrice?: string | null
 }
-
-const groupBorder = { borderLeft: 1, borderColor: "divider" }
 
 const BOOK_COL_MIN = 128
 
@@ -68,11 +70,7 @@ function pinBookBody() {
 }
 
 function diffCellSx(differs: boolean) {
-  return differs
-    ? {
-        bgcolor: color.attention.subtle,
-      }
-    : undefined
+  return differs ? { bgcolor: color.attention.subtle } : undefined
 }
 
 function ConfigValueCell({
@@ -80,14 +78,12 @@ function ConfigValueCell({
   differs,
   primaryLabel,
   align = "right",
-  firstInGroup,
   children,
 }: {
   field: ChaseConfigField
   differs: boolean
   primaryLabel: string
   align?: "left" | "right"
-  firstInGroup?: boolean
   children: ReactNode
 }) {
   const inner = (
@@ -107,14 +103,7 @@ function ConfigValueCell({
     </Box>
   )
   return (
-    <TableCell
-      align={align}
-      sx={{
-        ...(firstInGroup ? groupBorder : {}),
-        ...diffCellSx(differs),
-        whiteSpace: "nowrap",
-      }}
-    >
+    <TableCell align={align} sx={{ ...diffCellSx(differs), whiteSpace: "nowrap" }}>
       {differs ? (
         <Tooltip title={`Differs from ${primaryLabel} (${field})`}>
           <Box component="span">{inner}</Box>
@@ -126,10 +115,198 @@ function ConfigValueCell({
   )
 }
 
+function chaseDataCell(
+  colId: ChaseTableColumnId,
+  ctx: {
+    book: ChaseBookConfig
+    st: ChaseStatusRow | undefined
+    qty: number
+    flat: boolean
+    diff: Set<ChaseConfigField>
+    primaryLabel: string
+    executionMode: "PAPER" | "LIVE"
+    onEngineChange: (instrument: string, enabled: boolean) => void
+    onPauseChange: (instrument: string, paused: boolean) => void
+  }
+) {
+  const { book, st, qty, flat, diff, primaryLabel, executionMode, onEngineChange, onPauseChange } =
+    ctx
+  switch (colId) {
+    case "emaPeriod":
+      return (
+        <ConfigValueCell
+          key={colId}
+          field="emaPeriod"
+          differs={diff.has("emaPeriod")}
+          primaryLabel={primaryLabel}
+        >
+          {book.emaPeriod}
+        </ConfigValueCell>
+      )
+    case "bufferPercent":
+      return (
+        <ConfigValueCell
+          key={colId}
+          field="bufferPercent"
+          differs={diff.has("bufferPercent")}
+          primaryLabel={primaryLabel}
+        >
+          {book.bufferPercent}
+        </ConfigValueCell>
+      )
+    case "marketProtectionPercent":
+      return (
+        <ConfigValueCell
+          key={colId}
+          field="marketProtectionPercent"
+          differs={diff.has("marketProtectionPercent")}
+          primaryLabel={primaryLabel}
+        >
+          {book.marketProtectionPercent}
+        </ConfigValueCell>
+      )
+    case "entryLimitOffset":
+      return (
+        <ConfigValueCell
+          key={colId}
+          field="entryLimitOffset"
+          differs={diff.has("entryLimitOffset")}
+          primaryLabel={primaryLabel}
+        >
+          {book.entryLimitOffset}
+        </ConfigValueCell>
+      )
+    case "openClassify":
+      return (
+        <ConfigValueCell
+          key={colId}
+          field="openClassify"
+          differs={diff.has("openClassify")}
+          primaryLabel={primaryLabel}
+          align="left"
+        >
+          <Chip
+            size="small"
+            variant="outlined"
+            label={chaseOpenClassifyShortLabel(book.openClassify)}
+          />
+        </ConfigValueCell>
+      )
+    case "state":
+      return <TableCell key={colId}>{st?.current ?? "—"}</TableCell>
+    case "mode":
+      return (
+        <TableCell key={colId}>
+          <BookBadge book={executionMode} />
+        </TableCell>
+      )
+    case "qty":
+      return (
+        <TableCell key={colId} align="right">
+          <Figure kind="qty" value={qty} align="right" />
+        </TableCell>
+      )
+    case "avg":
+      return (
+        <TableCell key={colId} align="right">
+          <Figure kind="price" value={st?.averageEntryPrice} flat={flat} />
+        </TableCell>
+      )
+    case "mark":
+      return (
+        <TableCell key={colId} align="right">
+          <Figure kind="price" value={st?.markPrice} flat={flat} />
+        </TableCell>
+      )
+    case "openMark":
+      return (
+        <TableCell key={colId} align="right">
+          <Figure kind="inr" value={st?.openMark ?? "0"} pnl />
+        </TableCell>
+      )
+    case "contract":
+      return (
+        <TableCell key={colId}>
+          <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
+            {st?.tradingsymbol ?? "—"}
+          </Typography>
+        </TableCell>
+      )
+    case "engine":
+      return (
+        <TableCell key={colId} onClick={e => e.stopPropagation()}>
+          <Switch
+            checked={book.enabled}
+            onChange={e => onEngineChange(book.instrument, e.target.checked)}
+            aria-label={`Engine ${book.instrument}`}
+          />
+        </TableCell>
+      )
+    case "pause":
+      return (
+        <TableCell key={colId} onClick={e => e.stopPropagation()}>
+          <Tooltip title={book.enabled ? "" : "Turn the engine on first."}>
+            <span>
+              <Switch
+                checked={!book.paused}
+                disabled={!book.enabled}
+                onChange={e => onPauseChange(book.instrument, !e.target.checked)}
+                aria-label={`New entries ${book.instrument}`}
+              />
+            </span>
+          </Tooltip>
+        </TableCell>
+      )
+    case "lots":
+      return (
+        <TableCell
+          key={colId}
+          align="right"
+          sx={diff.has("lots") ? diffCellSx(true) : undefined}
+          onClick={e => e.stopPropagation()}
+        >
+          {book.lots}
+          {diff.has("lots") ? (
+            <Typography
+              component="span"
+              variant="caption"
+              color="warning.main"
+              sx={{ ml: 0.5 }}
+              aria-hidden
+            >
+              ≠
+            </Typography>
+          ) : null}
+        </TableCell>
+      )
+    default:
+      return null
+  }
+}
+
+const HEADER_LABELS: Record<ChaseTableColumnId, string> = {
+  emaPeriod: "EMA",
+  bufferPercent: "Buffer %",
+  marketProtectionPercent: "Protect %",
+  entryLimitOffset: "Offset (₹)",
+  openClassify: "Open",
+  state: "State",
+  mode: "Mode",
+  qty: "Qty",
+  avg: "Avg (₹)",
+  mark: "Mark (₹)",
+  openMark: "Open mark (₹)",
+  contract: "Contract",
+  engine: "Engine",
+  pause: "New entries",
+  lots: "Lots",
+}
+
 export default function ChaseBooksTable({
   books,
   statuses,
   executionMode,
+  visibleColumns,
   onRowClick,
   onEngineChange,
   onPauseChange,
@@ -138,6 +315,7 @@ export default function ChaseBooksTable({
   books: ChaseBookConfig[]
   statuses: ChaseStatusRow[]
   executionMode: "PAPER" | "LIVE"
+  visibleColumns: ChaseTableColumnId[]
   onRowClick: (instrument: string) => void
   onEngineChange: (instrument: string, enabled: boolean) => void
   onPauseChange: (instrument: string, paused: boolean) => void
@@ -146,50 +324,28 @@ export default function ChaseBooksTable({
   const [menu, setMenu] = useState<{ instrument: string; anchor: HTMLElement } | null>(null)
   const primary = useMemo(() => chaseConfigPrimaryBook(books), [books])
   const primaryLabel = primary ? labelFor(primary.instrument) : "primary book"
-
-  const minWidth = 1320
+  const cols = chaseColumnsInOrder(visibleColumns)
 
   return (
     <>
-      <ScrollTable
-        minWidth={minWidth}
-        scrollControls
-        scrollStartLabel="Configuration"
-        scrollEndLabel="Runtime & prices"
-      >
+      <ScrollTable minWidth={960}>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell rowSpan={2} sx={pinBookHeader()}>Book</TableCell>
-              <TableCell colSpan={5} align="center" sx={groupBorder}>
-                Configuration
-              </TableCell>
-              <TableCell colSpan={7} align="center" sx={groupBorder}>
-                Runtime
-              </TableCell>
-              <TableCell colSpan={3} align="center" sx={groupBorder}>
-                Controls
-              </TableCell>
-              <TableCell rowSpan={2} />
-            </TableRow>
-            <TableRow>
-              <TableCell align="right" sx={groupBorder}>
-                EMA
-              </TableCell>
-              <TableCell align="right">Buffer %</TableCell>
-              <TableCell align="right">Protect %</TableCell>
-              <TableCell align="right">Offset (₹)</TableCell>
-              <TableCell>Open</TableCell>
-              <TableCell sx={groupBorder}>State</TableCell>
-              <TableCell>Mode</TableCell>
-              <TableCell align="right">Qty</TableCell>
-              <TableCell align="right">Avg (₹)</TableCell>
-              <TableCell align="right">Mark (₹)</TableCell>
-              <TableCell align="right">Open mark (₹)</TableCell>
-              <TableCell>Contract</TableCell>
-              <TableCell sx={groupBorder}>Engine</TableCell>
-              <TableCell>New entries</TableCell>
-              <TableCell align="right">Lots</TableCell>
+              <TableCell sx={pinBookHeader()}>Book</TableCell>
+              {cols.map(id => (
+                <TableCell
+                  key={id}
+                  align={
+                    id === "openClassify" || id === "contract" || id === "state" || id === "mode"
+                      ? "left"
+                      : "right"
+                  }
+                >
+                  {HEADER_LABELS[id]}
+                </TableCell>
+              ))}
+              <TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -210,108 +366,19 @@ export default function ChaseBooksTable({
                       {labelFor(book.instrument)}
                     </Typography>
                   </TableCell>
-                  <ConfigValueCell
-                    field="emaPeriod"
-                    differs={diff.has("emaPeriod")}
-                    primaryLabel={primaryLabel}
-                    firstInGroup
-                  >
-                    {book.emaPeriod}
-                  </ConfigValueCell>
-                  <ConfigValueCell
-                    field="bufferPercent"
-                    differs={diff.has("bufferPercent")}
-                    primaryLabel={primaryLabel}
-                  >
-                    {book.bufferPercent}
-                  </ConfigValueCell>
-                  <ConfigValueCell
-                    field="marketProtectionPercent"
-                    differs={diff.has("marketProtectionPercent")}
-                    primaryLabel={primaryLabel}
-                  >
-                    {book.marketProtectionPercent}
-                  </ConfigValueCell>
-                  <ConfigValueCell
-                    field="entryLimitOffset"
-                    differs={diff.has("entryLimitOffset")}
-                    primaryLabel={primaryLabel}
-                  >
-                    {book.entryLimitOffset}
-                  </ConfigValueCell>
-                  <ConfigValueCell
-                    field="openClassify"
-                    differs={diff.has("openClassify")}
-                    primaryLabel={primaryLabel}
-                    align="left"
-                  >
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={chaseOpenClassifyShortLabel(book.openClassify)}
-                    />
-                  </ConfigValueCell>
-                  <TableCell sx={groupBorder}>{st?.current ?? "—"}</TableCell>
-                  <TableCell>
-                    <BookBadge book={executionMode} />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Figure kind="qty" value={qty} align="right" />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Figure kind="price" value={st?.averageEntryPrice} flat={flat} />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Figure kind="price" value={st?.markPrice} flat={flat} />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Figure kind="inr" value={st?.openMark ?? "0"} pnl />
-                  </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}
-                    >
-                      {st?.tradingsymbol ?? "—"}
-                    </Typography>
-                  </TableCell>
-                  <TableCell onClick={e => e.stopPropagation()} sx={groupBorder}>
-                    <Switch
-                      checked={book.enabled}
-                      onChange={e => onEngineChange(book.instrument, e.target.checked)}
-                      aria-label={`Engine ${book.instrument}`}
-                    />
-                  </TableCell>
-                  <TableCell onClick={e => e.stopPropagation()}>
-                    <Tooltip title={book.enabled ? "" : "Turn the engine on first."}>
-                      <span>
-                        <Switch
-                          checked={!book.paused}
-                          disabled={!book.enabled}
-                          onChange={e => onPauseChange(book.instrument, !e.target.checked)}
-                          aria-label={`New entries ${book.instrument}`}
-                        />
-                      </span>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell
-                    align="right"
-                    sx={diff.has("lots") ? diffCellSx(true) : undefined}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    {book.lots}
-                    {diff.has("lots") ? (
-                      <Typography
-                        component="span"
-                        variant="caption"
-                        color="warning.main"
-                        sx={{ ml: 0.5 }}
-                        aria-hidden
-                      >
-                        ≠
-                      </Typography>
-                    ) : null}
-                  </TableCell>
+                  {cols.map(colId =>
+                    chaseDataCell(colId, {
+                      book,
+                      st,
+                      qty,
+                      flat,
+                      diff,
+                      primaryLabel,
+                      executionMode,
+                      onEngineChange,
+                      onPauseChange,
+                    })
+                  )}
                   <TableCell align="right" onClick={e => e.stopPropagation()}>
                     <IconButton
                       size="small"
@@ -330,17 +397,7 @@ export default function ChaseBooksTable({
           </TableBody>
         </Table>
       </ScrollTable>
-      <Box
-        sx={{
-          px: 2,
-          py: 1,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 1,
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
+      <Box sx={{ px: 2, py: 1 }}>
         <Typography variant="caption" color="text.secondary">
           Amber cells differ from {primaryLabel} (first enabled book in index order). Row click
           opens the drawer to edit parameters.

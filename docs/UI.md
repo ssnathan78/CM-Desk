@@ -22,7 +22,7 @@ Operator-facing surfaces for the personal Kite desk (2026 layout). Behaviour rul
 | `/risk` | Risk | Limits matrix, execution mode, new entries, sticky save |
 | `/templates` | Templates | Master–detail editor; `?type=` and `?id=` optional |
 | `/plan` | Schedules | Weekday grid; attach template to clock |
-| `/chase` | Chase | Books grid: frozen book column, config + runtime (incl. prices), jump scroll; drawer editor |
+| `/chase` | Chase | Books grid: frozen book column, column chooser, pagination; drawer editor |
 | `/momentum`, `/daily-trend` | Same as page | Permission line from desk status + page config |
 | `/help`, `/help/[topic]` | Guide | Operator help (revamp vocabulary) |
 | `/strat/straddle`, `/strat/strangle` | — | Redirect to `/templates?type=…` |
@@ -48,7 +48,7 @@ E2E and unit tests that open templates should use `/templates` (optional `?type=
 - **`pages/desk.tsx`** — data hooks, confirms, summary tiles chrome.
 - **`components/desk/views/*`** — Now, Books, Why, Setup panels.
 - **Settings forms** (templates, Chase drawer, Risk limits, Momentum filters) use `FieldRow` / `SettingsFields`; **runtime toolbars** (Daily trend engine) use compact horizontal controls — see [UI_COMPONENTS.md](./UI_COMPONENTS.md).
-- **Strategy tables** (Chase, Momentum, Daily trend): `ScrollTable` with horizontal page scroll; optional jump buttons; no nested vertical `maxHeight` on the main grid.
+- **Strategy tables** (Chase, Momentum, Daily trend): `ScrollTable` with horizontal page scroll; column menu in section header; `StrategyTablePagination` (10–100 or All); no nested vertical `maxHeight` on the main grid.
 - **Outlined `PageSection` panels** (header band + body) group engine, risk, books, feeds, and tables on strategy pages (`/chase`, `/momentum`, `/daily-trend`, `/risk`, `/templates`, `/plan`, `/profile`) and Desk sub-views (Now board, Books, Why, Setup).
 - **Template editor** (`FormSection` on straddle/strangle): same header band as `PageSection`. On `md+`, grid order is Contract | Risk on row 1, Entry | Timing on row 2.
 - **Labels:** `labelFor` maps known codes; unknown `SNAKE_CASE` is title-cased via `humanizeCode`.
