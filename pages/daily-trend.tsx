@@ -8,7 +8,6 @@ import {
   Checkbox,
   Chip,
   IconButton,
-  LinearProgress,
   MenuItem,
   Skeleton,
   Stack,
@@ -28,11 +27,7 @@ import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 import DailyTrendBookDrawer from "../components/daily-trend/DailyTrendBookDrawer"
 import DailyTrendEngineToolbar from "../components/daily-trend/DailyTrendEngineToolbar"
-import {
-  SettingsSelectField,
-  SettingsSwitchField,
-  SettingsTextField,
-} from "../components/forms/SettingsFields"
+import { SettingsSelectField, SettingsTextField } from "../components/forms/SettingsFields"
 import Layout from "../components/Layout"
 import ConfirmAction from "../components/lib/ConfirmAction"
 import PageSection from "../components/lib/PageSection"
