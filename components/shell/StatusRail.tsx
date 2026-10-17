@@ -1,15 +1,11 @@
-import Link from "next/link"
 import { Chip, Skeleton, Stack, Typography } from "@mui/material"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
 import { formatIstTime } from "../../lib/format"
 import { useDeskStatus } from "../../lib/hooks/useDeskStatus"
+import { deriveEntriesChip, deriveModeChip, marketSessionRailLabel } from "../../lib/ui/deskStatus"
 import { color } from "../../src/tokens"
-import {
-  deriveEntriesChip,
-  deriveModeChip,
-  marketSessionRailLabel,
-} from "../../lib/ui/deskStatus"
 import HaltControl from "./HaltControl"
 
 type Props = {
@@ -133,6 +129,12 @@ function TooltipChip({
   sx: Record<string, unknown>
 }) {
   return (
-    <Chip size="small" label={label} title={title} variant="outlined" sx={{ maxWidth: 280, ...sx }} />
+    <Chip
+      size="small"
+      label={label}
+      title={title}
+      variant="outlined"
+      sx={{ maxWidth: 280, ...sx }}
+    />
   )
 }

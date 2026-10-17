@@ -83,8 +83,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
   const [mobileOpen, setMobileOpen] = useState(false)
   const asPath = router.asPath
   const { data: alertSummary } = useSWR(user?.isLoggedIn ? "/api/desk/alerts?summary=1" : null)
-  const alertCount =
-    Number(alertSummary?.errorCount ?? 0) + Number(alertSummary?.warnCount ?? 0)
+  const alertCount = Number(alertSummary?.errorCount ?? 0) + Number(alertSummary?.warnCount ?? 0)
 
   const close = () => setMobileOpen(false)
 

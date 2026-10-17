@@ -1,11 +1,5 @@
 import BlockIcon from "@mui/icons-material/Block"
-import {
-  Button,
-  Popover,
-  Stack,
-  TextField,
-  Tooltip,
-} from "@mui/material"
+import { Button, Popover, Stack, TextField, Tooltip } from "@mui/material"
 import { useState } from "react"
 
 import fetchJson from "../../lib/fetchJson"
@@ -19,13 +13,7 @@ type Props = {
   compact?: boolean
 }
 
-export default function HaltControl({
-  deskHalted,
-  haltReason,
-  busy,
-  onChanged,
-  compact,
-}: Props) {
+export default function HaltControl({ deskHalted, haltReason, busy, onChanged, compact }: Props) {
   const [reasonAnchor, setReasonAnchor] = useState<HTMLElement | null>(null)
   const [reasonDraft, setReasonDraft] = useState("")
   const [resumeOpen, setResumeOpen] = useState(false)

@@ -1,12 +1,4 @@
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-} from "@mui/material"
-import React from "react"
+import ConfirmAction from "./ConfirmAction"
 
 type ConfirmDialogProps = {
   open: boolean
@@ -29,24 +21,18 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const tone =
+    confirmColor === "error" ? "danger" : confirmColor === "warning" ? "attention" : "neutral"
   return (
-    <Dialog
+    <ConfirmAction
       open={open}
-      onClose={onCancel}
-      fullWidth
-      maxWidth="sm"
-      sx={{ "& .MuiDialog-paper": { m: 2 } }}
-    >
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent>
-        <DialogContentText>{message}</DialogContentText>
-      </DialogContent>
-      <DialogActions sx={{ flexWrap: "wrap", gap: 1, px: 2, pb: 2 }}>
-        <Button onClick={onCancel}>{cancelLabel}</Button>
-        <Button color={confirmColor} variant="contained" onClick={onConfirm}>
-          {confirmLabel}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      title={title}
+      message={message}
+      confirmLabel={confirmLabel}
+      cancelLabel={cancelLabel}
+      tone={tone}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   )
 }

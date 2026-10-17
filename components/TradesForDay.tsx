@@ -1,4 +1,3 @@
-import { Stop } from "@mui/icons-material"
 import { Box, Button, Paper, Typography } from "@mui/material"
 import router from "next/router"
 import type React from "react"
@@ -10,6 +9,7 @@ import { dashboardJobActions, isJobAborted } from "../lib/dashboardJobActions"
 import fetchJson, { type FetchJsonError } from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
 import { operatorJobError } from "../lib/operatorJobError"
+import EmergencyPanel from "./desk/EmergencyPanel"
 import BrokerOrders from "./lib/brokerOrders"
 import ConfirmDialog from "./lib/ConfirmDialog"
 import PnLComponent from "./lib/PnLComponent"
@@ -261,122 +261,6 @@ const WrapperComponent = (props: TradeJob) => {
   )
 }
 
-const KILL_MESSAGES = {
-  flatten:
-    "Flatten every currently open book (straddle, strangle, and Chase). Chase can take the next signal. The desk is not halted. A live book is refused while the market is closed. The position and its stop stay. Paper still flattens.",
-  intraday:
-    "Emergency: flatten today's straddles and strangles, abort those jobs, and halt the desk. Chase stays running. A live book is refused while the market is closed. Those positions and their stops stay. The halt still happens.",
-  all: "Emergency: flatten every open book, pause Chase, and halt the desk. Use this only if the hedge should come off too. A live book is refused while the market is closed. Those positions and their stops stay, and Chase stays LONG or SHORT. Pause and halt still happen.",
-} as const
-
-const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
-  const [pendingScope, setPendingScope] = useState<keyof typeof KILL_MESSAGES | null>(null)
-  const [loading, setLoading] = useState(false)
-  const { showMessage, SnackbarAlert } = useSnackbar()
-
-  const runAction = async () => {
-    if (!pendingScope) return
-    setLoading(true)
-    try {
-      if (pendingScope === "flatten") {
-        const result = await fetchJson<FlattenOpenResult>("/api/desk/flatten", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ all: true }),
-        })
-        const notice = flattenOperatorNotice(result, "Open books squared off.")
-        if (notice.severity === "error") showMessage(notice.text, "error")
-      } else {
-        const result = await fetchJson<{ liveLeftOpen?: boolean; scope?: string }>(
-          "/api/kill-desk",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scope: pendingScope }),
-          }
-        )
-        if (result.liveLeftOpen) {
-          showMessage(
-            pendingScope === "all"
-              ? "Market is closed. Live books were left open with their stops. Chase is paused and the desk is halted."
-              : "Market is closed. Live intraday books were left open with their stops. The desk is halted. Chase was not paused.",
-            "error"
-          )
-        }
-      }
-      setPendingScope(null)
-      await onDone()
-    } catch (e) {
-      const err = e as FetchJsonError
-      showMessage(
-        (err.data as { error?: string })?.error || err.message || "Could not complete the action",
-        "error"
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <>
-      {SnackbarAlert}
-      <ConfirmDialog
-        open={Boolean(pendingScope)}
-        title={
-          pendingScope === "flatten"
-            ? "Square off all open books?"
-            : pendingScope === "all"
-              ? "Kill all jobs?"
-              : "Kill intraday jobs?"
-        }
-        message={pendingScope ? KILL_MESSAGES[pendingScope] : ""}
-        confirmColor={pendingScope === "all" ? "error" : "warning"}
-        confirmLabel="Proceed"
-        onConfirm={runAction}
-        onCancel={() => setPendingScope(null)}
-      />
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          flexWrap: "wrap",
-          mt: 2.5,
-          mb: 1.5,
-        }}
-      >
-        <Button
-          color="warning"
-          variant="contained"
-          loading={loading}
-          startIcon={<Stop />}
-          onClick={() => setPendingScope("flatten")}
-        >
-          Square off all open
-        </Button>
-        <Button
-          color="warning"
-          variant="outlined"
-          loading={loading}
-          startIcon={<Stop />}
-          onClick={() => setPendingScope("intraday")}
-        >
-          Kill intraday
-        </Button>
-        <Button
-          color="error"
-          variant="outlined"
-          loading={loading}
-          startIcon={<Stop />}
-          onClick={() => setPendingScope("all")}
-        >
-          Kill all (incl. Chase)
-        </Button>
-      </Box>
-    </>
-  )
-}
-
 const TradesForDay = () => {
   const {
     data: trades,
@@ -407,14 +291,14 @@ const TradesForDay = () => {
             New template
           </Button>
         </Paper>
-        <KillDeskButtons onDone={() => reloadTrades()} />
+        <EmergencyPanel onDone={() => reloadTrades()} />
       </>
     )
   }
 
   return (
     <>
-      <KillDeskButtons onDone={() => reloadTrades()} />
+      <EmergencyPanel onDone={() => reloadTrades()} />
       <Box>
         {trades.map((trade: TradeJob) => (
           <WrapperComponent

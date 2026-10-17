@@ -8,9 +8,9 @@ import {
   Chip,
   IconButton,
   LinearProgress,
-  Skeleton,
   MenuItem,
   Paper,
+  Skeleton,
   Stack,
   Switch,
   Table,
@@ -28,9 +28,9 @@ import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
-import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import ScrollTable from "../components/lib/ScrollTable"
 import { useSnackbar } from "../components/lib/useSnackbar"
+import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import fetchJson from "../lib/fetchJson"
 import useUser from "../lib/useUser"
 
@@ -377,95 +377,97 @@ export default function DailyTrendPage() {
             <Skeleton height={120} />
           </Paper>
         ) : (
-        <Paper sx={{ p: 2 }}>
-          <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-            <Typography variant="body2">Engine on</Typography>
-            <Switch
-              inputProps={{ "aria-label": "Engine on" }}
-              checked={runtime.active}
-              onChange={e => setConfig({ ...runtime, active: e.target.checked })}
-            />
-            <Typography variant="body2">Pull data daily</Typography>
-            <Switch
-              checked={runtime.dataRefresh}
-              onChange={e => setConfig({ ...runtime, dataRefresh: e.target.checked })}
-            />
-            <TextField
-              select
-              size="small"
-              label="Execution"
-              value={runtime.execution}
-              onChange={e =>
-                setConfig({
-                  ...runtime,
-                  execution: e.target.value as Payload["config"]["execution"],
-                })
-              }
-            >
-              <MenuItem value="report">Report only</MenuItem>
-              <MenuItem value="manual">Manual send</MenuItem>
-              <MenuItem value="auto">Auto</MenuItem>
-            </TextField>
-            <Button variant="contained" disabled={busy} onClick={() => void saveRuntime()}>
-              Save
-            </Button>
-            <Button disabled={busy || pull?.running} onClick={() => void pullHistory()}>
-              {pull?.running ? `Pulling ${pull.done} of ${pull.total || "…"}` : "Pull history now"}
-            </Button>
-            <Button disabled={busy || pull?.running} onClick={() => void pullHistory(true)}>
-              Retry missing
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() =>
-                void fetchJson<Payload>("/api/daily-trend", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "evaluate", execute: false }),
-                }).then(result => {
-                  setDecisions(result.decisions ?? [])
-                  showMessage(
-                    "Evaluation finished. No orders were required in report mode.",
-                    "success"
-                  )
-                })
-              }
-            >
-              Evaluate
-            </Button>
-            <Button
-              color="warning"
-              disabled={busy || runtime.execution === "report"}
-              onClick={() => {
-                if (!window.confirm("Send the daily-trend orders this evaluation wants?")) return
-                void fetchJson<Payload>("/api/daily-trend", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "evaluate", execute: true }),
-                }).then(async result => {
-                  setDecisions(result.decisions ?? [])
-                  await mutate()
-                  showMessage("Evaluate-and-send finished", "success")
-                })
-              }}
-            >
-              Evaluate and send
-            </Button>
-          </Stack>
-          {pull && (pull.running || pull.shown) ? (
-            <Box sx={{ mt: 1.5 }}>
-              {pull.running ? (
-                <LinearProgress
-                  variant={pull.total > 0 ? "determinate" : "indeterminate"}
-                  value={pull.total > 0 ? Math.round((100 * pull.done) / pull.total) : 0}
-                />
-              ) : null}
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                {pull.message}
-              </Typography>
-            </Box>
-          ) : null}
-        </Paper>
+          <Paper sx={{ p: 2 }}>
+            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+              <Typography variant="body2">Engine on</Typography>
+              <Switch
+                inputProps={{ "aria-label": "Engine on" }}
+                checked={runtime.active}
+                onChange={e => setConfig({ ...runtime, active: e.target.checked })}
+              />
+              <Typography variant="body2">Pull data daily</Typography>
+              <Switch
+                checked={runtime.dataRefresh}
+                onChange={e => setConfig({ ...runtime, dataRefresh: e.target.checked })}
+              />
+              <TextField
+                select
+                size="small"
+                label="Execution"
+                value={runtime.execution}
+                onChange={e =>
+                  setConfig({
+                    ...runtime,
+                    execution: e.target.value as Payload["config"]["execution"],
+                  })
+                }
+              >
+                <MenuItem value="report">Report only</MenuItem>
+                <MenuItem value="manual">Manual send</MenuItem>
+                <MenuItem value="auto">Auto</MenuItem>
+              </TextField>
+              <Button variant="contained" disabled={busy} onClick={() => void saveRuntime()}>
+                Save
+              </Button>
+              <Button disabled={busy || pull?.running} onClick={() => void pullHistory()}>
+                {pull?.running
+                  ? `Pulling ${pull.done} of ${pull.total || "…"}`
+                  : "Pull history now"}
+              </Button>
+              <Button disabled={busy || pull?.running} onClick={() => void pullHistory(true)}>
+                Retry missing
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void fetchJson<Payload>("/api/daily-trend", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "evaluate", execute: false }),
+                  }).then(result => {
+                    setDecisions(result.decisions ?? [])
+                    showMessage(
+                      "Evaluation finished. No orders were required in report mode.",
+                      "success"
+                    )
+                  })
+                }
+              >
+                Evaluate
+              </Button>
+              <Button
+                color="warning"
+                disabled={busy || runtime.execution === "report"}
+                onClick={() => {
+                  if (!window.confirm("Send the daily-trend orders this evaluation wants?")) return
+                  void fetchJson<Payload>("/api/daily-trend", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "evaluate", execute: true }),
+                  }).then(async result => {
+                    setDecisions(result.decisions ?? [])
+                    await mutate()
+                    showMessage("Evaluate-and-send finished", "success")
+                  })
+                }}
+              >
+                Evaluate and send
+              </Button>
+            </Stack>
+            {pull && (pull.running || pull.shown) ? (
+              <Box sx={{ mt: 1.5 }}>
+                {pull.running ? (
+                  <LinearProgress
+                    variant={pull.total > 0 ? "determinate" : "indeterminate"}
+                    value={pull.total > 0 ? Math.round((100 * pull.done) / pull.total) : 0}
+                  />
+                ) : null}
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {pull.message}
+                </Typography>
+              </Box>
+            ) : null}
+          </Paper>
         )}
         <Paper sx={{ p: 2 }}>
           <Typography variant="subtitle2" gutterBottom>

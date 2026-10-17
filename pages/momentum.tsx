@@ -7,9 +7,9 @@ import {
   Button,
   Chip,
   LinearProgress,
-  Skeleton,
   MenuItem,
   Paper,
+  Skeleton,
   Stack,
   Switch,
   Table,
@@ -27,9 +27,9 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
-import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import ScrollTable from "../components/lib/ScrollTable"
 import { useSnackbar } from "../components/lib/useSnackbar"
+import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import fetchJson from "../lib/fetchJson"
 import { DEFAULT_MOMENTUM_CONFIG, type MomentumConfig } from "../lib/momentum/types"
 import useUser from "../lib/useUser"
@@ -345,345 +345,349 @@ export default function MomentumPage() {
             <Skeleton height={200} />
           </Paper>
         ) : (
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
-            Run
-          </Typography>
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-              gap: 2,
-              alignItems: "center",
-            }}
-          >
-            <SwitchField
-              label="Engine on"
-              checked={config.active}
-              onChange={active => patch({ active })}
-            />
-            <SwitchField
-              label="Pull data daily"
-              checked={config.dataRefresh}
-              onChange={dataRefresh => patch({ dataRefresh })}
-            />
-            <TextField
-              select
-              fullWidth
-              size="small"
-              label="Execution"
-              value={config.execution}
-              onChange={e => patch({ execution: e.target.value as MomentumConfig["execution"] })}
-            >
-              <MenuItem value="report">Report only</MenuItem>
-              <MenuItem value="manual">Manual send</MenuItem>
-              <MenuItem value="auto">Auto on rebalance day</MenuItem>
-            </TextField>
-            <TextField
-              select
-              fullWidth
-              size="small"
-              label="Rebalance"
-              value={config.rebalance}
-              helperText={
-                config.rebalance === "adhoc"
-                  ? "Never sends on a schedule. The order list is the buy and sell diff."
-                  : config.rebalance === "monthly"
-                    ? "First NSE session of the month. Weekday is only for weekly."
-                    : "Sends on the weekday below."
-              }
-              onChange={e => patch({ rebalance: e.target.value as MomentumConfig["rebalance"] })}
-            >
-              <MenuItem value="monthly">Monthly</MenuItem>
-              <MenuItem value="weekly">Weekly</MenuItem>
-              <MenuItem value="adhoc">Ad hoc</MenuItem>
-            </TextField>
-            {config.rebalance === "weekly" ? (
-              <Num
-                label="Weekday (1–5)"
-                value={config.weeklyDay}
-                onChange={weeklyDay => patch({ weeklyDay })}
-              />
-            ) : null}
-            <Num
-              label="Holdings"
-              value={config.holdingsCount}
-              onChange={holdingsCount => patch({ holdingsCount })}
-            />
-            <Num
-              label="Worst rank held"
-              value={config.worstRankHeld}
-              onChange={worstRankHeld => patch({ worstRankHeld })}
-            />
-            <Num
-              label="Entry rank max"
-              value={config.entryRankMax}
-              onChange={entryRankMax => patch({ entryRankMax })}
-            />
-            <TextField
-              select
-              fullWidth
-              size="small"
-              label="Rank"
-              value={config.ranking}
-              onChange={e => patch({ ranking: e.target.value as MomentumConfig["ranking"] })}
-            >
-              <MenuItem value="SHARPE_12M">12-month Sharpe</MenuItem>
-              <MenuItem value="RETURN_12M">12-month return</MenuItem>
-              <MenuItem value="RETURN_12_1">12-month return, skip last month</MenuItem>
-            </TextField>
-            <TextField
-              select
-              fullWidth
-              size="small"
-              label="Weights"
-              value={config.weighting}
-              helperText={
-                config.weighting === "drift"
-                  ? "Held shares stay put. A name is sold when it leaves the book, or when it grows past the trim level. New rupees buy only names you do not hold yet."
-                  : "Each rebalance resizes every name to the same slice of capital."
-              }
-              onChange={e => patch({ weighting: e.target.value as MomentumConfig["weighting"] })}
-            >
-              <MenuItem value="equal">Equal weight each rebalance</MenuItem>
-              <MenuItem value="drift">Let winners run</MenuItem>
-            </TextField>
-            <Num
-              label="Max weight %"
-              value={config.maxWeightPct}
-              helperText={
-                config.weighting === "drift"
-                  ? "Caps a new name. It does not trim a share you already hold."
-                  : undefined
-              }
-              onChange={maxWeightPct => patch({ maxWeightPct })}
-            />
-            {config.weighting === "drift" ? (
-              <>
-                <Num
-                  label="Trim above % of book"
-                  value={config.trimAbovePct}
-                  onChange={trimAbovePct => patch({ trimAbovePct })}
-                />
-                <Num
-                  label="Trim down to %"
-                  value={config.trimToPct}
-                  helperText="New capital buys a new name up to one equal slice. It is not added to shares you already hold. Leftover rupees wait for the next new name."
-                  onChange={trimToPct => patch({ trimToPct })}
-                />
-              </>
-            ) : null}
-            <Num
-              label="Capital INR"
-              value={config.capitalInr}
-              helperText="Rupees for the whole book. 0 shows weights and buys nothing."
-              onChange={capitalInr => patch({ capitalInr })}
-            />
-          </Box>
-          <Accordion disableGutters elevation={0} sx={{ mt: 1, bgcolor: "transparent" }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="subtitle2">Filters</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                  gap: 2,
-                }}
-              >
-                <Num
-                  label="12-month multiple cap"
-                  value={config.filters.maxPriceMultiple12m}
-                  onChange={maxPriceMultiple12m =>
-                    patch({ filters: { ...config.filters, maxPriceMultiple12m } })
-                  }
-                />
-                <Num
-                  label="24-month multiple cap"
-                  value={config.filters.maxPriceMultiple24m}
-                  onChange={maxPriceMultiple24m =>
-                    patch({ filters: { ...config.filters, maxPriceMultiple24m } })
-                  }
-                />
-                <Num
-                  label="Max % below high"
-                  value={config.filters.maxPctBelowHigh}
-                  onChange={maxPctBelowHigh =>
-                    patch({ filters: { ...config.filters, maxPctBelowHigh } })
-                  }
-                />
-                <Num
-                  label="Min turnover INR"
-                  value={config.filters.minAvgTurnoverInr}
-                  helperText="Mean of close × volume over the last 21 sessions, after a history pull."
-                  onChange={minAvgTurnoverInr =>
-                    patch({ filters: { ...config.filters, minAvgTurnoverInr } })
-                  }
-                />
-                <Num
-                  label="SMA days"
-                  value={config.filters.smaPeriod}
-                  onChange={smaPeriod => patch({ filters: { ...config.filters, smaPeriod } })}
-                />
-                <Num
-                  label="1-month / 12-month cap"
-                  value={config.filters.maxOneMonthShare}
-                  onChange={maxOneMonthShare =>
-                    patch({ filters: { ...config.filters, maxOneMonthShare } })
-                  }
-                />
-                <TextField
-                  select
-                  fullWidth
-                  size="small"
-                  label="Market cap"
-                  helperText="Off ignores it. Strict drops a name with no stored market cap, or below the minimum. The daily refresh covers the daily-trend book, not all 750."
-                  value={config.filters.marketCapFilter}
-                  onChange={e =>
-                    patch({
-                      filters: {
-                        ...config.filters,
-                        marketCapFilter: e.target.value as "off" | "strict",
-                      },
-                    })
-                  }
-                >
-                  <MenuItem value="off">Off</MenuItem>
-                  <MenuItem value="strict">Strict</MenuItem>
-                </TextField>
-              </Box>
-            </AccordionDetails>
-          </Accordion>
-          <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-            <Button variant="contained" disabled={busy} onClick={() => void save()}>
-              Save
-            </Button>
-            <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory()}>
-              {pullWatch?.running
-                ? `Pulling ${pullWatch.done} of ${pullWatch.total || "…"}`
-                : "Pull history now"}
-            </Button>
-            <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory(true)}>
-              Retry missing
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() =>
-                void post({ action: "rebalance", execute: false }, "Preview refreshed")
-              }
-            >
-              Preview orders
-            </Button>
-            <Button
-              color="warning"
-              disabled={busy || config.execution === "report"}
-              onClick={() => {
-                if (window.confirm("Send the current rebalance orders?")) {
-                  void post({ action: "rebalance", execute: true }, "Rebalance sent")
-                }
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
+              Run
+            </Typography>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                gap: 2,
+                alignItems: "center",
               }}
             >
-              Send rebalance
-            </Button>
-          </Stack>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
-            Save writes the switches. Pull history saves them and starts the download. Preview lists
-            orders and sends nothing. Send needs Manual or Auto.
-          </Typography>
-          {config.weighting === "drift" ? (
-            <Accordion sx={{ mt: 2 }}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle2">Drift cash</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-                  <Button
-                    disabled={busy || data?.config.weighting !== "drift"}
-                    onClick={() =>
-                      void post({ action: "deploy", execute: false }, "Deploy preview refreshed")
-                    }
-                  >
-                    Preview deploy
-                  </Button>
-                  <Button
-                    color="warning"
-                    disabled={
-                      busy || data?.config.weighting !== "drift" || config.execution === "report"
-                    }
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Buy an equal share of the spare cash for each name in today's book?"
-                        )
-                      ) {
-                        void post({ action: "deploy", execute: true }, "Deploy sent")
-                      }
-                    }}
-                  >
-                    Deploy spare cash
-                  </Button>
-                  <Num
-                    label="Trim book %"
-                    value={trimPct}
-                    onChange={value => setTrimPct(Math.min(99, Math.max(1, Math.round(value))))}
-                  />
-                  <Button
-                    disabled={busy || data?.config.weighting !== "drift"}
-                    onClick={() =>
-                      void post(
-                        { action: "trim", execute: false, trimPct },
-                        "Trim preview refreshed"
-                      )
-                    }
-                  >
-                    Preview trim
-                  </Button>
-                  <Button
-                    color="warning"
-                    disabled={
-                      busy || data?.config.weighting !== "drift" || config.execution === "report"
-                    }
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Sell ${trimPct}% of each open momentum position and reduce Capital INR by the same percent?`
-                        )
-                      ) {
-                        void post({ action: "trim", execute: true, trimPct }, "Trim sent")
-                      }
-                    }}
-                  >
-                    Trim book
-                  </Button>
-                </Stack>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 1, display: "block" }}
-                >
-                  Deploy and trim run only when weights are Let winners run. They recompute their
-                  own orders and do not replace the stored rank.
-                </Typography>
-              </AccordionDetails>
-            </Accordion>
-          ) : null}
-          {pullWatch?.running || pullWatch?.shown ? (
-            <Box sx={{ mt: 1.5 }}>
-              {pullWatch.running ? (
-                <LinearProgress
-                  variant={pullWatch.total > 0 ? "determinate" : "indeterminate"}
-                  value={
-                    pullWatch.total > 0 ? Math.round((100 * pullWatch.done) / pullWatch.total) : 0
-                  }
+              <SwitchField
+                label="Engine on"
+                checked={config.active}
+                onChange={active => patch({ active })}
+              />
+              <SwitchField
+                label="Pull data daily"
+                checked={config.dataRefresh}
+                onChange={dataRefresh => patch({ dataRefresh })}
+              />
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Execution"
+                value={config.execution}
+                onChange={e => patch({ execution: e.target.value as MomentumConfig["execution"] })}
+              >
+                <MenuItem value="report">Report only</MenuItem>
+                <MenuItem value="manual">Manual send</MenuItem>
+                <MenuItem value="auto">Auto on rebalance day</MenuItem>
+              </TextField>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Rebalance"
+                value={config.rebalance}
+                helperText={
+                  config.rebalance === "adhoc"
+                    ? "Never sends on a schedule. The order list is the buy and sell diff."
+                    : config.rebalance === "monthly"
+                      ? "First NSE session of the month. Weekday is only for weekly."
+                      : "Sends on the weekday below."
+                }
+                onChange={e => patch({ rebalance: e.target.value as MomentumConfig["rebalance"] })}
+              >
+                <MenuItem value="monthly">Monthly</MenuItem>
+                <MenuItem value="weekly">Weekly</MenuItem>
+                <MenuItem value="adhoc">Ad hoc</MenuItem>
+              </TextField>
+              {config.rebalance === "weekly" ? (
+                <Num
+                  label="Weekday (1–5)"
+                  value={config.weeklyDay}
+                  onChange={weeklyDay => patch({ weeklyDay })}
                 />
               ) : null}
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                {pullWatch.message}
-              </Typography>
+              <Num
+                label="Holdings"
+                value={config.holdingsCount}
+                onChange={holdingsCount => patch({ holdingsCount })}
+              />
+              <Num
+                label="Worst rank held"
+                value={config.worstRankHeld}
+                onChange={worstRankHeld => patch({ worstRankHeld })}
+              />
+              <Num
+                label="Entry rank max"
+                value={config.entryRankMax}
+                onChange={entryRankMax => patch({ entryRankMax })}
+              />
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Rank"
+                value={config.ranking}
+                onChange={e => patch({ ranking: e.target.value as MomentumConfig["ranking"] })}
+              >
+                <MenuItem value="SHARPE_12M">12-month Sharpe</MenuItem>
+                <MenuItem value="RETURN_12M">12-month return</MenuItem>
+                <MenuItem value="RETURN_12_1">12-month return, skip last month</MenuItem>
+              </TextField>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Weights"
+                value={config.weighting}
+                helperText={
+                  config.weighting === "drift"
+                    ? "Held shares stay put. A name is sold when it leaves the book, or when it grows past the trim level. New rupees buy only names you do not hold yet."
+                    : "Each rebalance resizes every name to the same slice of capital."
+                }
+                onChange={e => patch({ weighting: e.target.value as MomentumConfig["weighting"] })}
+              >
+                <MenuItem value="equal">Equal weight each rebalance</MenuItem>
+                <MenuItem value="drift">Let winners run</MenuItem>
+              </TextField>
+              <Num
+                label="Max weight %"
+                value={config.maxWeightPct}
+                helperText={
+                  config.weighting === "drift"
+                    ? "Caps a new name. It does not trim a share you already hold."
+                    : undefined
+                }
+                onChange={maxWeightPct => patch({ maxWeightPct })}
+              />
+              {config.weighting === "drift" ? (
+                <>
+                  <Num
+                    label="Trim above % of book"
+                    value={config.trimAbovePct}
+                    onChange={trimAbovePct => patch({ trimAbovePct })}
+                  />
+                  <Num
+                    label="Trim down to %"
+                    value={config.trimToPct}
+                    helperText="New capital buys a new name up to one equal slice. It is not added to shares you already hold. Leftover rupees wait for the next new name."
+                    onChange={trimToPct => patch({ trimToPct })}
+                  />
+                </>
+              ) : null}
+              <Num
+                label="Capital INR"
+                value={config.capitalInr}
+                helperText="Rupees for the whole book. 0 shows weights and buys nothing."
+                onChange={capitalInr => patch({ capitalInr })}
+              />
             </Box>
-          ) : null}
-        </Paper>
+            <Accordion disableGutters elevation={0} sx={{ mt: 1, bgcolor: "transparent" }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle2">Filters</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                    gap: 2,
+                  }}
+                >
+                  <Num
+                    label="12-month multiple cap"
+                    value={config.filters.maxPriceMultiple12m}
+                    onChange={maxPriceMultiple12m =>
+                      patch({ filters: { ...config.filters, maxPriceMultiple12m } })
+                    }
+                  />
+                  <Num
+                    label="24-month multiple cap"
+                    value={config.filters.maxPriceMultiple24m}
+                    onChange={maxPriceMultiple24m =>
+                      patch({ filters: { ...config.filters, maxPriceMultiple24m } })
+                    }
+                  />
+                  <Num
+                    label="Max % below high"
+                    value={config.filters.maxPctBelowHigh}
+                    onChange={maxPctBelowHigh =>
+                      patch({ filters: { ...config.filters, maxPctBelowHigh } })
+                    }
+                  />
+                  <Num
+                    label="Min turnover INR"
+                    value={config.filters.minAvgTurnoverInr}
+                    helperText="Mean of close × volume over the last 21 sessions, after a history pull."
+                    onChange={minAvgTurnoverInr =>
+                      patch({ filters: { ...config.filters, minAvgTurnoverInr } })
+                    }
+                  />
+                  <Num
+                    label="SMA days"
+                    value={config.filters.smaPeriod}
+                    onChange={smaPeriod => patch({ filters: { ...config.filters, smaPeriod } })}
+                  />
+                  <Num
+                    label="1-month / 12-month cap"
+                    value={config.filters.maxOneMonthShare}
+                    onChange={maxOneMonthShare =>
+                      patch({ filters: { ...config.filters, maxOneMonthShare } })
+                    }
+                  />
+                  <TextField
+                    select
+                    fullWidth
+                    size="small"
+                    label="Market cap"
+                    helperText="Off ignores it. Strict drops a name with no stored market cap, or below the minimum. The daily refresh covers the daily-trend book, not all 750."
+                    value={config.filters.marketCapFilter}
+                    onChange={e =>
+                      patch({
+                        filters: {
+                          ...config.filters,
+                          marketCapFilter: e.target.value as "off" | "strict",
+                        },
+                      })
+                    }
+                  >
+                    <MenuItem value="off">Off</MenuItem>
+                    <MenuItem value="strict">Strict</MenuItem>
+                  </TextField>
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+            <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
+              <Button variant="contained" disabled={busy} onClick={() => void save()}>
+                Save
+              </Button>
+              <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory()}>
+                {pullWatch?.running
+                  ? `Pulling ${pullWatch.done} of ${pullWatch.total || "…"}`
+                  : "Pull history now"}
+              </Button>
+              <Button disabled={busy || pullWatch?.running} onClick={() => void pullHistory(true)}>
+                Retry missing
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void post({ action: "rebalance", execute: false }, "Preview refreshed")
+                }
+              >
+                Preview orders
+              </Button>
+              <Button
+                color="warning"
+                disabled={busy || config.execution === "report"}
+                onClick={() => {
+                  if (window.confirm("Send the current rebalance orders?")) {
+                    void post({ action: "rebalance", execute: true }, "Rebalance sent")
+                  }
+                }}
+              >
+                Send rebalance
+              </Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+              Save writes the switches. Pull history saves them and starts the download. Preview
+              lists orders and sends nothing. Send needs Manual or Auto.
+            </Typography>
+            {config.weighting === "drift" ? (
+              <Accordion sx={{ mt: 2 }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="subtitle2">Drift cash</Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ flexWrap: "wrap", alignItems: "center" }}
+                  >
+                    <Button
+                      disabled={busy || data?.config.weighting !== "drift"}
+                      onClick={() =>
+                        void post({ action: "deploy", execute: false }, "Deploy preview refreshed")
+                      }
+                    >
+                      Preview deploy
+                    </Button>
+                    <Button
+                      color="warning"
+                      disabled={
+                        busy || data?.config.weighting !== "drift" || config.execution === "report"
+                      }
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "Buy an equal share of the spare cash for each name in today's book?"
+                          )
+                        ) {
+                          void post({ action: "deploy", execute: true }, "Deploy sent")
+                        }
+                      }}
+                    >
+                      Deploy spare cash
+                    </Button>
+                    <Num
+                      label="Trim book %"
+                      value={trimPct}
+                      onChange={value => setTrimPct(Math.min(99, Math.max(1, Math.round(value))))}
+                    />
+                    <Button
+                      disabled={busy || data?.config.weighting !== "drift"}
+                      onClick={() =>
+                        void post(
+                          { action: "trim", execute: false, trimPct },
+                          "Trim preview refreshed"
+                        )
+                      }
+                    >
+                      Preview trim
+                    </Button>
+                    <Button
+                      color="warning"
+                      disabled={
+                        busy || data?.config.weighting !== "drift" || config.execution === "report"
+                      }
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Sell ${trimPct}% of each open momentum position and reduce Capital INR by the same percent?`
+                          )
+                        ) {
+                          void post({ action: "trim", execute: true, trimPct }, "Trim sent")
+                        }
+                      }}
+                    >
+                      Trim book
+                    </Button>
+                  </Stack>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 1, display: "block" }}
+                  >
+                    Deploy and trim run only when weights are Let winners run. They recompute their
+                    own orders and do not replace the stored rank.
+                  </Typography>
+                </AccordionDetails>
+              </Accordion>
+            ) : null}
+            {pullWatch?.running || pullWatch?.shown ? (
+              <Box sx={{ mt: 1.5 }}>
+                {pullWatch.running ? (
+                  <LinearProgress
+                    variant={pullWatch.total > 0 ? "determinate" : "indeterminate"}
+                    value={
+                      pullWatch.total > 0 ? Math.round((100 * pullWatch.done) / pullWatch.total) : 0
+                    }
+                  />
+                ) : null}
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {pullWatch.message}
+                </Typography>
+              </Box>
+            ) : null}
+          </Paper>
         )}
         <Stack
           direction={{ xs: "column", sm: "row" }}
