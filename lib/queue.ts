@@ -5,6 +5,7 @@ import IORedis from "ioredis"
 
 import logger from "./logger"
 import { followUpJobId, isDuplicateJobError } from "./trading/brokerPlace"
+import { chaseSchedulerEndStillOpen } from "./trading/scheduleGuard"
 import {
   getBackoffStrategy,
   getEntryAttemptsCount,
@@ -203,36 +204,46 @@ export const CHASE_UPDATE_SL_SCHEDULER_ID = "chase-updateSL"
 
 export async function addToChaseQueue(user: any) {
   const today = dayjs().format("YYYY-MM-DD")
+  const emaEnd = new Date(`${today}T16:15:00+05:30`)
+  const slEnd = new Date(`${today}T15:30:00+05:30`)
   try {
-    await chaseQueue.upsertJobScheduler(
-      CHASE_EMA_SCHEDULER_ID,
-      {
-        pattern: "15 10-16 * * *",
-        startDate: new Date(`${today}T10:14:00+05:30`),
-        endDate: new Date(`${today}T16:15:00+05:30`),
-        tz: "Asia/Kolkata",
-      },
-      {
-        name: "calculateEMA",
-        data: { user },
-      }
-    )
+    if (chaseSchedulerEndStillOpen(emaEnd)) {
+      await chaseQueue.upsertJobScheduler(
+        CHASE_EMA_SCHEDULER_ID,
+        {
+          pattern: "15 10-16 * * *",
+          startDate: new Date(`${today}T10:14:00+05:30`),
+          endDate: emaEnd,
+          tz: "Asia/Kolkata",
+        },
+        {
+          name: "calculateEMA",
+          data: { user },
+        }
+      )
+    } else {
+      logger.info("[queue] Chase EMA schedule is past today's end. Left unchanged.")
+    }
 
-    await chaseQueue.upsertJobScheduler(
-      CHASE_UPDATE_SL_SCHEDULER_ID,
-      {
-        pattern: "0 * 9-15 * * *",
-        startDate: new Date(`${today}T09:15:59+05:30`),
-        endDate: new Date(`${today}T15:30:00+05:30`),
-        tz: "Asia/Kolkata",
-      },
-      {
-        name: "updateSL",
-        data: { user },
-      }
-    )
+    if (chaseSchedulerEndStillOpen(slEnd)) {
+      await chaseQueue.upsertJobScheduler(
+        CHASE_UPDATE_SL_SCHEDULER_ID,
+        {
+          pattern: "0 * 9-15 * * *",
+          startDate: new Date(`${today}T09:15:59+05:30`),
+          endDate: slEnd,
+          tz: "Asia/Kolkata",
+        },
+        {
+          name: "updateSL",
+          data: { user },
+        }
+      )
+    } else {
+      logger.info("[queue] Chase stop schedule is past today's end. Left unchanged.")
+    }
 
-    return true
+    return chaseSchedulerEndStillOpen(emaEnd) || chaseSchedulerEndStillOpen(slEnd)
   } catch (e) {
     logger.error("[queue] addToChaseQueue error", e)
     throw e

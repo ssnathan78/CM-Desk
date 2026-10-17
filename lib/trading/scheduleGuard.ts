@@ -1,3 +1,8 @@
+/** BullMQ rejects a scheduler whose end is already in the past. After the session, leave it. */
+export function chaseSchedulerEndStillOpen(end: Date, now = new Date()): boolean {
+  return end.getTime() > now.getTime()
+}
+
 /** Statuses that mean this template already has a live or finished run today. */
 const BLOCKING = new Set(["PENDING", "QUEUE", "EXECUTING", "COMPLETED", "SQUARED_OFF"])
 

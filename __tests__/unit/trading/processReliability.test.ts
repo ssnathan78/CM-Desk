@@ -10,7 +10,11 @@ import {
   OrderAckUnknownError,
   workingEntryCount,
 } from "../../../lib/trading/brokerPlace"
-import { jobNeedsReconcile, templateBlockedByJob } from "../../../lib/trading/scheduleGuard"
+import {
+  chaseSchedulerEndStillOpen,
+  jobNeedsReconcile,
+  templateBlockedByJob,
+} from "../../../lib/trading/scheduleGuard"
 import dayjs from "dayjs"
 
 describe("broker place decisions", () => {
@@ -175,6 +179,10 @@ describe("entry schedule and follow-up identity", () => {
     expect(templateBlockedByJob("PENDING")).toBe(true)
     expect(templateBlockedByJob("FAILED")).toBe(false)
     expect(templateBlockedByJob("REJECT")).toBe(false)
+    const end = new Date("2026-10-17T15:30:00+05:30")
+    expect(chaseSchedulerEndStillOpen(end, new Date("2026-10-17T15:29:00+05:30"))).toBe(true)
+    expect(chaseSchedulerEndStillOpen(end, new Date("2026-10-17T15:30:00+05:30"))).toBe(false)
+    expect(chaseSchedulerEndStillOpen(end, new Date("2026-10-17T23:40:00+05:30"))).toBe(false)
   })
 
   it("fails a stuck pending row and leaves a young queue row alone", () => {
