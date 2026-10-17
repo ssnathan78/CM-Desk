@@ -253,7 +253,7 @@ export function signedQty(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** Live MTM. Qty 0 (flatten, expiry, recon flat) is always 0 — never keep the last open mark. */
+/** Live MTM. Qty 0 (flatten, expiry, recon flat) is always 0 — never keep stale unrealised P&L. */
 export function positionMarkSnapshot(args: {
   quantity: number
   averagePrice: Money

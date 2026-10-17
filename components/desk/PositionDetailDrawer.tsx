@@ -57,7 +57,7 @@ export default function PositionDetailDrawer({
           Mark: <Figure kind="price" value={row.markPrice} />
         </Typography>
         <Typography variant="body2">
-          Unrealized: <Figure kind="inr" value={flat ? "0" : row.unrealizedPnl} pnl />
+          Unrealised P&L: <Figure kind="inr" value={flat ? "0" : row.unrealizedPnl} pnl />
         </Typography>
         <Typography variant="body2">
           Realized (lifetime): <Figure kind="inr" value={row.realizedPnl} pnl />

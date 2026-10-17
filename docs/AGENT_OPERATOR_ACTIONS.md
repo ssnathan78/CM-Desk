@@ -31,7 +31,7 @@ The API phrases for square-off, Kill, Allow live orders, and reconcile accept li
 - A Chase square-off without `instrument` resets the signal on every flat Chase book. A per-book square-off resets only that book.
 - `planChaseSignalReset` runs before any status write. Unknown quantity is a refuse, not a flat book.
 - The header checkbox on Daily trend selects the page on screen. **Turn selected off** uses every checked symbol, including other pages.
-- Strategy board **Closed today** is round-trips finished today. **Open mark** is open quantity versus entry, including earlier days on an overnight book. **Realized lifetime** is stored on the position rows. Kite day P&L is none of these. Chase rows show the strategy-wide closed and realized figures only on the first Chase row.
+- Strategy board **Closed today** is round-trips finished today. **Unrealised P&L** is open quantity versus entry, including earlier days on an overnight book. **Realized lifetime** is stored on the position rows. Kite day P&L is none of these. Chase rows show the strategy-wide closed and realized figures only on the first Chase row.
 - The board **Switch** column is not one field. Intraday is straddle and strangle enabled. Chase is that book's on/off. Momentum and Daily trend cells that say **Desk on** are Desk → Risk, not the page Engine.
 
 ## Guard rails
@@ -43,7 +43,7 @@ These already caused a wrong flatten, a wrong save, or a missed reject.
 3. Symbol off and Remove from the daily-trend list do not sell and do not run the stop. The confirm has to say both.
 4. Kill and square-off copy comes from `killDialogNotice` and `flattenOperatorNotice`. Do not invent a second success string in the component.
 5. Due today must not be labeled Schedule. The button and the confirm say run now or queue, from `dueSchedulePresentation`.
-6. Do not render today's closed P&L, open mark, and lifetime realized in the same colour under the same short name.
+6. Do not render today's closed P&L, unrealised P&L, and lifetime realized in the same colour under the same short name.
 
 ## How to implement a new control
 

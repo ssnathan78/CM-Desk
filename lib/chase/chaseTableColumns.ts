@@ -28,7 +28,7 @@ export const CHASE_BOOK_COLUMNS: ColumnDef<ChaseTableColumnId>[] = [
   { id: "qty", label: "Qty" },
   { id: "avg", label: "Avg (₹)" },
   { id: "mark", label: "Mark (₹)" },
-  { id: "openMark", label: "Open mark (₹)" },
+  { id: "openMark", label: "Unrealised P&L (₹)" },
   { id: "contract", label: "Contract" },
   { id: "engine", label: "Engine" },
   { id: "pause", label: "New entries" },

@@ -91,7 +91,7 @@ export function positionColumns(
       cell: ({ row }) => <Figure kind="price" value={row.original.markPrice} />,
     },
     {
-      header: "Unrealized (₹)",
+      header: "Unrealised P&L (₹)",
       meta: { align: "right" },
       cell: ({ row }) => {
         const flat = Number(row.original.quantity) === 0

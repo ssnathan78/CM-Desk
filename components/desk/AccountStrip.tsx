@@ -20,7 +20,7 @@ export default function AccountStrip({ portfolio }: { portfolio?: Portfolio | nu
     ["Gross exposure", formatInr(portfolio?.grossExposure)],
     ["Drawdown", formatInr(portfolio?.drawdown)],
     ["Realized lifetime", portfolio?.realizedPnl],
-    ["Open mark", portfolio?.unrealizedPnl],
+    ["Unrealised P&L", portfolio?.unrealizedPnl],
   ] as const
 
   return (
@@ -46,7 +46,7 @@ export default function AccountStrip({ portfolio }: { portfolio?: Portfolio | nu
               <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                 {label}
               </Typography>
-              {label === "Realized lifetime" || label === "Open mark" ? (
+              {label === "Realized lifetime" || label === "Unrealised P&L" ? (
                 <Figure kind="inr" value={value as string} pnl align="left" />
               ) : (
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>

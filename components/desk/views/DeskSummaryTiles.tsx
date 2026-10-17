@@ -55,7 +55,7 @@ export default function DeskSummaryTiles({
         type="button"
         onClick={() => onNavigate("books", "sessions")}
         title="Closed is round-trips finished today. Mark is from the entry price, so an overnight Chase book includes earlier days."
-        aria-label="Today by strategy. The number in parentheses is open books. Closed is round-trips finished today. Open mark is from the entry price."
+        aria-label="Today by strategy. The number in parentheses is open books. Closed is round-trips finished today. Unrealised P&L is from the entry price."
         sx={deskTileSx}
       >
         <Box
@@ -73,7 +73,7 @@ export default function DeskSummaryTiles({
             Closed today
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Open mark
+            Unrealised P&L
           </Typography>
           {todayRows.map(row => (
             <Box key={row.id} sx={{ display: "contents" }}>
@@ -114,7 +114,7 @@ export default function DeskSummaryTiles({
         type="button"
         onClick={() => onNavigate("books", "positions")}
         title="Margin + open MTM is Kite available margin plus desk unrealized (average cost versus mark). It is not Kite equity and not Sessions net. Realized lifetime is stored on the position rows, not today's closed round-trips. Drawdown is the peak of that margin-plus-MTM figure minus the current one."
-        aria-label={`Cash ${formatInr(p?.availableCash)}. Realized lifetime ${formatInr(p?.realizedPnl)}. Open mark ${formatInr(p?.unrealizedPnl)}. Margin plus open mark ${formatInr(p?.portfolioValue)}. Gross exposure ${formatInr(p?.grossExposure)}. Drawdown ${formatInr(p?.drawdown)}.`}
+        aria-label={`Cash ${formatInr(p?.availableCash)}. Realized lifetime ${formatInr(p?.realizedPnl)}. Unrealised P&L ${formatInr(p?.unrealizedPnl)}. Margin plus unrealised P&L ${formatInr(p?.portfolioValue)}. Gross exposure ${formatInr(p?.grossExposure)}. Drawdown ${formatInr(p?.drawdown)}.`}
         sx={{
           ...deskTileSx,
           display: "grid",
@@ -129,7 +129,7 @@ export default function DeskSummaryTiles({
             ["Margin + open MTM", formatInr(p?.portfolioValue)],
             ["Realized lifetime", formatInr(p?.realizedPnl)],
             ["Gross exposure", formatInr(p?.grossExposure)],
-            ["Open mark", formatInr(p?.unrealizedPnl)],
+            ["Unrealised P&L", formatInr(p?.unrealizedPnl)],
             ["Drawdown", formatInr(p?.drawdown)],
           ] as const
         ).map(([label, value]) => (

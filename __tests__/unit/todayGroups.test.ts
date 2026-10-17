@@ -1,7 +1,7 @@
 import { groupStrategyRealized, groupTodayBooks } from "../../lib/trading/todayGroups"
 
 describe("today strategy groups", () => {
-  it("keeps closed today separate from the open mark", () => {
+  it("keeps closed today separate from unrealised P&L", () => {
     const rows = groupTodayBooks({
       closed: [
         { strategy: "ATM_STRADDLE", netPnl: "100" },

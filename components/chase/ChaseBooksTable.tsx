@@ -295,7 +295,7 @@ const HEADER_LABELS: Record<ChaseTableColumnId, string> = {
   qty: "Qty",
   avg: "Avg (₹)",
   mark: "Mark (₹)",
-  openMark: "Open mark (₹)",
+  openMark: "Unrealised P&L (₹)",
   contract: "Contract",
   engine: "Engine",
   pause: "New entries",

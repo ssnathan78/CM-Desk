@@ -14,5 +14,5 @@ Read [docs/AGENT_OPERATOR_ACTIONS.md](../../docs/AGENT_OPERATOR_ACTIONS.md) befo
 - Daily trend symbol off and Remove from the list do not sell and do not run the stop. Pause still allows the stop.
 - Chase reset is all-or-nothing (`planChaseSignalReset`). Unknown quantity changes nothing.
 - Kill reports `deskHalted`, `chasePaused`, and `flattenFailed` from what actually happened (`killDialogNotice`).
-- Closed today, open mark, and realized lifetime are different measures. Do not give them the same short name. Chase strategy totals are shown once, not on every book row.
+- Closed today, unrealised P&L, and realized lifetime are different measures. Do not give them the same short name. Chase strategy totals are shown once, not on every book row.
 - A new control needs a hermetic test that fails if the old label or the old scope returns. `yarn unit-test`.

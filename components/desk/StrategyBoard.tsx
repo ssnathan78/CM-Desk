@@ -193,7 +193,7 @@ export default function StrategyBoard({
               <TableCell>Desk</TableCell>
               <TableCell>Mode</TableCell>
               <TableCell align="right">Open / Qty</TableCell>
-              <TableCell align="right">Open mark (₹)</TableCell>
+              <TableCell align="right">Unrealised P&L (₹)</TableCell>
               <TableCell align="right">Closed today (₹)</TableCell>
               <TableCell
                 align="right"
