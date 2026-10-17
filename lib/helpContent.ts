@@ -320,6 +320,15 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         ],
       },
       {
+        id: "drift-cash",
+        title: "Drift cash (let winners run)",
+        body: [
+          "When Weights is Let winners run, spare rupees do not automatically buy more of your winners. Deploy spare cash splits that spare cash across today's book in equal rupee slices. Each buy stops at Max weight % and at the trim-down level. It does not run on the hourly pass and does not replace the ranked rebalance list.",
+          "Trim book sells the same percent of every open line (you set Trim book % on the page). Weights stay proportional; Capital INR drops by that fraction. Preview deploy and Preview trim refresh the planned-order list on Universe & orders without sending.",
+          "Both actions need Manual or Auto execution. Report only keeps them disabled. See Guide → Cash momentum → Drift cash for the full story.",
+        ],
+      },
+      {
         id: "buttons",
         title: "Buttons",
         body: [
@@ -336,7 +345,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "All names shows the ranked list. Pass the filters shows names that clear the gates. In the order diff shows the target book plus any name that is only being sold. That view can be one larger than Holdings. The extra row is a name leaving so the book can come back to the cap. It is not an extra holding.",
           "Export this view downloads the rows you are looking at. Sorting a column does not need Save.",
-          "Opening the page shows the stored rank, 50 names at a time. It is rebuilt when the date rolls, after Save, after a lock or holding change, when you press Preview, and on the hourly pass. The planned-order count and the as-of time are one line above the table. Send always rebuilds before an order is placed.",
+          "Opening the page shows the stored rank, with page size 10–100 or All. It is rebuilt when the date rolls, after Save, after a lock or holding change, when you press Preview, and on the hourly pass. Planned orders sit in a collapsible panel between the filters and the table (summary chips plus expand for the full buy/sell list). Send always rebuilds before an order is placed.",
           "Constituent changes are on Desk → Lists. Accept all adds names and does not buy. Accept all drops names and does not sell. A history pull that misses names is an alert. Retry missing on this page downloads only the names that still have no candles.",
         ],
       },
@@ -368,7 +377,8 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "books",
         title: "The symbol list",
         body: [
-          "The first visit inserts the Nifty 100 names with On switched off. A name you remove is not put back by that seed. Apply to all writes only the fields you fill. It does not change on/off, pause, status, or the stop.",
+          "The first visit inserts the Nifty 100 names with On switched off. A name you remove is not put back by that seed. Apply to all writes only the fields you fill. Turn selected on/off changes engine for checked rows only. Save selected applies bulk and inline budget, EMA, and buffer. Neither changes pause, status, or the stop.",
+          "Filters for symbol, name, industry, and signal sit at the top of the Book table section so they stay visually tied to the grid. Use the ℹ tooltips on bulk fields for longer help.",
           "Constituent changes are on Desk → Lists. A new Nifty 100 name is added here with On off. Accepting a removal deletes that book and does not sell. The EMA column is the exponential average of completed daily closes. Signal says Below the band, or Buy and the share count, whether the row is On or off. Signal Qualifies shows only names above the band. Sorting Signal puts those names first. State stays flat until a fill. Stop stays blank until the book is long. Engine on and Execution on this page, plus Desk → Risk for Daily trend, still have to allow an order.",
         ],
       },

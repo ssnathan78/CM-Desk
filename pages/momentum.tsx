@@ -1,4 +1,5 @@
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
 import {
   Accordion,
   AccordionDetails,
@@ -6,21 +7,23 @@ import {
   Box,
   Button,
   Chip,
+  IconButton,
   LinearProgress,
   MenuItem,
   Skeleton,
   Stack,
   Table,
+  Tooltip,
+  Typography,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
   TableSortLabel,
   TextField,
-  Typography,
 } from "@mui/material"
 import Link from "next/link"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 
 import {
@@ -29,6 +32,7 @@ import {
   SettingsSwitchField,
 } from "../components/forms/SettingsFields"
 import Layout from "../components/Layout"
+import MomentumPlannedOrdersPanel from "../components/momentum/MomentumPlannedOrdersPanel"
 import ConfirmAction from "../components/lib/ConfirmAction"
 import PageSection from "../components/lib/PageSection"
 import ScrollTable from "../components/lib/ScrollTable"
@@ -37,6 +41,7 @@ import TableColumnMenu from "../components/lib/TableColumnMenu"
 import { useSnackbar } from "../components/lib/useSnackbar"
 import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import fetchJson from "../lib/fetchJson"
+import { MOMENTUM_FIELD_HELP } from "../lib/momentum/fieldHelp"
 import { diffRebalancePreview } from "../lib/momentum/rebalanceDiff"
 import { DEFAULT_MOMENTUM_CONFIG, type MomentumConfig } from "../lib/momentum/types"
 import type { ColumnDef } from "../lib/ui/columnVisibility"
@@ -138,14 +143,7 @@ export default function MomentumPage() {
   const [draft, setDraft] = useState<MomentumConfig | null>(null)
   const [query, setQuery] = useState("")
   const [view, setView] = useState<
-    | "all"
-    | "pass"
-    | "orders"
-    | "hold"
-    | "exclude"
-    | "locked"
-    | "unlocked"
-    | "hasTarget"
+    "all" | "pass" | "orders" | "hold" | "exclude" | "locked" | "unlocked" | "hasTarget"
   >("all")
   const [sortKey, setSortKey] = useState<"rank" | "symbol" | "score" | "pass" | "weight">("rank")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
@@ -239,10 +237,7 @@ export default function MomentumPage() {
       return String(left).localeCompare(String(right)) * dir
     })
   }, [data?.locks, data?.orders, data?.rows, data?.targets, query, sortDir, sortKey, view])
-  const pageRows = useMemo(
-    () => paginateSlice(rows, page, rowsPerPage),
-    [rows, page, rowsPerPage]
-  )
+  const pageRows = useMemo(() => paginateSlice(rows, page, rowsPerPage), [rows, page, rowsPerPage])
 
   useEffect(() => {
     let cancelled = false
@@ -500,16 +495,22 @@ export default function MomentumPage() {
               <Box>
                 <SwitchField
                   label="Engine on"
+                  helper={MOMENTUM_FIELD_HELP.engine}
+                  helperPlacement="tooltip"
                   checked={config.active}
                   onChange={active => patch({ active })}
                 />
                 <SwitchField
                   label="Pull data daily"
+                  helper={MOMENTUM_FIELD_HELP.dataRefresh}
+                  helperPlacement="tooltip"
                   checked={config.dataRefresh}
                   onChange={dataRefresh => patch({ dataRefresh })}
                 />
                 <SettingsSelectField
                   label="Execution"
+                  helper={MOMENTUM_FIELD_HELP.execution}
+                  helperPlacement="tooltip"
                   value={config.execution}
                   onChange={execution => patch({ execution })}
                 >
@@ -520,13 +521,8 @@ export default function MomentumPage() {
                 <SettingsSelectField
                   label="Rebalance"
                   value={config.rebalance}
-                  helper={
-                    config.rebalance === "adhoc"
-                      ? "Never sends on a schedule. The order list is the buy and sell diff."
-                      : config.rebalance === "monthly"
-                        ? "First NSE session of the month. Weekday is only for weekly."
-                        : "Sends on the weekday below."
-                  }
+                  helper={MOMENTUM_FIELD_HELP.rebalance}
+                  helperPlacement="tooltip"
                   onChange={rebalance => patch({ rebalance })}
                 >
                   <MenuItem value="monthly">Monthly</MenuItem>
@@ -536,29 +532,46 @@ export default function MomentumPage() {
                 {config.rebalance === "weekly" ? (
                   <Num
                     label="Weekday (1–5)"
+                    helperText={MOMENTUM_FIELD_HELP.weeklyDay}
+                    helperPlacement="tooltip"
                     value={config.weeklyDay}
                     onChange={weeklyDay => patch({ weeklyDay })}
                   />
                 ) : null}
+                <Num
+                  label="Capital INR"
+                  value={config.capitalInr}
+                  helperText={MOMENTUM_FIELD_HELP.capitalInr}
+                  helperPlacement="tooltip"
+                  onChange={capitalInr => patch({ capitalInr })}
+                />
               </Box>
               <Box>
                 <Num
                   label="Holdings"
+                  helperText={MOMENTUM_FIELD_HELP.holdings}
+                  helperPlacement="tooltip"
                   value={config.holdingsCount}
                   onChange={holdingsCount => patch({ holdingsCount })}
                 />
                 <Num
                   label="Worst rank held"
+                  helperText={MOMENTUM_FIELD_HELP.worstRankHeld}
+                  helperPlacement="tooltip"
                   value={config.worstRankHeld}
                   onChange={worstRankHeld => patch({ worstRankHeld })}
                 />
                 <Num
                   label="Entry rank max"
+                  helperText={MOMENTUM_FIELD_HELP.entryRankMax}
+                  helperPlacement="tooltip"
                   value={config.entryRankMax}
                   onChange={entryRankMax => patch({ entryRankMax })}
                 />
                 <SettingsSelectField
                   label="Rank"
+                  helper={MOMENTUM_FIELD_HELP.ranking}
+                  helperPlacement="tooltip"
                   value={config.ranking}
                   onChange={ranking => patch({ ranking })}
                 >
@@ -569,11 +582,8 @@ export default function MomentumPage() {
                 <SettingsSelectField
                   label="Weights"
                   value={config.weighting}
-                  helper={
-                    config.weighting === "drift"
-                      ? "Held shares stay put. A name is sold when it leaves the book, or when it grows past the trim level. New rupees buy only names you do not hold yet."
-                      : "Each rebalance resizes every name to the same slice of capital."
-                  }
+                  helper={MOMENTUM_FIELD_HELP.weighting}
+                  helperPlacement="tooltip"
                   onChange={weighting => patch({ weighting })}
                 >
                   <MenuItem value="equal">Equal weight each rebalance</MenuItem>
@@ -582,34 +592,28 @@ export default function MomentumPage() {
                 <Num
                   label="Max weight %"
                   value={config.maxWeightPct}
-                  helperText={
-                    config.weighting === "drift"
-                      ? "Caps a new name. It does not trim a share you already hold."
-                      : undefined
-                  }
+                  helperText={MOMENTUM_FIELD_HELP.maxWeightPct}
+                  helperPlacement="tooltip"
                   onChange={maxWeightPct => patch({ maxWeightPct })}
                 />
                 {config.weighting === "drift" ? (
                   <>
                     <Num
                       label="Trim above % of book"
+                      helperText={MOMENTUM_FIELD_HELP.trimAbovePct}
+                      helperPlacement="tooltip"
                       value={config.trimAbovePct}
                       onChange={trimAbovePct => patch({ trimAbovePct })}
                     />
                     <Num
                       label="Trim down to %"
+                      helperText={MOMENTUM_FIELD_HELP.trimToPct}
+                      helperPlacement="tooltip"
                       value={config.trimToPct}
-                      helperText="New capital buys a new name up to one equal slice. It is not added to shares you already hold. Leftover rupees wait for the next new name."
                       onChange={trimToPct => patch({ trimToPct })}
                     />
                   </>
                 ) : null}
-                <Num
-                  label="Capital INR"
-                  value={config.capitalInr}
-                  helperText="Rupees for the whole book. 0 shows weights and buys nothing."
-                  onChange={capitalInr => patch({ capitalInr })}
-                />
               </Box>
             </Box>
             <Accordion disableGutters elevation={0} sx={{ mt: 1, bgcolor: "transparent" }}>
@@ -628,6 +632,8 @@ export default function MomentumPage() {
                 >
                   <Num
                     label="12-month multiple cap"
+                    helperText={MOMENTUM_FIELD_HELP.maxPriceMultiple12m}
+                    helperPlacement="tooltip"
                     value={config.filters.maxPriceMultiple12m}
                     onChange={maxPriceMultiple12m =>
                       patch({ filters: { ...config.filters, maxPriceMultiple12m } })
@@ -635,6 +641,8 @@ export default function MomentumPage() {
                   />
                   <Num
                     label="24-month multiple cap"
+                    helperText={MOMENTUM_FIELD_HELP.maxPriceMultiple24m}
+                    helperPlacement="tooltip"
                     value={config.filters.maxPriceMultiple24m}
                     onChange={maxPriceMultiple24m =>
                       patch({ filters: { ...config.filters, maxPriceMultiple24m } })
@@ -642,6 +650,8 @@ export default function MomentumPage() {
                   />
                   <Num
                     label="Max % below high"
+                    helperText={MOMENTUM_FIELD_HELP.maxPctBelowHigh}
+                    helperPlacement="tooltip"
                     value={config.filters.maxPctBelowHigh}
                     onChange={maxPctBelowHigh =>
                       patch({ filters: { ...config.filters, maxPctBelowHigh } })
@@ -649,20 +659,24 @@ export default function MomentumPage() {
                   />
                   <Num
                     label="Min turnover INR"
-                    value={config.filters.minAvgTurnoverInr}
-                    helperText="Mean of close × volume over the last 21 sessions, after a history pull."
+                    helperText={MOMENTUM_FIELD_HELP.minAvgTurnoverInr}
                     helperPlacement="tooltip"
+                    value={config.filters.minAvgTurnoverInr}
                     onChange={minAvgTurnoverInr =>
                       patch({ filters: { ...config.filters, minAvgTurnoverInr } })
                     }
                   />
                   <Num
                     label="SMA days"
+                    helperText={MOMENTUM_FIELD_HELP.smaPeriod}
+                    helperPlacement="tooltip"
                     value={config.filters.smaPeriod}
                     onChange={smaPeriod => patch({ filters: { ...config.filters, smaPeriod } })}
                   />
                   <Num
                     label="1-month / 12-month cap"
+                    helperText={MOMENTUM_FIELD_HELP.maxOneMonthShare}
+                    helperPlacement="tooltip"
                     value={config.filters.maxOneMonthShare}
                     onChange={maxOneMonthShare =>
                       patch({ filters: { ...config.filters, maxOneMonthShare } })
@@ -670,7 +684,7 @@ export default function MomentumPage() {
                   />
                   <SettingsSelectField
                     label="Market cap"
-                    helper="Off ignores it. Strict drops a name with no stored market cap, or below the minimum. The daily refresh covers the daily-trend book, not all 750."
+                    helper={MOMENTUM_FIELD_HELP.marketCapFilter}
                     helperPlacement="tooltip"
                     value={config.filters.marketCapFilter}
                     onChange={marketCapFilter =>
@@ -726,61 +740,94 @@ export default function MomentumPage() {
                   <Typography variant="subtitle2">Drift cash</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ flexWrap: "wrap", alignItems: "center" }}
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                      gap: 2,
+                    }}
                   >
-                    <Button
-                      disabled={busy || data?.config.weighting !== "drift"}
-                      onClick={() =>
-                        void post({ action: "deploy", execute: false }, "Deploy preview refreshed")
-                      }
-                    >
-                      Preview deploy
-                    </Button>
-                    <Button
-                      color="warning"
-                      disabled={
-                        busy || data?.config.weighting !== "drift" || config.execution === "report"
-                      }
-                      onClick={() => setPendingOrder("deploy")}
-                    >
-                      Deploy spare cash
-                    </Button>
-                    <Num
-                      label="Trim book %"
-                      value={trimPct}
-                      onChange={value => setTrimPct(Math.min(99, Math.max(1, Math.round(value))))}
-                    />
-                    <Button
-                      disabled={busy || data?.config.weighting !== "drift"}
-                      onClick={() =>
-                        void post(
-                          { action: "trim", execute: false, trimPct },
-                          "Trim preview refreshed"
-                        )
-                      }
-                    >
-                      Preview trim
-                    </Button>
-                    <Button
-                      color="warning"
-                      disabled={
-                        busy || data?.config.weighting !== "drift" || config.execution === "report"
-                      }
-                      onClick={() => setPendingOrder("trim")}
-                    >
-                      Trim book
-                    </Button>
-                  </Stack>
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Deploy spare cash
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                        {MOMENTUM_FIELD_HELP.deploySpare}
+                      </Typography>
+                      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                        <Button
+                          disabled={busy || data?.config.weighting !== "drift"}
+                          onClick={() =>
+                            void post(
+                              { action: "deploy", execute: false },
+                              "Deploy preview refreshed"
+                            )
+                          }
+                        >
+                          Preview deploy
+                        </Button>
+                        <Button
+                          color="warning"
+                          disabled={
+                            busy ||
+                            data?.config.weighting !== "drift" ||
+                            config.execution === "report"
+                          }
+                          onClick={() => setPendingOrder("deploy")}
+                        >
+                          Deploy spare cash
+                        </Button>
+                      </Stack>
+                    </Box>
+                    <Box>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Trim book
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {MOMENTUM_FIELD_HELP.trimBook}
+                      </Typography>
+                      <Num
+                        label="Trim book %"
+                        helperText={MOMENTUM_FIELD_HELP.trimPct}
+                        helperPlacement="tooltip"
+                        value={trimPct}
+                        onChange={value =>
+                          setTrimPct(Math.min(99, Math.max(1, Math.round(value))))
+                        }
+                      />
+                      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                        <Button
+                          disabled={busy || data?.config.weighting !== "drift"}
+                          onClick={() =>
+                            void post(
+                              { action: "trim", execute: false, trimPct },
+                              "Trim preview refreshed"
+                            )
+                          }
+                        >
+                          Preview trim
+                        </Button>
+                        <Button
+                          color="warning"
+                          disabled={
+                            busy ||
+                            data?.config.weighting !== "drift" ||
+                            config.execution === "report"
+                          }
+                          onClick={() => setPendingOrder("trim")}
+                        >
+                          Trim book
+                        </Button>
+                      </Stack>
+                    </Box>
+                  </Box>
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{ mt: 1, display: "block" }}
+                    sx={{ mt: 1.5, display: "block" }}
                   >
-                    Deploy and trim run only when weights are Let winners run. They recompute their
-                    own orders and do not replace the stored rank.
+                    Only when Weights is Let winners run. Deploy and trim build their own order list;
+                    they do not replace the ranked rebalance preview on Universe &amp; orders.
                   </Typography>
                 </AccordionDetails>
               </Accordion>
@@ -817,29 +864,29 @@ export default function MomentumPage() {
             />
           }
         >
-          <Box sx={{ px: 2, pb: 1 }}>
+          <Box sx={{ px: 2, pb: 1.5, borderBottom: 1, borderColor: "divider" }}>
             <Stack
               direction={{ xs: "column", sm: "row" }}
               spacing={1}
-              sx={{ alignItems: { sm: "center" } }}
+              sx={{ alignItems: { sm: "center" }, mb: 1.5 }}
             >
-              <TextField
-                size="small"
+              <ToolbarFilterField
                 label="Filter symbol or name"
+                helper={MOMENTUM_FIELD_HELP.filterSymbol}
                 value={query}
-                onChange={e => {
-                  setQuery(e.target.value)
+                onChange={value => {
+                  setQuery(value)
                   setPage(0)
                 }}
               />
-              <TextField
+              <ToolbarFilterField
                 select
-                size="small"
                 label="Show"
+                helper={MOMENTUM_FIELD_HELP.showView}
                 value={view}
-                onChange={e => {
+                onChange={value => {
                   setView(
-                    e.target.value as
+                    value as
                       | "all"
                       | "pass"
                       | "orders"
@@ -861,37 +908,23 @@ export default function MomentumPage() {
                 <MenuItem value="exclude">Exclude lock</MenuItem>
                 <MenuItem value="locked">Any lock</MenuItem>
                 <MenuItem value="unlocked">No lock</MenuItem>
-              </TextField>
+              </ToolbarFilterField>
               <Button onClick={() => exportMomentum(rows, data)}>Export this view</Button>
             </Stack>
-            <Typography variant="body2" color="text.secondary">
-              {(previewOrders ?? data?.orders ?? []).length} planned. Last pull{" "}
-              {data?.lastDataPullOn ?? "never"}. Rank as of{" "}
-              {data?.computedAt
-                ? new Date(data.computedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-                : "not stored"}
-              . Rebalance day {data?.due ? "yes" : "no"}.
-            </Typography>
-            {previewDiff &&
-            (previewDiff.added.length ||
-              previewDiff.removed.length ||
-              previewDiff.changed.length) ? (
-              <Chip
-                size="small"
-                color="info"
-                variant="outlined"
-                label={`Preview diff: ${previewDiff.summary}`}
-              />
-            ) : null}
-            {(previewOrders ?? data?.orders ?? []).length > 0 ? (
-              <Box sx={{ maxHeight: 140, overflow: "auto" }}>
-                {(previewOrders ?? data?.orders ?? []).map(order => (
-                  <Typography key={`${order.side}-${order.symbol}`} variant="body2">
-                    {order.side} {order.symbol} {order.quantity} — {order.reason}
-                  </Typography>
-                ))}
-              </Box>
-            ) : null}
+            <MomentumPlannedOrdersPanel
+              orders={previewOrders ?? data?.orders ?? []}
+              lastDataPullOn={data?.lastDataPullOn ?? null}
+              computedAt={data?.computedAt ?? null}
+              due={Boolean(data?.due)}
+              previewDiffSummary={
+                previewDiff &&
+                (previewDiff.added.length ||
+                  previewDiff.removed.length ||
+                  previewDiff.changed.length)
+                  ? previewDiff.summary
+                  : null
+              }
+            />
           </Box>
           <ScrollTable minWidth={720}>
             <Table size="small" stickyHeader>
@@ -1121,8 +1154,52 @@ function SwitchField(props: {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
+  helper?: string
+  helperPlacement?: "below" | "tooltip"
 }) {
   return <SettingsSwitchField {...props} />
+}
+
+function ToolbarFilterField({
+  label,
+  helper,
+  value,
+  onChange,
+  select,
+  children,
+  sx,
+}: {
+  label: string
+  helper?: string
+  value: string
+  onChange: (value: string) => void
+  select?: boolean
+  children?: ReactNode
+  sx?: object
+}) {
+  return (
+    <Box sx={sx}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, mb: 0.5 }}>
+        <Typography variant="caption" color="text.secondary">{label}</Typography>
+        {helper ? (
+          <Tooltip title={helper}>
+            <IconButton size="small" aria-label={`About ${label}`} sx={{ p: 0.25 }}>
+              <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        ) : null}
+      </Box>
+      <TextField
+        select={select}
+        size="small"
+        fullWidth={!select}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      >
+        {children}
+      </TextField>
+    </Box>
+  )
 }
 
 function Num(props: {

@@ -48,6 +48,7 @@ import {
   type DailyTrendTableColumnId,
   dailyTrendColumnsInOrder,
 } from "../lib/dailyTrend/tableColumns"
+import { DAILY_TREND_FIELD_HELP } from "../lib/dailyTrend/fieldHelp"
 import fetchJson from "../lib/fetchJson"
 import {
   defaultVisibleIds,
@@ -346,6 +347,34 @@ export default function DailyTrendPage() {
     }
   }
 
+  async function setSelectedEnabled(enabled: boolean) {
+    if (!selectedSymbols.size) {
+      showMessage("Select at least one symbol.", "info")
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await fetchJson<{ count: number }>("/api/daily-trend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "set-enabled-selected",
+          enabled,
+          symbols: [...selectedSymbols],
+        }),
+      })
+      await mutate()
+      showMessage(
+        `${enabled ? "Turned on" : "Turned off"} ${result.count} selected symbol(s)`,
+        "success"
+      )
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Update failed", "error")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function applyToAll() {
     const body: Record<string, unknown> = { action: "apply-all" }
     if (bulk.emaPeriod !== "") body.emaPeriod = Number(bulk.emaPeriod)
@@ -628,7 +657,7 @@ export default function DailyTrendPage() {
         )}
         <PageSection
           title="Symbol book"
-          description="Add names, bulk-patch settings, then filter the list below."
+          description="Add names and bulk-patch settings. Filters and the table are in the next section."
         >
           <Stack
             direction={{ xs: "column", md: "row" }}
@@ -637,6 +666,8 @@ export default function DailyTrendPage() {
           >
             <SettingsTextField
               label="Add symbol (NSE cash)"
+              helper={DAILY_TREND_FIELD_HELP.addSymbol}
+              helperPlacement="tooltip"
               placeholder="RELIANCE, Mahindra, NIFTYBEES"
               value={query}
               onChange={setQuery}
@@ -666,8 +697,8 @@ export default function DailyTrendPage() {
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
             Bulk patch: fill only fields to change. Blank leaves each symbol unchanged. Apply to all
             writes every symbol. Save selected also applies filled bulk fields to checked rows
-            (inline cells win over bulk for budget, EMA, and buffer). Does not change on/off, pause,
-            status, or stop.
+            (inline cells win over bulk for budget, EMA, and buffer). Turn selected on/off changes
+            engine only. Does not change pause, status, or stop.
           </Typography>
           <Box
             sx={{
@@ -679,26 +710,36 @@ export default function DailyTrendPage() {
           >
             <SettingsTextField
               label="EMA"
+              helper={DAILY_TREND_FIELD_HELP.bulkEma}
+              helperPlacement="tooltip"
               value={bulk.emaPeriod}
               onChange={emaPeriod => setBulk({ ...bulk, emaPeriod })}
             />
             <SettingsTextField
               label="Buffer %"
+              helper={DAILY_TREND_FIELD_HELP.bulkBuffer}
+              helperPlacement="tooltip"
               value={bulk.bufferPercent}
               onChange={bufferPercent => setBulk({ ...bulk, bufferPercent })}
             />
             <SettingsTextField
               label="Exit %"
+              helper={DAILY_TREND_FIELD_HELP.bulkExit}
+              helperPlacement="tooltip"
               value={bulk.exitBufferPercent}
               onChange={exitBufferPercent => setBulk({ ...bulk, exitBufferPercent })}
             />
             <SettingsTextField
               label="Budget INR"
+              helper={DAILY_TREND_FIELD_HELP.bulkBudget}
+              helperPlacement="tooltip"
               value={bulk.budgetInr}
               onChange={budgetInr => setBulk({ ...bulk, budgetInr })}
             />
             <SettingsSelectField
               label="Entry"
+              helper={DAILY_TREND_FIELD_HELP.bulkEntry}
+              helperPlacement="tooltip"
               value={bulk.entryStyle || ""}
               onChange={entryStyle => setBulk({ ...bulk, entryStyle })}
             >
@@ -728,39 +769,25 @@ export default function DailyTrendPage() {
             <Button
               variant="outlined"
               disabled={busy || selectedSymbols.size === 0}
+              onClick={() => void setSelectedEnabled(true)}
+            >
+              Turn selected on ({selectedSymbols.size})
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={busy || selectedSymbols.size === 0}
+              onClick={() => void setSelectedEnabled(false)}
+            >
+              Turn selected off ({selectedSymbols.size})
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={busy || selectedSymbols.size === 0}
               onClick={() => void saveSelectedRows()}
             >
               Save selected ({selectedSymbols.size})
             </Button>
           </Stack>
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", sm: "1fr 220px" },
-              gap: 2,
-              mt: 2,
-            }}
-          >
-            <SettingsTextField
-              label="Filter symbol, name, or industry"
-              value={filter}
-              onChange={value => {
-                setFilter(value)
-                setTablePage(0)
-              }}
-            />
-            <SettingsSelectField<"all" | "qualifies">
-              label="Signal"
-              value={signalView}
-              onChange={value => {
-                setSignalView(value)
-                setTablePage(0)
-              }}
-            >
-              <MenuItem value="all">All names</MenuItem>
-              <MenuItem value="qualifies">Qualifies</MenuItem>
-            </SettingsSelectField>
-          </Box>
         </PageSection>
         <DailyTrendBookDrawer
           open={Boolean(editBook)}
@@ -774,7 +801,7 @@ export default function DailyTrendPage() {
         />
         <PageSection
           title="Book table"
-          description="Wide table scrolls horizontally with the page. Choose optional columns from the header menu."
+          description="Filter, select rows, and edit inline. Wide table scrolls horizontally; optional columns in the header menu."
           flush
           actions={
             <TableColumnMenu
@@ -787,6 +814,41 @@ export default function DailyTrendPage() {
             />
           }
         >
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 220px" },
+              gap: 2,
+              px: 2,
+              pb: 1.5,
+              borderBottom: 1,
+              borderColor: "divider",
+            }}
+          >
+            <SettingsTextField
+              label="Filter symbol, name, or industry"
+              helper={DAILY_TREND_FIELD_HELP.filter}
+              helperPlacement="tooltip"
+              value={filter}
+              onChange={value => {
+                setFilter(value)
+                setTablePage(0)
+              }}
+            />
+            <SettingsSelectField<"all" | "qualifies">
+              label="Signal"
+              helper={DAILY_TREND_FIELD_HELP.signalView}
+              helperPlacement="tooltip"
+              value={signalView}
+              onChange={value => {
+                setSignalView(value)
+                setTablePage(0)
+              }}
+            >
+              <MenuItem value="all">All names</MenuItem>
+              <MenuItem value="qualifies">Qualifies</MenuItem>
+            </SettingsSelectField>
+          </Box>
           <Typography
             variant="caption"
             color="text.secondary"

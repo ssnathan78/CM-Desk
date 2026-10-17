@@ -536,6 +536,20 @@ export async function setAllDailyTrendEnabled(enabled: boolean): Promise<number>
   return rows.length
 }
 
+export async function setDailyTrendEnabledForSymbols(
+  symbols: string[],
+  enabled: boolean
+): Promise<number> {
+  const unique = [...new Set(symbols.map(s => s.trim().toUpperCase()).filter(Boolean))]
+  if (!unique.length) return 0
+  const rows = await db
+    .update(dailyTrendBooks)
+    .set({ enabled, updatedAt: new Date() })
+    .where(inArray(dailyTrendBooks.tradingsymbol, unique))
+    .returning({ symbol: dailyTrendBooks.tradingsymbol })
+  return rows.length
+}
+
 export async function applyDailyTrendBulkToBooks(patch: DailyTrendBulkPatch): Promise<number> {
   const books = await listDailyTrendBooks()
   for (const book of books) {

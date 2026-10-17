@@ -8,14 +8,16 @@ export function SettingsSwitchField({
   checked,
   onChange,
   helper,
+  helperPlacement,
 }: {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
   helper?: string
+  helperPlacement?: "below" | "tooltip"
 }) {
   return (
-    <FieldRow label={label} wide helper={helper}>
+    <FieldRow label={label} wide helper={helper} helperPlacement={helperPlacement}>
       <FormControlLabel
         label={checked ? "On" : "Off"}
         control={<Switch checked={checked} onChange={e => onChange(e.target.checked)} />}
@@ -87,6 +89,7 @@ export function SettingsTextField({
   label,
   value,
   helper,
+  helperPlacement,
   onChange,
   placeholder,
   onKeyDown,
@@ -94,12 +97,13 @@ export function SettingsTextField({
   label: string
   value: string
   helper?: string
+  helperPlacement?: "below" | "tooltip"
   onChange: (value: string) => void
   placeholder?: string
   onKeyDown?: (e: KeyboardEvent) => void
 }) {
   return (
-    <FieldRow label={label} helper={helper}>
+    <FieldRow label={label} helper={helper} helperPlacement={helperPlacement}>
       <TextField
         fullWidth
         size="small"

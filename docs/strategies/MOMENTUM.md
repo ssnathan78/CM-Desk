@@ -18,7 +18,7 @@ Hold on a row, in equal weight, keeps that name at its current weight and does n
 
 Save writes the form. Pull history now writes the same form and starts the download. The page shows the stored rank. It rebuilds when the IST date, config, locks, holdings, or universe change, and when you press Preview. Send, deploy, and trim rebuild before an order is placed. The hourly pass stores a fresh rank while the strategy is on. The symbol filter, sort, and Show menu are only for this visit.
 
-Save, Pull history, Preview, and Send sit on one row under the switches. Drift cash (deploy and trim) stays folded, and only when weights are let winners run.
+Save, Pull history, Preview, and Send sit on one row under the switches. **Drift cash** (folded accordion, only when weights are let winners run) has two columns: **Deploy spare cash** (equal rupee slices into the book, capped by max weight and trim-down) and **Trim book** (same % off every line). Each block has in-page help and Preview / live buttons. Deploy and trim build their own order list; they do not replace the ranked rebalance preview. Operator guide: `/help/momentum` → Drift cash.
 
 **Column picker** (view-column icon above the rank table) toggles optional columns (close, ROC, % below high, above SMA). Choices persist in the browser under `momentum.visibleColumns`. **Preview diff** compares the latest Preview / deploy / trim order list with the previous preview on this visit and shows a chip when lines were added, dropped, or resized.
 
