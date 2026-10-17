@@ -12,4 +12,6 @@ This desk loses real money if status, qty, and broker disagree.
 - Halt / trading-disabled **must still allow** flatten and SL. Strategy **disabled** is fully dark (no flatten either).
 - Paper leftover must not punch Kite; live leftover blocks a new paper book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`).
 - LONG/SHORT requires a **fill**, not the candle alone.
-- After a protective stop **fills**, do not place a second MARKET flatten (that reverses into a new un-signaled position).
+- After a protective stop **fills**, do not place a second MARKET flatten (that reverses into a new un-signaled position). Cover size is this open book (`chaseCoverOrderQty`); an earlier same-day fill does not count.
+- A flatten or stop must pass `purpose` `FLATTEN` / `SL` / `EXIT`. A bare MARKET is an entry, so halt blocks it. Do not mark the strategy flat until quantity is 0 (`planChaseMorningExit`).
+- A failed Kite position read is **unknown**, not 0. Do not enter, clear a live row, or report the broker flat. See [docs/AGENT_BOOKS_AND_PNL.md](../../docs/AGENT_BOOKS_AND_PNL.md).

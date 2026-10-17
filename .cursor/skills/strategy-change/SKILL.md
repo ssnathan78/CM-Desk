@@ -7,7 +7,7 @@ description: Workflow for changing Chase, ATM straddle, or strangle without viol
 
 ## Before code
 
-1. Read the spec in `docs/strategies/` (Chase, ATM_STRADDLE, ATM_STRANGLE).
+1. Read the spec in `docs/strategies/` (Chase, ATM_STRADDLE, ATM_STRANGLE) and [docs/AGENT_BOOKS_AND_PNL.md](../../../docs/AGENT_BOOKS_AND_PNL.md).
 2. Name sequences that can phantom-status, mix paper/live, flatten the wrong size, or **open** while exiting.
 3. Do not flatten a leftover 9:20 wing because the other SL hit. Do not size flatten from configured lots.
 

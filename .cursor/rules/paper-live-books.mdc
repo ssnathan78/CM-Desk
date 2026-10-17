@@ -13,3 +13,4 @@ Triple live gate: `MOCK_ORDERS=false` **and** `allowLiveOrders` **and** strategy
 - Live leftover still blocks paper (`chase-live-to-paper-open`).
 - Clear paper book does not send a Kite order. Clear phantom zeros a ledger row only.
 - Do not punch paper on top of a real Kite book.
+- Paper on a live process (`MOCK_ORDERS=false`) must read Kite. A failed `getPositions` is unknown, not flat: do not enter, do not clear the live row, do not switch mode. `MOCK_ORDERS=true` has no broker book.

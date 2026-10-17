@@ -12,3 +12,6 @@ alwaysApply: false
 - Desk vs Kite: Desk marks remaining qty vs **entry average**. Kite NRML unrealised is often **today vs previous close**. Both can be right and still disagree.
 - Desk → Sessions **Net P&L** = sum of **closed round-trips** whose `exit_at` is that IST date. Open Chase MTM is not in that column. **Drawdown** is last snapshot peak − (cash + unrealized), not max session P&L.
 - Fees stay 0 until actually ingested. Use `presentLedgerPosition` / `signedQty` (pg may return qty as string `"0"`).
+- Open qty with **no mark** keeps stored unrealized (`unrealizedForPosition`). Do not substitute the average — that prints 0.
+- Advance `orders.filled_qty` only after the fill row exists (`commitBrokerFillProgress`). A close with no open trade still writes a closed round-trip (`orphanCloseTradeFields`) so Sessions Net includes it.
+- Account labels stay **Margin + open MTM** and **Realized lifetime**. Do not present them as Kite day P&L or Sessions net. Full rules: [docs/AGENT_BOOKS_AND_PNL.md](../../docs/AGENT_BOOKS_AND_PNL.md).

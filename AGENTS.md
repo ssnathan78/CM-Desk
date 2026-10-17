@@ -40,6 +40,16 @@ yarn live-test   # Optional; needs USER_SESSION against Kite
 
 CI runs lint, unit-test, sim-test, migrate, int-test, api-test, build, Playwright e2e-test. Do not put Kite live tests under `__tests__/unit`. Simulation must keep `SIMULATION=true` and `MOCK_ORDERS=true` — it must never call Kite.
 
+## Books, quantity, and P&L
+
+Before changing orders, fills, positions, Chase exits, paper/live, or a Desk P&L number, read [docs/AGENT_BOOKS_AND_PNL.md](docs/AGENT_BOOKS_AND_PNL.md).
+
+- A failed Kite position read is **unknown**, not quantity 0. Do not enter, clear a live row, or switch Paper/Live on that read.
+- A flatten or stop is not an entry. Set `purpose` to `FLATTEN` / `SL` / `EXIT` or halt will block it. Do not mark the strategy flat until quantity is 0.
+- Cover size is this open book. Do not subtract an earlier same-day fill, and do not send a second market order after a cover has already filled.
+- Advance `orders.filled_qty` only after the fill row exists. A close with no open trade still writes a closed round-trip so Sessions Net can see it.
+- Qty 0 → unrealized 0. A missing mark on an open qty is not the average (that prints a fake 0). Label **Margin + open MTM** and **Realized lifetime** as those measures, not as Kite day P&L or Sessions net.
+
 ## Adversarial testing (required — this is a live desk)
 
 Treat every change as if it can lose real money. Happy-path tests are not enough. Before you finish work on **orders, risk, ledger provenance, Chase, straddle, strangle, or a new strategy**:
@@ -59,7 +69,9 @@ Treat every change as if it can lose real money. Happy-path tests are not enough
 | New paper entry while live/Kite still has size | Punching paper on top of a real book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) |
 | Halt / trading-disabled / strategy-disabled | Blocking flatten/SL when those roles must still work (except strategy **disabled**, which is fully dark) |
 | One-way Nifty after a 9:20 short (one wing SL) | Flattening the leftover wing because the first SL hit. That leftover until ASO **is** the strategy (`*-920-one-way-holds-other-leg`) |
-| Restart, duplicate working order, partial fill, gap through stop | Overfill, double entry, or status that disagrees with ledger qty |
+| Restart, duplicate working order, partial fill, gap through stop | Overfill, double entry, or status that disagrees with ledger qty. Order `filled_qty` must not advance until the fill row exists |
+| Protective stop or market flatten already filled for this open book | A second MARKET that reverses. Same-day re-entry must not look already covered by the previous fill |
+| Kite `getPositions` failed or `net` missing | Treating that as quantity 0 (clear phantom, “broker already flat”, Paper/Live switch, new entry) |
 
 **New or changed strategy:** add it to `RISK_STRATEGY_KEYS` and Desk → Risk; add a sim **actor** that reuses production `evaluateOrder` (do not invent a second entry rule); add catalog cases for reject-without-phantom-status, paper↔live with an open book, flatten-empty-book, and halt vs flatten. Spec: [docs/strategies/README.md](docs/strategies/README.md). Sim how-to: [docs/TRADING_SIMULATION_GUIDE.md](docs/TRADING_SIMULATION_GUIDE.md).
 
@@ -80,6 +92,8 @@ Modernization patterns and backlog: [docs/CODEBASE_MODERNIZATION.md](docs/CODEBA
 Strategy specs (straddle, strangle, Chase) and rule-book vs chase-bot vs this app: [docs/strategies/README.md](docs/strategies/README.md).
 
 Trading ledger (orders, fills, positions, trades, recon): [docs/TRADING_DOMAIN_MODEL.md](docs/TRADING_DOMAIN_MODEL.md). Do not collapse signal / order / fill / position / trade into one row.
+
+Books, quantity, and P&L guard rails for agents: [docs/AGENT_BOOKS_AND_PNL.md](docs/AGENT_BOOKS_AND_PNL.md).
 
 Trading risk: [docs/TRADING_RISK_AUDIT.md](docs/TRADING_RISK_AUDIT.md). Pre-trade limits live in `lib/trading/riskEngine.ts` and cannot be bypassed by strategy code.
 

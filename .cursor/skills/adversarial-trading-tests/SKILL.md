@@ -19,6 +19,9 @@ Happy path is not enough. Encode failures that lose money.
 | One-way Nifty after 9:20 short | Flattening the leftover wing (`*-920-one-way-holds-other-leg`) |
 | Restart, duplicate working order, partial, gap through stop | Overfill, double entry, status ≠ ledger qty |
 | Protective stop already filled | Second MARKET flatten that reverses |
+| Same-day re-entry | Previous round-trip’s fill counted as cover for the new book |
+| Kite positions call failed | Treated as quantity 0 (entry, clear phantom, mode switch, “broker flat”) |
+| Fill insert failed | `orders.filled_qty` already advanced, so the snapshot never retries |
 
 ## Where
 
