@@ -6,6 +6,8 @@ import { CHASE_OPEN_CLASSIFY } from "../chaseDefaults"
 import {
   type ChaseEntryFillResult,
   chaseCoverMatchesOpenBook,
+  chaseCoverOrderQty,
+  chaseEpisodeCoverFillQty,
   chaseFillAllowsStatusFlip,
   chaseFillFromDecision,
   chaseFlattenQty,
@@ -13,13 +15,13 @@ import {
   chaseHasWorkingProtectiveStop,
   chaseHasWorkingSameSideOrder,
   chaseLotsFromConfig,
-  chaseProtectiveStopFillQty,
   chaseRolloverOrderQty,
   chaseSideFromNetQty,
   chaseSideHasPosition,
   chaseSlBreachMayClearStatus,
   decideChaseInPositionSync,
   isChaseWorkingBrokerStatus,
+  planChaseMorningExit,
   planChaseSlBreachFlatten,
 } from "../chaseFill"
 import { normalizeChaseOpenClassify, resolveChaseMorningSnapshot } from "../chaseOpenClassify"
@@ -53,7 +55,12 @@ import {
 } from "../kiteUtils"
 import logger from "../logger"
 import { CHASE_Q_NAME, redisConnection } from "../queue"
-import { getOpenOrders, recordDecision, syncTerminalKiteOrders } from "../trading/ledger"
+import {
+  getOpenOrders,
+  openRoundTripSize,
+  recordDecision,
+  syncTerminalKiteOrders,
+} from "../trading/ledger"
 import { matchPaperWorkingStops } from "../trading/paperExecution"
 import { recordStrategySignal } from "../trading/signals"
 import { ms, postToSlack, toIst, withRemoteRetry } from "../utils"
@@ -221,6 +228,7 @@ async function ensureChaseEntryFilled(args: {
     side: args.side,
     hasOpenEntryOrder,
     otherBookOpen: book.otherBookOpen,
+    kiteQtyKnown: book.kiteQtyKnown,
   })
   const mapped = chaseFillFromDecision(action)
   if (action === "leftover_open") {
@@ -261,7 +269,9 @@ async function ensureChaseEntryFilled(args: {
   }
   if (mapped === "wait") {
     logger.info(
-      `[processUpdateSL] ${args.side} entry still working for ${args.tradingsymbol} — not flipping status`
+      book.kiteQtyKnown
+        ? `[processUpdateSL] ${args.side} entry still working for ${args.tradingsymbol} — not flipping status`
+        : `[processUpdateSL] Kite qty unknown for ${args.tradingsymbol} — not entering`
     )
     return mapped
   }
@@ -651,6 +661,81 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
     const bookQty = chaseFlattenQty(netQty)
     const hasPosition = currentStatus === CHASE_STATUS.LONG ? netQty > 0 : netQty < 0
 
+    const runMorningExit = async (side: "LONG" | "SHORT", exitStoploss: number) => {
+      const bookNow = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+      if (!bookNow.paperBook && !bookNow.kiteQtyKnown) {
+        logger.warn(
+          `[processUpdateSL] morning exit: Kite qty unknown for ${tradingsymbol} — not sending and not clearing ${side}`
+        )
+        return
+      }
+      const plan = planChaseMorningExit({ side, netQty: bookNow.netQty })
+      if (plan.order) {
+        if (!isAutomated) {
+          logger.info(
+            `[processUpdateSL] morning exit for ${tradingsymbol} is signal-only — not sending`
+          )
+          return
+        }
+        try {
+          await placeKiteOrder(accessToken, {
+            tradingsymbol,
+            exchange: "NFO",
+            transaction_type: plan.order.side,
+            quantity: plan.order.quantity,
+            order_type: "MARKET",
+            product: "NRML",
+            tag: "chase",
+            purpose: plan.order.purpose,
+            strategy: "CHASE",
+          } as any)
+        } catch (e) {
+          logger.error(
+            `[processUpdateSL] morning flatten rejected for ${tradingsymbol} — keeping ${side}`,
+            e
+          )
+          return
+        }
+      }
+      const after = await resolveChaseBookBreakdown(tradingsymbol, accessToken)
+      const settled = planChaseMorningExit({ side, netQty: after.netQty })
+      if (settled.status !== "AWAITING_SIGNAL") {
+        await updateChaseStatus({
+          instrument: nfoSymbol,
+          stoploss: exitStoploss,
+          updatedAt: new Date(),
+          tradingsymbol,
+          instrumentToken,
+          isSignalBreachingTolerance: false,
+        })
+        logger.warn(
+          `[processUpdateSL] morning exit sent for ${tradingsymbol} but qty=${after.netQty} — keeping ${side}`
+        )
+        return
+      }
+      if (plan.order) {
+        await insertChaseLog({
+          tradingsymbol,
+          transactionType: plan.order.side,
+          averagePrice: lastClose,
+        })
+        await postToSlack(
+          `:rotating_light: Action $chase: Transaction Alert Exit ${tradingsymbol} AT CMP :stop_sign:`
+        )
+      }
+      const { success, error } = await updateChaseStatus({
+        instrument: nfoSymbol,
+        stoploss: exitStoploss,
+        updatedAt: new Date(),
+        createdAt: new Date(),
+        status: CHASE_STATUS.AWAITING_SIGNAL,
+        tradingsymbol,
+        instrumentToken,
+        isSignalBreachingTolerance: false,
+      })
+      if (!success) logger.error("[processUpdateSL] error updating chase_status:", error)
+    }
+
     if (currentStatus === CHASE_STATUS.LONG && previousTradingDay === createdAtDate) {
       if (lastClose >= longT1) {
         newStoploss = Math.max(newStoploss, ema)
@@ -709,38 +794,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
             )
         }
       } else if (lastClose <= shortT1) {
-        await postToSlack(
-          `:rotating_light: Action $chase: Transaction Alert Exit ${tradingsymbol} AT CMP :stop_sign:`
-        )
-        const { success, error } = await updateChaseStatus({
-          instrument: nfoSymbol,
-          stoploss: lastClose,
-          updatedAt: new Date(),
-          createdAt: new Date(),
-          status: CHASE_STATUS.AWAITING_SIGNAL,
-          tradingsymbol,
-          instrumentToken,
-          isSignalBreachingTolerance: false,
-        })
-        if (success) {
-          await insertChaseLog({ tradingsymbol, transactionType: "SELL", averagePrice: lastClose })
-          if (isAutomated && quantity > 0) {
-            if (hasPosition)
-              await placeKiteOrder(accessToken, {
-                tradingsymbol,
-                exchange: "NFO",
-                transaction_type: "SELL",
-                quantity: bookQty,
-                order_type: "MARKET",
-                product: "NRML",
-                tag: "chase",
-              } as any)
-            else
-              logger.info(
-                `[processUpdateSL] no open position for ${tradingsymbol} — skipping exit order`
-              )
-          }
-        } else logger.error("[processUpdateSL] error updating chase_status:", error)
+        await runMorningExit("LONG", lastClose)
       } else if (shortT1 <= lastClose && lastClose <= ema) {
         newStoploss = Math.max(newStoploss, lowestLow)
         await persistChaseMorningSlTrail({
@@ -843,38 +897,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
             )
         }
       } else if (lastClose >= longT1) {
-        await postToSlack(
-          `:rotating_light: Action $chase: Transaction Alert Exit ${tradingsymbol} AT CMP :stop_sign:`
-        )
-        const { success, error } = await updateChaseStatus({
-          instrument: nfoSymbol,
-          stoploss: newStoploss,
-          updatedAt: new Date(),
-          createdAt: new Date(),
-          status: CHASE_STATUS.AWAITING_SIGNAL,
-          tradingsymbol,
-          instrumentToken,
-          isSignalBreachingTolerance: false,
-        })
-        if (success) {
-          await insertChaseLog({ tradingsymbol, transactionType: "BUY", averagePrice: lastClose })
-          if (isAutomated && quantity > 0) {
-            if (hasPosition)
-              await placeKiteOrder(accessToken, {
-                tradingsymbol,
-                exchange: "NFO",
-                transaction_type: "BUY",
-                quantity: bookQty,
-                order_type: "MARKET",
-                product: "NRML",
-                tag: "chase",
-              } as any)
-            else
-              logger.info(
-                `[processUpdateSL] no open position for ${tradingsymbol} — skipping exit order`
-              )
-          }
-        } else logger.error("[processUpdateSL] error updating chase_status:", error)
+        await runMorningExit("SHORT", newStoploss)
       }
     } else {
       // Different day — update SL to EMA
@@ -1140,15 +1163,28 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         return "skip_cover" as const
       }
       const signedQty = book.paperBook ? book.netQty : book.kiteQty
-      const liveStopFills = chaseProtectiveStopFillQty({
-        tradingsymbol,
-        side,
-        kiteOrders,
-      })
+      const episode = book.paperBook ? null : await openRoundTripSize(tradingsymbol, "CHASE")
+      const liveStopFills = book.paperBook
+        ? 0
+        : chaseEpisodeCoverFillQty({
+            tradingsymbol,
+            side,
+            openedAt: episode?.openedAt,
+            kiteOrders,
+          })
+      const coverQty = book.paperBook
+        ? chaseFlattenQty(signedQty)
+        : chaseCoverOrderQty({
+            kiteQty: signedQty,
+            ledgerQty: book.liveLedgerQty,
+            openedQty: episode?.signedQty ?? null,
+            episodeFilledCoverQty: liveStopFills,
+          })
       const plan = planChaseSlBreachFlatten({
         netQty: signedQty,
         workingStopsFilledThisTick: paperStopsFilled,
         filledCoverQty: liveStopFills,
+        coverQty,
         hasWorkingProtectiveStop: chaseHasWorkingProtectiveStop({
           paperBook: book.paperBook,
           tradingsymbol,
@@ -1158,7 +1194,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         }),
       })
       logger.info(
-        `[processUpdateSL] SL hit plan=${plan} qty=${signedQty} kiteKnown=${book.kiteQtyKnown} liveStopFills=${liveStopFills} for ${tradingsymbol}`
+        `[processUpdateSL] SL hit plan=${plan} qty=${signedQty} coverQty=${coverQty} kiteKnown=${book.kiteQtyKnown} episodeFills=${liveStopFills} for ${tradingsymbol}`
       )
       if (plan === "already_covered" || plan === "phantom_empty") return plan
       if (!isAutomated || chaseFlattenQty(signedQty) <= 0) return plan
@@ -1168,7 +1204,7 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
         )
         return "skip_cover" as const
       }
-      const flattenQty = Math.max(0, chaseFlattenQty(signedQty) - liveStopFills)
+      const flattenQty = coverQty
       if (flattenQty <= 0) return "already_covered"
       if (plan === "convert_working_stop") {
         const existingSL = kiteOrders.find(
@@ -1187,17 +1223,11 @@ async function processUpdateSLForInstrument(job: Job, nfoSymbol: string) {
           )
           return plan
         }
-        if (liveStopFills > 0) {
+        if (coverQty <= 0) {
           logger.info(
             `[processUpdateSL] SL already filled for ${tradingsymbol} — not placing a second flatten`
           )
           return "already_covered"
-        }
-        if (!book.paperBook) {
-          logger.warn(
-            `[processUpdateSL] no Kite stop to convert for ${tradingsymbol} — not sending a new market order`
-          )
-          return "skip_cover" as const
         }
       }
       if (!book.paperBook && chaseHasWorkingSameSideOrder({ tradingsymbol, side, kiteOrders })) {

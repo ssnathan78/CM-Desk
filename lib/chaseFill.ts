@@ -109,19 +109,104 @@ export function planChaseSlBreachFlatten(input: {
   netQty: number
   workingStopsFilledThisTick: number
   hasWorkingProtectiveStop: boolean
-  /** Live Kite filled qty on the cover side (SL / trigger orders only). */
+  /** Cover fills that belong to this open episode (stops and market/limit covers). */
   filledCoverQty?: number
+  /** Signed size this episode opened at, when the open round-trip is known. */
+  openedQty?: number | null
+  /** Ledger qty after this tick's order sync. Same sign as `netQty` when both are open. */
+  ledgerQty?: number | null
+  /**
+   * Shares still to send. When omitted, derived from kite net, ledger, opened size,
+   * and episode fills — never `open − every historical fill`.
+   */
+  coverQty?: number | null
 }): ChaseSlBreachPlan {
   const open = chaseFlattenQty(input.netQty)
   const filled = Math.max(0, Number(input.filledCoverQty) || 0)
+  const coverQty =
+    input.coverQty != null
+      ? Math.max(0, Number(input.coverQty) || 0)
+      : chaseCoverOrderQty({
+          kiteQty: input.netQty,
+          ledgerQty: input.ledgerQty ?? null,
+          openedQty: input.openedQty ?? null,
+          episodeFilledCoverQty: filled,
+        })
   // Paper matcher: a stop fill this tick already covered. Do not MARKET lots.
   if (input.workingStopsFilledThisTick > 0) return "already_covered"
   if (open === 0) return filled > 0 ? "already_covered" : "phantom_empty"
-  // Stop already filled for the open size while the position feed still shows that size.
-  // Do not drop this when status waits for a flat quantity. A filled stop is already the cover.
-  if (filled >= open) return "already_covered"
+  // Nothing left to send: the episode's covers already account for the displayed net
+  // (including a stale position feed that still shows the pre-fill size).
+  if (coverQty <= 0) return "already_covered"
   if (input.hasWorkingProtectiveStop) return "convert_working_stop"
   return "place_flatten"
+}
+
+/**
+ * Live cover size.
+ *
+ * Kite net is the quantity we would trade. Episode fills are covers since this
+ * book opened — not every buy/sell on the symbol today.
+ *
+ * Subtract a fill only when the kite net has not already dropped by that much
+ * from the size the episode opened at. If the open size is unknown, trust the
+ * kite net, and use a tighter ledger only as evidence that Kite has not absorbed
+ * a fill yet. A fill that covers the whole displayed net sends nothing, so a
+ * second market order cannot reverse the book while the position feed lags.
+ */
+export function chaseCoverOrderQty(input: {
+  kiteQty: number
+  ledgerQty?: number | null
+  openedQty?: number | null
+  episodeFilledCoverQty: number
+}): number {
+  const kite = Number(input.kiteQty) || 0
+  const kiteAbs = Math.abs(kite)
+  if (kiteAbs === 0) return 0
+  const filled = Math.max(0, Number(input.episodeFilledCoverQty) || 0)
+  if (filled >= kiteAbs) return 0
+
+  const opened = input.openedQty == null ? null : Number(input.openedQty)
+  const openedKnown =
+    opened != null &&
+    Number.isFinite(opened) &&
+    opened !== 0 &&
+    Math.sign(opened) === Math.sign(kite)
+  if (openedKnown) {
+    const reflected = Math.max(0, Math.abs(opened) - kiteAbs)
+    const unreflected = Math.max(0, filled - reflected)
+    return Math.max(0, kiteAbs - unreflected)
+  }
+
+  const ledger = input.ledgerQty == null ? null : Number(input.ledgerQty)
+  if (ledger != null && ledger !== 0 && Math.sign(ledger) === Math.sign(kite)) {
+    const gap = Math.max(0, kiteAbs - Math.abs(ledger))
+    if (gap > 0) return Math.max(0, kiteAbs - Math.min(filled, gap))
+  }
+  return kiteAbs
+}
+
+/**
+ * 09:16 opposite-signal exit. The order is a flatten (halt and trading-disabled
+ * still allow it). Status becomes AWAITING_SIGNAL only once quantity is flat.
+ */
+export function planChaseMorningExit(input: { side: "LONG" | "SHORT"; netQty: number }): {
+  status: "LONG" | "SHORT" | "AWAITING_SIGNAL"
+  order: { side: "BUY" | "SELL"; purpose: "FLATTEN"; quantity: number } | null
+} {
+  const quantity = chaseFlattenQty(input.netQty)
+  const stillOpen = input.side === "LONG" ? input.netQty > 0 : input.netQty < 0
+  if (!stillOpen || quantity <= 0) {
+    return { status: "AWAITING_SIGNAL", order: null }
+  }
+  return {
+    status: input.side,
+    order: {
+      side: input.side === "LONG" ? "SELL" : "BUY",
+      purpose: "FLATTEN",
+      quantity,
+    },
+  }
 }
 
 /** Filled protective stop size from today's Kite book (COMPLETE / partial fill). */
@@ -158,6 +243,65 @@ export function chaseProtectiveStopFillQty(input: {
     if (!isChaseProtectiveStopOrder(o)) continue
     const qty = Number(o.filled_quantity || 0)
     if (qty > 0) filled += qty
+  }
+  return filled
+}
+
+function isChaseFlattenFill(o: { order_type?: string | null; purpose?: string | null }): boolean {
+  const type = (o.order_type || "").toUpperCase().trim()
+  if (type === "MARKET" || type === "LIMIT") return true
+  const purpose = (o.purpose || "").toUpperCase()
+  return purpose === "FLATTEN" || purpose === "EXIT" || purpose === "SQUARE_OFF"
+}
+
+function coverOrderTimeMs(o: {
+  exchange_timestamp?: string | null
+  order_timestamp?: string | null
+}): number | null {
+  const raw = (o.exchange_timestamp || o.order_timestamp || "").trim()
+  if (!raw) return null
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)
+  const normalized = hasZone ? raw : `${raw.replace(" ", "T")}+05:30`
+  const ms = new Date(normalized).getTime()
+  return Number.isFinite(ms) ? ms : null
+}
+
+/**
+ * Filled covers for the current open book: protective stops and market/limit
+ * flattens on the cover side, at or after `openedAt`. Earlier round-trips
+ * the same day do not reduce this book's cover.
+ */
+export function chaseEpisodeCoverFillQty(input: {
+  tradingsymbol: string
+  side: "BUY" | "SELL"
+  openedAt?: Date | string | null
+  kiteOrders?: Array<{
+    tradingsymbol?: string | null
+    transaction_type?: string | null
+    status?: string | null
+    filled_quantity?: number | null
+    order_type?: string | null
+    trigger_price?: number | null
+    purpose?: string | null
+    exchange_timestamp?: string | null
+    order_timestamp?: string | null
+  }>
+}): number {
+  const openedMs = input.openedAt == null ? null : new Date(input.openedAt).getTime()
+  const haveOpened = openedMs != null && Number.isFinite(openedMs)
+  let filled = 0
+  for (const o of input.kiteOrders ?? []) {
+    if (o.tradingsymbol !== input.tradingsymbol || o.transaction_type !== input.side) continue
+    const status = (o.status || "").toUpperCase().trim()
+    if (status === "CANCELLED" || status === "REJECTED") continue
+    if (!isChaseProtectiveStopOrder(o) && !isChaseFlattenFill(o)) continue
+    const qty = Number(o.filled_quantity || 0)
+    if (!(qty > 0)) continue
+    if (haveOpened) {
+      const at = coverOrderTimeMs(o)
+      if (at != null && at < openedMs) continue
+    }
+    filled += qty
   }
   return filled
 }

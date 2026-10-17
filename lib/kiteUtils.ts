@@ -29,6 +29,11 @@ import logger from "./logger"
 import { aggregateFillsBySymbol } from "./pnl"
 import { jobExecutions, orders as ledgerOrders } from "./schema"
 import {
+  KitePositionsUnavailableError,
+  kiteNetQuantity,
+  rethrowKiteQtyFailure,
+} from "./trading/kitePositions"
+import {
   amendWorkingStopPrices,
   applyBrokerOrderSnapshot,
   getOpenOrders,
@@ -1759,13 +1764,14 @@ export async function getNetPositionQty(
 ): Promise<number> {
   try {
     const positions = await kite.getPositions()
-    const net = (positions.net as any[]).find((p: any) => p.tradingsymbol === tradingsymbol)
-    return Number(net?.quantity || 0)
+    return kiteNetQuantity(positions, tradingsymbol)
   } catch (e) {
     logger.warn("[getNetPositionQty] kite positions unavailable", e)
-    if (opts?.strict) throw e
+    if (rethrowKiteQtyFailure(opts)) {
+      if (e instanceof KitePositionsUnavailableError) throw e
+      throw new KitePositionsUnavailableError()
+    }
   }
-  if (opts?.ledgerFallback === false) return 0
   const ledger = (await getOpenPositions()).filter(
     p => p.tradingsymbol === tradingsymbol && p.quantity !== 0
   )

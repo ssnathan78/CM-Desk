@@ -61,8 +61,11 @@ export function decideChaseEntryAction(input: {
   side: "LONG" | "SHORT"
   hasOpenEntryOrder: boolean
   otherBookOpen?: boolean
+  /** False when a live Kite position read failed. Undefined means the caller did not check. */
+  kiteQtyKnown?: boolean
 }): ChaseFillDecision {
   if (!input.automated || input.quantity <= 0) return "signal_only"
+  if (input.kiteQtyKnown === false) return "wait_open_order"
   if (input.otherBookOpen) return "other_book_open"
   const openSide = chaseSideFromNetQty(input.netQty)
   if (openSide && openSide !== input.side) return "leftover_open"
@@ -77,7 +80,8 @@ export async function resolveChaseBookBreakdown(
   accessToken: string
 ) {
   const settings = await getRiskSettings()
-  const paperBook = isMockOrder() || isPaperStrategy(settings, "CHASE")
+  const processMock = isMockOrder()
+  const paperBook = processMock || isPaperStrategy(settings, "CHASE")
   if (!tradingsymbol) {
     return {
       ...chaseBookFromSources({
@@ -86,7 +90,7 @@ export async function resolveChaseBookBreakdown(
         paperLedgerQty: 0,
         liveLedgerQty: 0,
       }),
-      kiteQtyKnown: paperBook,
+      kiteQtyKnown: processMock,
     }
   }
   const { getOpenPositions } = await import("./trading/ledger")
@@ -95,8 +99,10 @@ export async function resolveChaseBookBreakdown(
     tradingsymbol
   )
   let kiteQty = 0
-  let kiteQtyKnown = paperBook
-  if (!paperBook) {
+  // Mock has no broker book. Paper on a live process must still read Kite so a
+  // real leftover blocks the paper entry. A failed read is unknown, not flat.
+  let kiteQtyKnown = processMock
+  if (!processMock) {
     try {
       kiteQty = await getNetPositionQty(getKiteInstance(accessToken), tradingsymbol, {
         ledgerFallback: false,

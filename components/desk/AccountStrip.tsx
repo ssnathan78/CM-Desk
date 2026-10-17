@@ -16,10 +16,10 @@ type Portfolio = {
 export default function AccountStrip({ portfolio }: { portfolio?: Portfolio | null }) {
   const pairs = [
     ["Cash", formatInr(portfolio?.availableCash)],
-    ["Portfolio", formatInr(portfolio?.portfolioValue)],
+    ["Margin + open MTM", formatInr(portfolio?.portfolioValue)],
     ["Gross exposure", formatInr(portfolio?.grossExposure)],
     ["Drawdown", formatInr(portfolio?.drawdown)],
-    ["Realized", portfolio?.realizedPnl],
+    ["Realized lifetime", portfolio?.realizedPnl],
     ["Unrealized", portfolio?.unrealizedPnl],
   ] as const
 
@@ -29,6 +29,10 @@ export default function AccountStrip({ portfolio }: { portfolio?: Portfolio | nu
         <Typography variant="subtitle2">Account</Typography>
       </AccordionSummary>
       <AccordionDetails>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+          Margin + open MTM is Kite available margin plus desk unrealized. Realized lifetime is
+          stored on the books. Neither is Sessions net or Kite day P&L.
+        </Typography>
         <Box
           sx={{
             display: "flex",
@@ -42,7 +46,7 @@ export default function AccountStrip({ portfolio }: { portfolio?: Portfolio | nu
               <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                 {label}
               </Typography>
-              {label === "Realized" || label === "Unrealized" ? (
+              {label === "Realized lifetime" || label === "Unrealized" ? (
                 <Figure kind="inr" value={value as string} pnl align="left" />
               ) : (
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>

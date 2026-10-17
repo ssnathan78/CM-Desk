@@ -34,6 +34,30 @@ export function mapKiteOrderStatus(args: {
   return status
 }
 
+/**
+ * The order's filled quantity advances only after a fill row exists.
+ * A failed insert leaves the previous quantity so the next snapshot retries.
+ * FILLED / PARTIALLY_FILLED are held back in that case; cancel and reject still land.
+ */
+export function commitBrokerFillProgress(input: {
+  previousFilledQty: number
+  kiteFilledQty: number
+  fillRowSaved: boolean
+  fromStatus: string
+  nextStatus: string
+}): { filledQty: number; status: string } {
+  const prev = Math.max(0, Math.trunc(Number(input.previousFilledQty)) || 0)
+  const kite = Math.max(0, Math.trunc(Number(input.kiteFilledQty)) || 0)
+  if (kite > prev && !input.fillRowSaved) {
+    const hold = input.nextStatus === "FILLED" || input.nextStatus === "PARTIALLY_FILLED"
+    return { filledQty: prev, status: hold ? input.fromStatus : input.nextStatus }
+  }
+  return {
+    filledQty: Math.max(prev, kite),
+    status: input.fromStatus === "FILLED" ? "FILLED" : input.nextStatus,
+  }
+}
+
 export function fillFingerprint(args: {
   brokerOrderId?: string | null
   brokerTradeId?: string | null

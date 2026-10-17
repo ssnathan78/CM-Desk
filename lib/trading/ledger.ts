@@ -10,6 +10,7 @@ import {
   orderEvents,
   orders,
   positions,
+  trades,
   tradingAccounts,
   tradingDecisions,
 } from "../schema"
@@ -20,10 +21,11 @@ import {
   incrementalFillFromAverages,
   inferPurpose,
   netRealized,
+  orphanCloseTradeFields,
   positionMarkSnapshot,
 } from "./accounting"
-import { fillFingerprint, mapKiteOrderStatus } from "./kiteMap"
-import { moneyFromUnknown, moneyMulQty, moneyToString } from "./money"
+import { commitBrokerFillProgress, fillFingerprint, mapKiteOrderStatus } from "./kiteMap"
+import { type Money, moneyFromUnknown, moneyMulQty, moneyToString } from "./money"
 import {
   exitReasonForOrderPurpose,
   shouldRecordOrderStatusEvent,
@@ -505,87 +507,25 @@ export async function applyBrokerOrderSnapshot(
       ? new Date(kiteOrder.order_timestamp)
       : now
 
-  const patch: Record<string, unknown> = {
-    brokerOrderId: brokerOrderId || row.brokerOrderId,
-    exchangeOrderId: kiteOrder.exchange_order_id || row.exchangeOrderId,
-    parentBrokerOrderId: kiteOrder.parent_order_id || row.parentBrokerOrderId,
-    brokerStatus: kiteOrder.status || row.brokerStatus,
-    rawBroker: kiteOrder as Record<string, unknown>,
-    filledQty: Math.max(row.filledQty ?? 0, filled),
-    remainingQty: Math.max(0, remaining),
-    averageFillPrice:
-      kiteOrder.average_price != null ? String(kiteOrder.average_price) : row.averageFillPrice,
-    rejectReason:
-      nextStatus === "REJECTED" ? kiteOrder.status_message || row.rejectReason : row.rejectReason,
-    cancelReason:
-      nextStatus === "CANCELLED" ? kiteOrder.status_message || row.cancelReason : row.cancelReason,
-    updatedAt: now,
-  }
-  if (fromStatus !== nextStatus || nextStatus === "PARTIALLY_FILLED") {
-    patch.status = fromStatus === "FILLED" ? "FILLED" : nextStatus
-  }
-  if (
-    nextStatus === "SUBMITTED" ||
-    nextStatus === "ACCEPTED" ||
-    nextStatus === "PARTIALLY_FILLED" ||
-    nextStatus === "FILLED"
-  ) {
-    patch.submittedAt = row.submittedAt ?? occurred
-  }
-  if (nextStatus === "ACCEPTED" || nextStatus === "PARTIALLY_FILLED" || nextStatus === "FILLED") {
-    patch.acceptedAt = row.acceptedAt ?? occurred
-  }
-  if (nextStatus === "FILLED") patch.filledAt = row.filledAt ?? occurred
-  if (nextStatus === "CANCELLED") patch.cancelledAt = row.cancelledAt ?? occurred
-
-  await db.update(orders).set(patch).where(eq(orders.id, row.id))
-  if (shouldRecordOrderStatusEvent(fromStatus, patch.status as string | undefined)) {
-    await appendOrderEvent({
-      orderId: row.id,
-      fromStatus,
-      toStatus: (patch.status as OrderStatus) || nextStatus,
-      eventType: nextStatus,
-      brokerStatus: kiteOrder.status,
-      filledQty: filled,
-      remainingQty: remaining,
-      message: kiteOrder.status_message,
-      raw: kiteOrder as Record<string, unknown>,
-      occurredAt: occurred,
-    })
-    if (nextStatus === "REJECTED") {
-      await recordAuditEvent({
-        eventType: "ORDER_REJECTED",
-        orderId: row.id,
-        jobId: row.jobId,
-        summary: kiteOrder.status_message || "rejected",
-        idempotencyKey: `rej:${row.id}:${brokerOrderId || ""}`,
-      })
-    }
-    if (nextStatus === "CANCELLED") {
-      await recordAuditEvent({
-        eventType: "ORDER_CANCELLED",
-        orderId: row.id,
-        jobId: row.jobId,
-        summary: [row.tradingsymbol, kiteOrder.status_message || "cancelled"]
-          .filter(Boolean)
-          .join(" — "),
-        idempotencyKey: `can:${row.id}:${brokerOrderId || ""}`,
-      })
-    }
-  }
-
+  const previousFilled = row.filledQty ?? 0
   const fillIds: string[] = []
-  if (
-    filled > (row.filledQty ?? 0) &&
-    (nextStatus === "PARTIALLY_FILLED" || nextStatus === "FILLED" || nextStatus === "CANCELLED")
-  ) {
+  let fillRowSaved = filled <= previousFilled
+  const booksFill =
+    filled > previousFilled &&
+    (nextStatus === "PARTIALLY_FILLED" ||
+      nextStatus === "FILLED" ||
+      nextStatus === "CANCELLED" ||
+      nextStatus === "REJECTED")
+  if (booksFill) {
     const incremental = incrementalFillFromAverages({
-      previousFilledQty: row.filledQty ?? 0,
+      previousFilledQty: previousFilled,
       previousAverage: moneyFromUnknown(row.averageFillPrice),
       newFilledQty: filled,
       newAverage: moneyFromUnknown(kiteOrder.average_price),
     })
-    if (incremental) {
+    if (!incremental) {
+      fillRowSaved = true
+    } else {
       const fillId = await insertFill({
         orderId: row.id,
         jobId: row.jobId,
@@ -609,6 +549,7 @@ export async function applyBrokerOrderSnapshot(
         raw: kiteOrder as Record<string, unknown>,
       })
       if (fillId) {
+        fillRowSaved = true
         fillIds.push(fillId)
         await applyFillById(fillId, context?.exitReason ?? exitReasonForOrderPurpose(row.purpose))
         await recordAuditEvent({
@@ -619,6 +560,83 @@ export async function applyBrokerOrderSnapshot(
           idempotencyKey: `fill:${fillId}`,
         })
       }
+    }
+  }
+
+  const committed = commitBrokerFillProgress({
+    previousFilledQty: previousFilled,
+    kiteFilledQty: filled,
+    fillRowSaved,
+    fromStatus,
+    nextStatus,
+  })
+
+  const patch: Record<string, unknown> = {
+    brokerOrderId: brokerOrderId || row.brokerOrderId,
+    exchangeOrderId: kiteOrder.exchange_order_id || row.exchangeOrderId,
+    parentBrokerOrderId: kiteOrder.parent_order_id || row.parentBrokerOrderId,
+    brokerStatus: kiteOrder.status || row.brokerStatus,
+    rawBroker: kiteOrder as Record<string, unknown>,
+    filledQty: committed.filledQty,
+    remainingQty: Math.max(0, remaining),
+    averageFillPrice:
+      kiteOrder.average_price != null ? String(kiteOrder.average_price) : row.averageFillPrice,
+    rejectReason:
+      nextStatus === "REJECTED" ? kiteOrder.status_message || row.rejectReason : row.rejectReason,
+    cancelReason:
+      nextStatus === "CANCELLED" ? kiteOrder.status_message || row.cancelReason : row.cancelReason,
+    updatedAt: now,
+  }
+  if (fromStatus !== committed.status || committed.status === "PARTIALLY_FILLED") {
+    patch.status = committed.status
+  }
+  if (
+    nextStatus === "SUBMITTED" ||
+    nextStatus === "ACCEPTED" ||
+    nextStatus === "PARTIALLY_FILLED" ||
+    nextStatus === "FILLED"
+  ) {
+    patch.submittedAt = row.submittedAt ?? occurred
+  }
+  if (nextStatus === "ACCEPTED" || nextStatus === "PARTIALLY_FILLED" || nextStatus === "FILLED") {
+    patch.acceptedAt = row.acceptedAt ?? occurred
+  }
+  if (committed.status === "FILLED") patch.filledAt = row.filledAt ?? occurred
+  if (committed.status === "CANCELLED") patch.cancelledAt = row.cancelledAt ?? occurred
+
+  await db.update(orders).set(patch).where(eq(orders.id, row.id))
+  if (shouldRecordOrderStatusEvent(fromStatus, patch.status as string | undefined)) {
+    await appendOrderEvent({
+      orderId: row.id,
+      fromStatus,
+      toStatus: (patch.status as OrderStatus) || nextStatus,
+      eventType: (patch.status as OrderStatus) || nextStatus,
+      brokerStatus: kiteOrder.status,
+      filledQty: committed.filledQty,
+      remainingQty: remaining,
+      message: kiteOrder.status_message,
+      raw: kiteOrder as Record<string, unknown>,
+      occurredAt: occurred,
+    })
+    if (committed.status === "REJECTED") {
+      await recordAuditEvent({
+        eventType: "ORDER_REJECTED",
+        orderId: row.id,
+        jobId: row.jobId,
+        summary: kiteOrder.status_message || "rejected",
+        idempotencyKey: `rej:${row.id}:${brokerOrderId || ""}`,
+      })
+    }
+    if (committed.status === "CANCELLED") {
+      await recordAuditEvent({
+        eventType: "ORDER_CANCELLED",
+        orderId: row.id,
+        jobId: row.jobId,
+        summary: [row.tradingsymbol, kiteOrder.status_message || "cancelled"]
+          .filter(Boolean)
+          .join(" — "),
+        idempotencyKey: `can:${row.id}:${brokerOrderId || ""}`,
+      })
     }
   }
 
@@ -929,6 +947,9 @@ export async function applyFillById(fillId: string, exitReason?: ExitReason): Pr
       result,
       fill,
       exitReason,
+      quantityBefore: before.quantity,
+      averageBefore: before.averagePrice,
+      openedAt: before.openedAt,
     })
 
     await client.query(`UPDATE fills SET applied_at = now() WHERE id = $1`, [fill.id])
@@ -978,6 +999,9 @@ async function syncTrade(
     result: ReturnType<typeof applyFillToPosition>
     fill: Record<string, unknown>
     exitReason?: ExitReason
+    quantityBefore: number
+    averageBefore: Money
+    openedAt: Date | null
   }
 ) {
   const { result, fill } = args
@@ -1025,8 +1049,46 @@ async function syncTrade(
       result.eventKind === "REDUCED" ||
       result.eventKind === "CLOSED"
     ) {
-      const direction = directionFromQty(result.next.quantity || -result.closedQty)
-      if (direction === "FLAT" && result.closedQty > 0) {
+      const direction = directionFromQty(args.quantityBefore)
+      if (result.next.quantity === 0 && result.closedQty > 0 && direction !== "FLAT") {
+        const fields = orphanCloseTradeFields({
+          closedQty: result.closedQty,
+          averageBefore: args.averageBefore,
+          exitPrice: moneyFromUnknown(fill.price),
+          realizedDelta: result.realizedDelta,
+          fee: moneyFromUnknown(fill.fee_amount),
+          closedAt: new Date(String(fill.occurred_at)),
+          openedAt: args.openedAt,
+        })
+        await client.query(
+          `INSERT INTO trades (
+             account_id, job_id, decision_id, position_id, strategy, exchange, tradingsymbol,
+             product, direction, status, entry_qty, exit_qty, average_entry, average_exit,
+             gross_pnl, fees, net_pnl, entry_at, exit_at, exit_reason, provenance
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'CLOSED',$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+          [
+            args.accountId,
+            args.jobId,
+            args.decisionId,
+            args.positionId,
+            args.strategy,
+            args.exchange,
+            args.tradingsymbol,
+            args.product,
+            direction,
+            fields.entryQty,
+            fields.exitQty,
+            fields.averageEntry,
+            fields.averageExit,
+            fields.gross,
+            fields.fees,
+            fields.net,
+            fields.entryAt,
+            fields.exitAt,
+            args.exitReason ?? "UNKNOWN",
+            fill.provenance || "LIVE",
+          ]
+        )
         return
       }
       const ins = await client.query(
@@ -1346,6 +1408,37 @@ export async function amendWorkingStopPrices(input: {
     message: `SL amended to trigger ${stopPrice} limit ${limitPrice}`,
   })
   return true
+}
+
+/** Open round-trip size for cover math. Current position qty is not the opened size. */
+export async function openRoundTripSize(
+  tradingsymbol: string,
+  strategy = "CHASE"
+): Promise<{ signedQty: number; openedAt: Date } | null> {
+  const rows = await db
+    .select({
+      entryQty: trades.entryQty,
+      direction: trades.direction,
+      entryAt: trades.entryAt,
+    })
+    .from(trades)
+    .where(
+      and(
+        eq(trades.tradingsymbol, tradingsymbol),
+        eq(trades.status, "OPEN"),
+        eq(trades.strategy, strategy)
+      )
+    )
+    .orderBy(desc(trades.entryAt))
+    .limit(1)
+  const row = rows[0]
+  if (!row) return null
+  const magnitude = Math.abs(Number(row.entryQty) || 0)
+  if (magnitude <= 0) return null
+  return {
+    signedQty: row.direction === "SHORT" ? -magnitude : magnitude,
+    openedAt: new Date(row.entryAt),
+  }
 }
 
 export async function getOpenPositions() {

@@ -184,6 +184,62 @@ export function applyFillToPosition(
   }
 }
 
+/**
+ * Open unrealized from an explicit mark. Qty 0 is 0. A missing mark keeps the
+ * stored figure — it does not substitute the average, which would print 0.
+ */
+export function unrealizedForPosition(input: {
+  quantity: unknown
+  averageEntryPrice: unknown
+  markPrice?: string | null
+  storedUnrealized?: unknown
+}): Money {
+  const quantity = signedQty(input.quantity)
+  if (quantity === 0) return moneyZero()
+  if (input.markPrice != null && input.markPrice !== "") {
+    return unrealizedPnl(
+      quantity,
+      moneyFromUnknown(input.averageEntryPrice),
+      moneyFromUnknown(input.markPrice)
+    )
+  }
+  return moneyFromUnknown(input.storedUnrealized)
+}
+
+/** A closing fill with no open trade row. Sessions Net sums this closed round-trip. */
+export function orphanCloseTradeFields(input: {
+  closedQty: number
+  averageBefore: Money
+  exitPrice: Money
+  realizedDelta: Money
+  fee: Money
+  closedAt: Date
+  openedAt: Date | null
+}): {
+  entryQty: number
+  exitQty: number
+  averageEntry: string
+  averageExit: string
+  gross: string
+  fees: string
+  net: string
+  entryAt: Date
+  exitAt: Date
+} {
+  const qty = Math.max(0, Math.trunc(input.closedQty) || 0)
+  return {
+    entryQty: qty,
+    exitQty: qty,
+    averageEntry: moneyToString(input.averageBefore),
+    averageExit: moneyToString(input.exitPrice),
+    gross: moneyToString(input.realizedDelta),
+    fees: moneyToString(input.fee),
+    net: moneyToString(netRealized(input.realizedDelta, input.fee)),
+    entryAt: input.openedAt ?? input.closedAt,
+    exitAt: input.closedAt,
+  }
+}
+
 export function unrealizedPnl(quantity: number, averagePrice: Money, markPrice: Money): Money {
   if (quantity === 0) return moneyZero()
   if (quantity > 0) {

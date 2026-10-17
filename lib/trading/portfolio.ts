@@ -27,7 +27,7 @@ import {
   positionMarkSnapshot,
   presentLedgerPosition,
   signedQty,
-  unrealizedPnl,
+  unrealizedForPosition,
 } from "./accounting"
 import { type Money, moneyAdd, moneyFromUnknown, moneyToString, moneyZero } from "./money"
 import { groupTodayBooks, type TodayGroupRow } from "./todayGroups"
@@ -84,22 +84,22 @@ export async function computePortfolio(
     if (book !== "ALL" && !provenanceInBook(pos.provenance, book)) continue
     realized = moneyAdd(realized, moneyFromUnknown(pos.realizedPnl))
     fees = moneyAdd(fees, moneyFromUnknown(pos.fees))
-    const mark =
+    const explicitMark =
       marks?.get(`${pos.exchange}:${pos.tradingsymbol}`) ??
-      pos.markPrice ??
-      pos.averageEntryPrice ??
-      "0"
-    const u = unrealizedPnl(
-      pos.quantity,
-      moneyFromUnknown(pos.averageEntryPrice),
-      moneyFromUnknown(mark)
-    )
+      (pos.markPrice != null && pos.markPrice !== "" ? pos.markPrice : null)
+    const u = unrealizedForPosition({
+      quantity: pos.quantity,
+      averageEntryPrice: pos.averageEntryPrice,
+      markPrice: explicitMark,
+      storedUnrealized: pos.unrealizedPnl,
+    })
     unrealized = moneyAdd(unrealized, u)
-    const mv = marketValue(pos.quantity, moneyFromUnknown(mark))
+    const exposureMark = explicitMark ?? "0"
+    const mv = marketValue(signedQty(pos.quantity), moneyFromUnknown(exposureMark))
     netExposure = moneyAdd(netExposure, mv)
-    const absMv = marketValue(Math.abs(pos.quantity), moneyFromUnknown(mark))
+    const absMv = marketValue(Math.abs(signedQty(pos.quantity)), moneyFromUnknown(exposureMark))
     grossExposure = moneyAdd(grossExposure, absMv)
-    if (pos.quantity !== 0) openCount += 1
+    if (signedQty(pos.quantity) !== 0) openCount += 1
     const key = pos.strategy || "UNATTRIBUTED"
     const bucket = byStrategy.get(key) ?? { realized: moneyZero(), unrealized: moneyZero() }
     bucket.realized = moneyAdd(bucket.realized, moneyFromUnknown(pos.realizedPnl))
@@ -164,12 +164,15 @@ export async function loadTodayGroups(book: TradeBookFilter = "ALL"): Promise<To
     .filter(row => book === "ALL" || provenanceInBook(row.provenance, book))
     .filter(row => signedQty(row.quantity) !== 0)
     .map(row => {
-      const qty = signedQty(row.quantity)
-      const mark = row.markPrice ?? row.averageEntryPrice ?? "0"
       return {
         strategy: row.strategy,
         unrealized: moneyToString(
-          unrealizedPnl(qty, moneyFromUnknown(row.averageEntryPrice), moneyFromUnknown(mark))
+          unrealizedForPosition({
+            quantity: row.quantity,
+            averageEntryPrice: row.averageEntryPrice,
+            markPrice: row.markPrice,
+            storedUnrealized: row.unrealizedPnl,
+          })
         ),
       }
     })
@@ -186,7 +189,7 @@ export async function countOpenStrategyPositions(
   for (const pos of rows) {
     if (pos.strategy !== strategy) continue
     if (book !== "ALL" && !provenanceInBook(pos.provenance, book)) continue
-    if (pos.quantity !== 0) openPositionCount += 1
+    if (signedQty(pos.quantity) !== 0) openPositionCount += 1
   }
   return openPositionCount
 }

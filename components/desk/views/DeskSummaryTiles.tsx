@@ -113,7 +113,8 @@ export default function DeskSummaryTiles({
         component="button"
         type="button"
         onClick={() => onNavigate("books", "positions")}
-        aria-label={`Cash ${formatInr(p?.availableCash)}. Realized ${formatInr(p?.realizedPnl)}. Unrealized ${formatInr(p?.unrealizedPnl)}. Portfolio ${formatInr(p?.portfolioValue)}. Gross exposure ${formatInr(p?.grossExposure)}. Drawdown ${formatInr(p?.drawdown)}.`}
+        title="Margin + open MTM is Kite available margin plus desk unrealized (average cost versus mark). It is not Kite equity and not Sessions net. Realized lifetime is stored on the position rows, not today's closed round-trips. Drawdown is the peak of that margin-plus-MTM figure minus the current one."
+        aria-label={`Cash ${formatInr(p?.availableCash)}. Realized lifetime ${formatInr(p?.realizedPnl)}. Unrealized ${formatInr(p?.unrealizedPnl)}. Margin plus open mark ${formatInr(p?.portfolioValue)}. Gross exposure ${formatInr(p?.grossExposure)}. Drawdown ${formatInr(p?.drawdown)}.`}
         sx={{
           ...deskTileSx,
           display: "grid",
@@ -125,8 +126,8 @@ export default function DeskSummaryTiles({
         {(
           [
             ["Cash", formatInr(p?.availableCash)],
-            ["Portfolio", formatInr(p?.portfolioValue)],
-            ["Realized", formatInr(p?.realizedPnl)],
+            ["Margin + open MTM", formatInr(p?.portfolioValue)],
+            ["Realized lifetime", formatInr(p?.realizedPnl)],
             ["Gross exposure", formatInr(p?.grossExposure)],
             ["Unrealized", formatInr(p?.unrealizedPnl)],
             ["Drawdown", formatInr(p?.drawdown)],

@@ -1,5 +1,6 @@
 import { applyFillToPosition, emptyPosition, unrealizedPnl } from "../../../lib/trading/accounting"
-import { mapKiteOrderStatus } from "../../../lib/trading/kiteMap"
+import { commitBrokerFillProgress, mapKiteOrderStatus } from "../../../lib/trading/kiteMap"
+import { kiteNetQuantity, rethrowKiteQtyFailure } from "../../../lib/trading/kitePositions"
 import { moneyFromString, moneyToString } from "../../../lib/trading/money"
 import { canTransitionOrder } from "../../../lib/trading/stateMachine"
 
@@ -63,5 +64,38 @@ describe("ledger invariants", () => {
         unrealizedPnl(closed.next.quantity, closed.next.averagePrice, moneyFromString("999"))
       )
     ).toBe("0.0000")
+  })
+
+  it("does not mark an order filled when the fill row was not saved", () => {
+    expect(
+      commitBrokerFillProgress({
+        previousFilledQty: 0,
+        kiteFilledQty: 65,
+        fillRowSaved: false,
+        fromStatus: "ACCEPTED",
+        nextStatus: "FILLED",
+      })
+    ).toEqual({ filledQty: 0, status: "ACCEPTED" })
+    expect(
+      commitBrokerFillProgress({
+        previousFilledQty: 0,
+        kiteFilledQty: 65,
+        fillRowSaved: true,
+        fromStatus: "ACCEPTED",
+        nextStatus: "FILLED",
+      })
+    ).toEqual({ filledQty: 65, status: "FILLED" })
+  })
+
+  it("treats a failed Kite position book as unavailable, and an empty net as flat", () => {
+    expect(rethrowKiteQtyFailure({ ledgerFallback: false })).toBe(true)
+    expect(rethrowKiteQtyFailure({ strict: true })).toBe(true)
+    expect(rethrowKiteQtyFailure()).toBe(false)
+    expect(kiteNetQuantity({ net: [] }, "NIFTY26OCTFUT")).toBe(0)
+    expect(kiteNetQuantity({ net: [{ tradingsymbol: "NIFTY26OCTFUT", quantity: -65 }] }, "NIFTY26OCTFUT")).toBe(
+      -65
+    )
+    expect(() => kiteNetQuantity(null, "NIFTY26OCTFUT")).toThrow(/unavailable/)
+    expect(() => kiteNetQuantity({}, "NIFTY26OCTFUT")).toThrow(/unavailable/)
   })
 })

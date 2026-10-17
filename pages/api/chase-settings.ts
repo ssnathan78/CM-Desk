@@ -15,7 +15,7 @@ import withSession from "../../lib/session"
 async function chaseBookStatuses(books: { instrument: string }[]) {
   const { getChaseStatus } = await import("../../lib/drizzleDbUtils")
   const { getOpenPositions } = await import("../../lib/trading/ledger")
-  const { signedQty } = await import("../../lib/trading/accounting")
+  const { presentLedgerPosition, signedQty } = await import("../../lib/trading/accounting")
   const { chaseIndexFromSymbol } = await import("../../lib/chaseValidation")
   const { moneyAdd, moneyFromUnknown, moneyToString, moneyZero } = await import(
     "../../lib/trading/money"
@@ -31,8 +31,9 @@ async function chaseBookStatuses(books: { instrument: string }[]) {
       let netQty = 0
       let openMark = moneyZero()
       for (const leg of legs) {
-        netQty += signedQty(leg.quantity)
-        openMark = moneyAdd(openMark, moneyFromUnknown(leg.unrealizedPnl))
+        const view = presentLedgerPosition(leg)
+        netQty += signedQty(view.quantity)
+        openMark = moneyAdd(openMark, moneyFromUnknown(view.unrealizedPnl))
       }
       return {
         instrument: book.instrument,

@@ -110,7 +110,7 @@ AWAITING_SHORT ──entry SL-M @ day's low──►  SHORT
 
 Operator escape hatch: **Chase page → Reset signal** (one index) or **Desk → Risk → Reset Chase to fresh signal** (every Chase index). `POST /api/chase-settings` `action: reset-signal` with `instrument` resets one book; omitting `instrument` resets Nifty, BankNifty, FinNifty, and Midcap Nifty. Reset is refused while that book still has futures quantity, so the position and LONG/SHORT stay. On a flat book, or a pending entry that never filled, it returns the signal to `AWAITING_SIGNAL` and cancels the pending entry. It does not send a flatten.
 
-Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit, and quantity when the open book changed) instead of leaving the old trigger in place. If the protective stop has already filled (or Kite/ledger qty is still catching up), the minute job must **not** place a second MARKET flatten — that would reverse into a new position with no entry signal. If `chase_status` is `AWAITING_SIGNAL` but the book still has qty, Chase **adopts** LONG/SHORT from that qty and will not fire the opposite entry. Trails and new stops use **open qty**, not configured lots.
+Open LONG/SHORT: no new entries until flat. At **09:16 IST** (`updateSL`) and **13:15 IST** (`generateSignal`, days after entry) trail the stop. Desk → Signals stores both trails (09:16 was previously Slack-only). Every minute, 1-minute candles detect SL breach or entry trigger (`updateSL`). `placeSL` **amends** a working paper or live SL (trigger + limit, and quantity when the open book changed) instead of leaving the old trigger in place. If the protective stop or a market flatten for this open book has already filled (or Kite qty is still catching up), the minute job must **not** place a second MARKET flatten — that would reverse into a new position with no entry signal. Cover size is the open Kite quantity. Fills from an earlier round-trip the same day are ignored. A fill is subtracted only when the kite net has not already dropped by that much from the size the round-trip opened at. A failed Kite position read is unknown, not flat: Chase does not enter, and it does not clear LONG/SHORT. Paper mode on a live process still reads Kite so a real leftover blocks the paper book. If `chase_status` is `AWAITING_SIGNAL` but the book still has qty, Chase **adopts** LONG/SHORT from that qty and will not fire the opposite entry. Trails and new stops use **open qty**, not configured lots.
 
 EOD (~16:15 EMA job, `hour === 16`): pending AWAITING_LONG/SHORT reset to AWAITING_SIGNAL; no new signal from the 16:15 bar.
 
@@ -164,7 +164,7 @@ Uses that close vs EMA and T1 bands. **Long** (code in `processUpdateSL`):
 | `close >= longT1` | SL = max(old, EMA) |
 | `EMA <= close <= longT1` | SL = max(old, round((prevDayLow + EMA) / 2)) |
 | `shortT1 <= close <= EMA` | SL = max(old, day's low so far) |
-| `close <= shortT1` | **Exit MARKET** (CMP) |
+| `close <= shortT1` | **Exit MARKET** (CMP), purpose flatten. Status stays LONG/SHORT until the book is flat. |
 
 **Short:** mirrored (`min` instead of `max`; prev **high**; exit if close **≥ longT1**).
 

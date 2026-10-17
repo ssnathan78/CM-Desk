@@ -223,6 +223,19 @@ describe("decideChaseEntryAction", () => {
     ).toBe("signal_only")
   })
 
+  it("does not enter when the Kite position read failed", () => {
+    expect(
+      decideChaseEntryAction({
+        automated: true,
+        quantity: 65,
+        netQty: 0,
+        side: "LONG",
+        hasOpenEntryOrder: false,
+        kiteQtyKnown: false,
+      })
+    ).toBe("wait_open_order")
+  })
+
   it("refuses a new entry while the opposite paper/live book is open", () => {
     expect(
       decideChaseEntryAction({

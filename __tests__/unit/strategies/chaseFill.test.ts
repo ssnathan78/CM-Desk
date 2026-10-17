@@ -11,8 +11,11 @@ import {
   chaseRolloverOrderQty,
   chaseSlBreachMayClearStatus,
   chaseLotsFromConfig,
+  chaseCoverOrderQty,
+  chaseEpisodeCoverFillQty,
   chaseProtectiveStopFillQty,
   chaseSideFromNetQty,
+  planChaseMorningExit,
   chaseStatusHasPosition,
   decideChaseInPositionSync,
   planChaseSlBreachFlatten,
@@ -463,5 +466,82 @@ describe("chaseFill", () => {
         ],
       })
     ).toBe(false)
+  })
+
+  it("sizes a cover from the open net, not from an earlier fill the same day", () => {
+    const openedAt = new Date("2026-10-17T09:30:00+05:30")
+    const symbol = "NIFTY26OCTFUT"
+    const orders = [
+      {
+        tradingsymbol: symbol,
+        transaction_type: "BUY" as const,
+        status: "COMPLETE",
+        filled_quantity: 65,
+        order_type: "SL",
+        trigger_price: 24000,
+        order_timestamp: "2026-10-17T09:00:00+05:30",
+      },
+      {
+        tradingsymbol: symbol,
+        transaction_type: "BUY" as const,
+        status: "COMPLETE",
+        filled_quantity: 65,
+        order_type: "MARKET",
+        order_timestamp: "2026-10-17T10:15:00+05:30",
+      },
+    ]
+    expect(
+      chaseEpisodeCoverFillQty({ tradingsymbol: symbol, side: "BUY", openedAt, kiteOrders: orders })
+    ).toBe(65)
+    expect(
+      chaseCoverOrderQty({
+        kiteQty: -65,
+        openedQty: -65,
+        episodeFilledCoverQty: 65,
+      })
+    ).toBe(0)
+    expect(
+      planChaseSlBreachFlatten({
+        netQty: -65,
+        workingStopsFilledThisTick: 0,
+        hasWorkingProtectiveStop: false,
+        filledCoverQty: 65,
+        openedQty: -65,
+      })
+    ).toBe("already_covered")
+  })
+
+  it("does not subtract a partial fill that the kite net has already absorbed", () => {
+    expect(
+      chaseCoverOrderQty({
+        kiteQty: -35,
+        openedQty: -65,
+        ledgerQty: -35,
+        episodeFilledCoverQty: 30,
+      })
+    ).toBe(35)
+    expect(
+      chaseCoverOrderQty({
+        kiteQty: -65,
+        openedQty: -65,
+        ledgerQty: -35,
+        episodeFilledCoverQty: 30,
+      })
+    ).toBe(35)
+  })
+
+  it("keeps the morning exit on LONG until the book is flat, and marks the order as a flatten", () => {
+    expect(planChaseMorningExit({ side: "LONG", netQty: 65 })).toEqual({
+      status: "LONG",
+      order: { side: "SELL", purpose: "FLATTEN", quantity: 65 },
+    })
+    expect(planChaseMorningExit({ side: "SHORT", netQty: -30 })).toEqual({
+      status: "SHORT",
+      order: { side: "BUY", purpose: "FLATTEN", quantity: 30 },
+    })
+    expect(planChaseMorningExit({ side: "LONG", netQty: 0 })).toEqual({
+      status: "AWAITING_SIGNAL",
+      order: null,
+    })
   })
 })

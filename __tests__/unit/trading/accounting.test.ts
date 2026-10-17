@@ -3,8 +3,10 @@ import {
   emptyPosition,
   incrementalFillFromAverages,
   netRealized,
+  orphanCloseTradeFields,
   positionMarkSnapshot,
   presentLedgerPosition,
+  unrealizedForPosition,
   unrealizedPnl,
 } from "../../../lib/trading/accounting"
 import { moneyFromString, moneyToString } from "../../../lib/trading/money"
@@ -127,5 +129,45 @@ describe("position accounting", () => {
 
   it("rejects non-positive fill qty", () => {
     expect(() => apply("BUY", 0, "100")).toThrow(/positive/)
+  })
+
+  it("does not turn a missing mark into a zero unrealized by using the average", () => {
+    expect(
+      moneyToString(
+        unrealizedForPosition({
+          quantity: -65,
+          averageEntryPrice: "24000",
+          markPrice: null,
+          storedUnrealized: "-1300",
+        })
+      )
+    ).toBe("-1300.0000")
+    expect(
+      moneyToString(
+        unrealizedForPosition({
+          quantity: "0",
+          averageEntryPrice: "24000",
+          markPrice: "24100",
+          storedUnrealized: "-1300",
+        })
+      )
+    ).toBe("0.0000")
+  })
+
+  it("books an orphan close so the round-trip has a net the session can sum", () => {
+    const fields = orphanCloseTradeFields({
+      closedQty: 65,
+      averageBefore: moneyFromString("24000"),
+      exitPrice: moneyFromString("24100"),
+      realizedDelta: moneyFromString("-6500"),
+      fee: moneyFromString("0"),
+      closedAt: new Date("2026-10-17T10:00:00+05:30"),
+      openedAt: new Date("2026-10-16T10:00:00+05:30"),
+    })
+    expect(fields.entryQty).toBe(65)
+    expect(fields.exitQty).toBe(65)
+    expect(fields.net).toBe("-6500.0000")
+    expect(fields.averageEntry).toBe("24000.0000")
+    expect(fields.exitAt.toISOString()).toBe(new Date("2026-10-17T10:00:00+05:30").toISOString())
   })
 })
