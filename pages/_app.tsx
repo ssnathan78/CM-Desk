@@ -4,7 +4,6 @@ import "../styles/globals.css"
 
 import CssBaseline from "@mui/material/CssBaseline"
 
-import { ThemeProvider } from "@mui/material/styles"
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs"
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider"
 
@@ -13,8 +12,8 @@ import Head from "next/head"
 
 import { SWRConfig } from "swr"
 import ToastProvider from "../components/lib/ToastProvider"
+import DeskThemeProvider from "../components/shell/DeskThemeProvider"
 import fetch from "../lib/fetchJson"
-import theme from "../src/theme"
 
 const fontSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -65,14 +64,14 @@ function MyApp({ Component, pageProps }) {
       </Head>
 
       <LocalizationProvider dateAdapter={AdapterDayjs}>
-        <ThemeProvider theme={theme}>
+        <DeskThemeProvider>
           <CssBaseline />
           <ToastProvider>
             <div className={`${fontSans.variable} ${fontMono.variable}`}>
               <Component {...pageProps} />
             </div>
           </ToastProvider>
-        </ThemeProvider>
+        </DeskThemeProvider>
       </LocalizationProvider>
     </SWRConfig>
   )

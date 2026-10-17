@@ -46,6 +46,7 @@ import {
 } from "../lib/ui/alertNotifications"
 import useUser from "../lib/useUser"
 import DeskKeyboardShortcuts from "./shell/DeskKeyboardShortcuts"
+import { DeskThemeMenu } from "./shell/DeskThemeControl"
 import MobileOperatorSheet from "./shell/MobileOperatorSheet"
 import StatusRail from "./shell/StatusRail"
 
@@ -79,7 +80,7 @@ const itemSx = {
   borderRadius: 2,
   pl: 2,
   "&.Mui-selected": {
-    backgroundColor: "rgba(45, 212, 191, 0.12)",
+    backgroundColor: "action.selected",
     color: "primary.main",
   },
 }
@@ -321,10 +322,11 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
       ) : null}
       <AppBar
         position="fixed"
+        color="transparent"
         elevation={0}
         sx={{
-          bgcolor: "rgba(8, 12, 20, 0.78)",
-          backdropFilter: "blur(16px)",
+          bgcolor: "background.paper",
+          color: "text.primary",
           borderBottom: "1px solid",
           borderColor: "divider",
           ml: { md: `${DRAWER_WIDTH}px` },
@@ -364,6 +366,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
             {title || "CM-Desk"}
           </Typography>
           <StatusRail loggedIn={Boolean(user?.isLoggedIn)} compact={compact} />
+          <DeskThemeMenu />
           {user === undefined ? <Skeleton variant="rounded" width={88} height={28} /> : null}
         </Toolbar>
       </AppBar>
@@ -375,7 +378,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           slotProps={{ root: { keepMounted: true } }}
           sx={{
             display: { xs: "block", md: "none" },
-            "& .MuiDrawer-paper": { width: DRAWER_WIDTH, bgcolor: "#0c1422" },
+            "& .MuiDrawer-paper": { width: DRAWER_WIDTH, bgcolor: "background.paper" },
           }}
         >
           {drawer}
@@ -386,7 +389,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
             display: { xs: "none", md: "block" },
             "& .MuiDrawer-paper": {
               width: DRAWER_WIDTH,
-              bgcolor: "#0c1422",
+              bgcolor: "background.paper",
               borderRight: "1px solid",
               borderColor: "divider",
             },
@@ -430,7 +433,7 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           zIndex: theme.zIndex.appBar,
           borderTop: "1px solid",
           borderColor: "divider",
-          bgcolor: "#0c1422",
+          bgcolor: "background.paper",
           height: "calc(56px + env(safe-area-inset-bottom))",
           pb: "env(safe-area-inset-bottom)",
         }}

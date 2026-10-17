@@ -72,6 +72,7 @@ E2E and unit tests that open templates should use `/templates` (optional `?type=
 | Plan/scheduling cleanup | `PlanDash` removed; `DueSchedules` uses `fetchJson` |
 | Keyboard shortcuts | `?` dialog; `g` then `d` / `r` |
 | ERROR browser notify | Profile toggle (`desk.errorNotify`) |
+| Appearance | Top bar Theme menu and Profile → Appearance (`desk.theme`: Desk, Harbour, Blueprint, Night watch, Study lamp, Ledger). |
 | Constituent preview | Lists → `POST` preview before bulk accept |
 
 ## Keyboard

@@ -2,6 +2,7 @@ import { Box, Chip, Divider, FormControlLabel, Stack, Switch, Typography } from 
 import React, { useEffect, useState } from "react"
 import Layout from "../components/Layout"
 import PageSection from "../components/lib/PageSection"
+import { DeskThemeChoices } from "../components/shell/DeskThemeControl"
 import {
   readErrorNotifyEnabled,
   requestNotificationPermission,
@@ -51,6 +52,12 @@ const Profile = () => {
             ))}
           </Stack>
           <Chip sx={{ mt: 2 }} color="success" variant="outlined" label="Logged in" />
+        </PageSection>
+        <PageSection
+          title="Appearance"
+          description="Saved in this browser as desk.theme. It changes colours only. Books, risk, and orders stay as they are."
+        >
+          <DeskThemeChoices />
         </PageSection>
         <PageSection
           title="Notifications"
