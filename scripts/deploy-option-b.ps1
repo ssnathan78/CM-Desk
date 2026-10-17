@@ -94,4 +94,4 @@ if (-not $ok) {
 $rev = ssh -o BatchMode=yes $SshHost -- "git -C $RemoteDir rev-parse --short HEAD 2>/dev/null || echo unknown"
 Write-Host ""
 Write-Host "Deploy complete. Server tree: $rev" -ForegroundColor Green
-Write-Host "MOCK_ORDERS and secrets: check Desk / Risk — not printed here."
+Write-Host "MOCK_ORDERS and secrets: check Desk / Risk (not printed here)."
