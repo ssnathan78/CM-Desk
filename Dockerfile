@@ -1,3 +1,6 @@
+# syntax=docker/dockerfile:1
+# BuildKit (DOCKER_BUILDKIT=1) caches Yarn and Next between builds — see docs/DEPLOYMENT.md.
+
 # Build stage
 FROM node:22-alpine AS builder
 
@@ -6,9 +9,13 @@ WORKDIR /app
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
+# When true, runs yarn unit-test inside the image (slower; duplicates host CI). Default false — run tests on the laptop before deploy-option-b.ps1.
+ARG VERIFY_UNIT_TESTS=false
+
 COPY package.json yarn.lock .yarnrc.yml ./
 COPY .yarn/releases ./.yarn/releases
-RUN yarn install --immutable
+RUN --mount=type=cache,target=/root/.yarn/berry/cache \
+    yarn install --immutable
 
 COPY . .
 ENV DATABASE_URL=postgresql://postgres:postgres@localhost:5432/trading_db
@@ -20,9 +27,12 @@ ENV MOCK_ORDERS=true
 ENV NEXT_PUBLIC_DEFAULT_LOTS=1
 ENV NEXT_PUBLIC_DEFAULT_SKEW_PERCENT=10
 ENV NEXT_PUBLIC_DEFAULT_SLM_PERCENT=30
-    RUN yarn unit-test --forceExit
-    ENV NODE_ENV=production
-    RUN yarn build
+
+RUN if [ "$VERIFY_UNIT_TESTS" = "true" ]; then yarn unit-test --forceExit; fi
+
+ENV NODE_ENV=production
+RUN --mount=type=cache,target=/app/.next/cache \
+    yarn build
 
 # Production stage
 FROM node:22-alpine AS production
@@ -74,7 +84,8 @@ RUN corepack enable
 
 COPY package.json yarn.lock .yarnrc.yml ./
 COPY .yarn/releases ./.yarn/releases
-RUN yarn install --immutable
+RUN --mount=type=cache,target=/root/.yarn/berry/cache \
+    yarn install --immutable
 
 ENV TZ=Asia/Kolkata
 EXPOSE 3000

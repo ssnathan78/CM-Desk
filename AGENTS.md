@@ -69,7 +69,7 @@ Replay: `yarn simulate -- --scenario chase-paper-to-live-open` (paper archived, 
 
 Login/cookies → `docs/LOCAL.md`, `docs/TROUBLESHOOTING.md`.  
 Queues/schema → `docs/ARCHITECTURE.md`.  
-Ship to a server → `docs/DEPLOYMENT.md`.  
+Ship to a server → `docs/DEPLOYMENT.md` (fast Droplet path: `yarn deploy:prod` / `scripts/deploy-option-b.ps1`).  
 Security → `docs/SECURITY_REVIEW.md`, `docs/SECURITY_FINDINGS.md`.  
 Commands/stack → `CLAUDE.md` and this file.
 

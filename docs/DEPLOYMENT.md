@@ -86,33 +86,75 @@ Do **not** run `docker compose down -v` (wipes database volumes).
 
 ## Option B — Build locally, push the image to Droplet Docker
 
-Use this when the Droplet should **not** run `yarn build`. You still need git on the server in sync if you want matching source on disk; the **running code** is whatever is **inside the image** (including `drizzle/` SQL).
+Use this when the Droplet should **not** run `yarn build`. The **running code** is whatever is **inside the image** (including `drizzle/` SQL). By default the server also `git pull`s so `/srv/cmdesk` matches your commit for compose and debugging.
 
-### 1. On the laptop (repo root)
+### Fast path (recommended)
+
+From repo root on the laptop:
 
 ```powershell
-# Production-stage image (also runs yarn unit-test + yarn build in Docker)
+yarn deploy:prod
+# or: .\scripts\deploy-option-b.ps1
+```
+
+WSL / Linux:
+
+```bash
+chmod +x scripts/deploy-option-b.sh
+SYNC_GIT=true ./scripts/deploy-option-b.sh
+```
+
+The script:
+
+1. Runs **`yarn unit-test` on the host** (skip only with `-SkipHostTests` / `SKIP_HOST_TESTS=true`).
+2. Builds with **`DOCKER_BUILDKIT=1`** (Yarn + Next caches in the Dockerfile).
+3. **`docker save` → `scp` → `docker load`**, then **`docker compose up -d --no-deps app`** on the Droplet.
+4. Waits for **`/api/health`**.
+
+Flags (PowerShell):
+
+| Flag | Effect |
+|------|--------|
+| `-VerifyInDocker` | Also run unit tests **inside** `docker build` (`VERIFY_UNIT_TESTS=true`). Slower; usually unnecessary if host tests passed. |
+| `-NoSyncGit` / `-SkipGitPull` | Do not `git pull` on the server (image-only deploy). |
+| `-SkipHostTests` | Skip laptop unit tests (not recommended). |
+
+Push `master` before deploy if you rely on server `git pull`.
+
+### Why builds were slow (and what we changed)
+
+| Step | Before | Now |
+|------|--------|-----|
+| `yarn install` in Docker | Re-downloaded often on every code change | BuildKit **cache mount** on `/root/.yarn/berry/cache` |
+| `yarn build` in Docker | Cold every time | BuildKit **cache mount** on `.next/cache` |
+| Unit tests | Always inside Docker build (~30s + duplicate) | **Host** via deploy script; Docker only if `VERIFY_UNIT_TESTS=true` |
+| Transfer | Full image tar each time | Same tar path; use a **registry** later for incremental pulls (see below) |
+
+Always set **`$env:DOCKER_BUILDKIT = "1"`** (the script does). On Windows, keep the repo on **WSL2 disk** if Docker Desktop I/O on `C:\` is slow. Avoid `docker builder prune` unless you want a cold build.
+
+Strict Docker gate (old behaviour):
+
+```powershell
+$env:DOCKER_BUILDKIT = "1"
+$env:VERIFY_UNIT_TESTS = "true"
 docker compose build app
-
-# Compose names this image cm-desk-app. Confirm:
-docker images --format "{{.Repository}}:{{.Tag}}" | Select-String "cm-desk"
 ```
 
-Tag if the local name differs:
+### Manual steps (same as the script)
+
+#### 1. On the laptop (repo root)
 
 ```powershell
-docker tag cm-desk-app:latest cm-desk-app:latest
+$env:DOCKER_BUILDKIT = "1"
+yarn unit-test
+docker compose build app
 ```
 
-### 2. Copy the image over SSH
+Compose image name: **`cm-desk-app:latest`**.
 
-PowerShell (no intermediate file):
+#### 2. Copy the image over SSH
 
-```powershell
-docker save cm-desk-app:latest | ssh -o BatchMode=yes cm-desk-prod "docker load"
-```
-
-If the pipe is flaky on Windows, use a file:
+Prefer a file on Windows (pipes can corrupt the archive):
 
 ```powershell
 docker save cm-desk-app:latest -o cm-desk-app.tar
@@ -121,17 +163,18 @@ ssh -o BatchMode=yes cm-desk-prod -- "docker load -i /tmp/cm-desk-app.tar; rm /t
 Remove-Item cm-desk-app.tar
 ```
 
-### 3. Recreate only the app container (keep compose and .env)
+#### 3. Recreate only the app container
 
 ```bash
-ssh -o BatchMode=yes cm-desk-prod -- 'cd /srv/cmdesk && docker compose up -d --no-deps app'
-ssh -o BatchMode=yes cm-desk-prod -- 'curl -fsS -m 8 http://127.0.0.1:3000/api/health'
-ssh -o BatchMode=yes cm-desk-prod -- 'docker logs --tail 80 cm-desk-app'
+ssh -o BatchMode=yes cm-desk-prod -- 'cd /srv/cmdesk && git pull origin master && docker compose up -d --no-deps app'
+ssh -o BatchMode=yes cm-desk-prod -- 'curl -fsS -m 15 http://127.0.0.1:3000/api/health'
 ```
 
-Optional: `git pull` on `/srv/cmdesk` **without** replacing `docker-compose.yml` / `.env`, so the tree matches the image for debugging.
-
 The entrypoint still migrates Postgres when the new container starts. If a **new** SQL file is in the image, that is a schema change — snapshot/backup first.
+
+### Optional: container registry (faster than tar)
+
+For frequent deploys, push `cm-desk-app:latest` to GHCR or DigitalOcean Container Registry and `docker pull` on the Droplet instead of `docker save` / `scp`. Only changed layers download. Not wired in-repo yet; same image tag workflow as above.
 
 ---
 

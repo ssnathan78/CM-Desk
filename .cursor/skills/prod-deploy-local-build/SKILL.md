@@ -7,44 +7,44 @@ description: Deploy CM-Desk to the DigitalOcean Droplet by building the producti
 
 Production is financially sensitive. Confirm the operator asked to **change** prod (not only diagnose). Prefer after market / weekend.
 
-## 1. Git
+Full reference: `docs/DEPLOYMENT.md` (Option B, fast path).
 
-Commit only real content (skip CRLF-dirty files with empty `git diff --stat`). Push `master` if asked.
-
-## 2. Build on the laptop
+## Fast path
 
 ```powershell
-docker compose build app
+yarn deploy:prod
 ```
 
-Image name: `cm-desk-app:latest`. Unit tests run inside the build.
+Or `.\scripts\deploy-option-b.ps1` from repo root.
 
-## 3. Copy and load
+- Host **`yarn unit-test`** then **BuildKit** docker build (Yarn + Next caches; no in-image tests by default).
+- `docker save` → `scp` → `docker load` → `git pull` + `docker compose up -d --no-deps app` on `cm-desk-prod`.
+- Waits for `/api/health`.
+
+Flags: `-VerifyInDocker`, `-NoSyncGit`, `-SkipHostTests`. Push `master` before deploy if using server git pull.
+
+## Manual (if script unavailable)
 
 ```powershell
+$env:DOCKER_BUILDKIT = "1"
+yarn unit-test
+docker compose build app
 docker save cm-desk-app:latest -o cm-desk-app.tar
 scp cm-desk-app.tar cm-desk-prod:/tmp/cm-desk-app.tar
 ssh -o BatchMode=yes cm-desk-prod -- "docker load -i /tmp/cm-desk-app.tar; rm /tmp/cm-desk-app.tar"
 Remove-Item cm-desk-app.tar
-```
-
-Do not pipe `docker save` through PowerShell if it corrupts the archive.
-
-## 4. Recreate app only
-
-```powershell
 ssh -o BatchMode=yes cm-desk-prod -- "cd /srv/cmdesk && git pull origin master && docker compose up -d --no-deps app"
 ```
 
-Never `docker compose down -v`. Leave postgres/redis. Read new `drizzle/` SQL before shipping (entrypoint migrates).
+Never `docker compose down -v`. Read new `drizzle/` SQL before shipping.
 
-## 5. Verify
+## Verify
 
 ```powershell
 ssh -o BatchMode=yes cm-desk-prod -- "curl -fsS -m 15 http://127.0.0.1:3000/api/health"
 ssh -o BatchMode=yes cm-desk-prod -- "git -C /srv/cmdesk rev-parse --short HEAD"
 ```
 
-Print `NODE_ENV`, `MOCK_ORDERS`, `SESSION_COOKIE_SECURE`, `TZ`. Never print `.env`, secrets, or BullMQ queue names.
+Print `NODE_ENV`, `MOCK_ORDERS`, `SESSION_COOKIE_SECURE`, `TZ` only — never `.env`, secrets, or BullMQ queue names.
 
 SSH: `docs/SSH.md`. Host alias `cm-desk-prod` only.

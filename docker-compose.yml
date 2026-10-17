@@ -47,6 +47,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+      args:
+        # true = run yarn unit-test inside docker build (slow). Fast deploy: false + scripts/deploy-option-b.ps1
+        VERIFY_UNIT_TESTS: ${VERIFY_UNIT_TESTS:-false}
     container_name: cm-desk-app
     env_file:
       - path: .env
