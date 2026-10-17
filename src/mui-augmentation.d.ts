@@ -21,5 +21,3 @@ declare module "@mui/material/Typography" {
     code: true
   }
 }
-
-export {}

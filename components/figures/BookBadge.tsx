@@ -1,7 +1,6 @@
 import Chip from "@mui/material/Chip"
-
-import { color } from "../../src/tokens"
 import { labelFor } from "../../lib/ui/labels"
+import { color } from "../../src/tokens"
 
 type Book = "LIVE" | "PAPER" | "MOCK" | "RECONCILED" | "MIGRATED"
 

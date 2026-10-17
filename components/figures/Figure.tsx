@@ -1,5 +1,5 @@
-import Typography from "@mui/material/Typography"
 import type { SxProps, Theme } from "@mui/material/styles"
+import Typography from "@mui/material/Typography"
 
 import {
   formatInr,
@@ -7,9 +7,9 @@ import {
   formatPrice,
   formatPts,
   formatQty,
+  type PnlTone,
   pnlColorSx,
   pnlTone,
-  type PnlTone,
 } from "../../lib/format"
 
 export type FigureKind = "inr" | "pts" | "qty" | "price" | "pct" | "plain"

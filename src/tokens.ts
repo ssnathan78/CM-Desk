@@ -6,7 +6,13 @@ export const color = {
   profit: "#4CC38A",
   loss: "#F47A72",
   attention: { main: "#E3A93B", subtle: "rgba(227,169,59,0.14)", on: "#1A1300" },
-  danger: { main: "#C93C37", hover: "#B3322E", subtle: "rgba(201,60,55,0.16)", text: "#F47A72", on: "#FFFFFF" },
+  danger: {
+    main: "#C93C37",
+    hover: "#B3322E",
+    subtle: "rgba(201,60,55,0.16)",
+    text: "#F47A72",
+    on: "#FFFFFF",
+  },
   live: { bg: "#E3A93B", fg: "#1A1300" },
   paper: { border: "#3A4350", fg: "#A3ADBB" },
 } as const

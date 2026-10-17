@@ -44,7 +44,10 @@ export function formatInrLabel(
   return `\u20B9${core}`
 }
 
-export function formatPts(value: string | number | null | undefined, opts: { sign?: boolean } = {}) {
+export function formatPts(
+  value: string | number | null | undefined,
+  opts: { sign?: boolean } = {}
+) {
   const n = parseNum(value)
   if (n == null) return EM_DASH
   return formatSignedNumber(n, 2, opts.sign)

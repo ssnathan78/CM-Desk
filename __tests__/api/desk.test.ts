@@ -6,6 +6,7 @@ import flattenHandler from "../../pages/api/desk/flatten"
 import positionsHandler from "../../pages/api/desk/positions"
 import reconcileHandler from "../../pages/api/desk/reconcile"
 import riskHandler from "../../pages/api/desk/risk"
+import statusHandler from "../../pages/api/desk/status"
 import signalsHandler from "../../pages/api/desk/signals"
 import { invokeApi } from "../support/apiTestClient"
 import { describeDb } from "../support/dbHelpers"
@@ -33,6 +34,11 @@ describe("desk API auth", () => {
 
   it("rejects anonymous alerts", async () => {
     const result = await invokeApi(alertsHandler, { method: "GET", user: null })
+    expect(result.status).toBe(401)
+  })
+
+  it("rejects anonymous desk status", async () => {
+    const result = await invokeApi(statusHandler, { method: "GET", user: null })
     expect(result.status).toBe(401)
   })
 
@@ -170,6 +176,21 @@ describeDb("desk API session", () => {
     expect(Array.isArray(body.alerts)).toBe(true)
     expect(typeof body.errorCount).toBe("number")
     expect(typeof body.warnCount).toBe("number")
+  })
+
+  it("returns desk status payload", async () => {
+    const result = await invokeApi(statusHandler, { method: "GET", user })
+    expect(result.status).toBe(200)
+    const body = result.body as {
+      mockOrders?: boolean
+      strategies?: { CHASE?: { openPositions?: number } }
+      alerts?: { errorCount?: number; warnCount?: number }
+      market?: { session?: string }
+    }
+    expect(typeof body.mockOrders).toBe("boolean")
+    expect(body.strategies?.CHASE).toBeDefined()
+    expect(typeof body.alerts?.errorCount).toBe("number")
+    expect(typeof body.market?.session).toBe("string")
   })
 
   it("returns orders list", async () => {

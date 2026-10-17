@@ -7,6 +7,7 @@ import {
   Button,
   Chip,
   LinearProgress,
+  Skeleton,
   MenuItem,
   Paper,
   Stack,
@@ -26,6 +27,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
+import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import ScrollTable from "../components/lib/ScrollTable"
 import { useSnackbar } from "../components/lib/useSnackbar"
 import fetchJson from "../lib/fetchJson"
@@ -92,7 +94,7 @@ export default function MomentumPage() {
     message: string | null
     shown: boolean
   } | null>(null)
-  const config = draft ?? data?.config ?? DEFAULT_MOMENTUM_CONFIG
+  const config = data ? (draft ?? data.config) : null
   const locksRef = useRef<Report["locks"]>([])
   const lockQueue = useRef(Promise.resolve())
   const rankTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -254,7 +256,8 @@ export default function MomentumPage() {
   }
 
   function patch(partial: Partial<MomentumConfig>) {
-    setDraft({ ...config, ...partial })
+    const base = draft ?? data?.config ?? DEFAULT_MOMENTUM_CONFIG
+    setDraft({ ...base, ...partial })
   }
 
   function rememberLocks(locks: Report["locks"]) {
@@ -314,7 +317,34 @@ export default function MomentumPage() {
             any order is accepted, and a disabled strategy does not sell either. History pull runs
             only while this page is on and data refresh is on.
           </Typography>
+          {config ? (
+            <StrategyPermissionLine
+              strategyKey="MOMENTUM"
+              engineOn={config.active}
+              pageExecutionLabel={
+                config.execution === "report"
+                  ? "Report only"
+                  : config.execution === "manual"
+                    ? "Manual send"
+                    : "Auto on rebalance day"
+              }
+              extra={
+                config.rebalance === "adhoc"
+                  ? "Rebalance: Ad hoc"
+                  : config.rebalance === "monthly"
+                    ? "Rebalance: Monthly"
+                    : "Rebalance: Weekly"
+              }
+            />
+          ) : (
+            <Skeleton variant="text" width="70%" />
+          )}
         </Box>
+        {!config ? (
+          <Paper sx={{ p: 2 }}>
+            <Skeleton height={200} />
+          </Paper>
+        ) : (
         <Paper sx={{ p: 2 }}>
           <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
             Run
@@ -328,7 +358,7 @@ export default function MomentumPage() {
             }}
           >
             <SwitchField
-              label="Strategy on"
+              label="Engine on"
               checked={config.active}
               onChange={active => patch({ active })}
             />
@@ -654,6 +684,7 @@ export default function MomentumPage() {
             </Box>
           ) : null}
         </Paper>
+        )}
         <Stack
           direction={{ xs: "column", sm: "row" }}
           spacing={1}

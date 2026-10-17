@@ -1,8 +1,7 @@
 import Box from "@mui/material/Box"
 import Chip from "@mui/material/Chip"
-
-import Figure from "../figures/Figure"
 import { formatInrLabel, pnlTone } from "../../lib/format"
+import Figure from "../figures/Figure"
 
 type Props = {
   pnl?: number | null
@@ -11,8 +10,7 @@ type Props = {
 
 export default function PnLComponent({ pnl, points }: Props) {
   const rupeeTone = typeof pnl === "number" ? pnlTone(pnl) : "none"
-  const chipColor =
-    rupeeTone === "loss" ? "error" : rupeeTone === "profit" ? "success" : "default"
+  const chipColor = rupeeTone === "loss" ? "error" : rupeeTone === "profit" ? "success" : "default"
 
   if (typeof pnl !== "number" && typeof points !== "number") {
     return <Chip size="small" label="P&L" />
@@ -28,9 +26,7 @@ export default function PnLComponent({ pnl, points }: Props) {
           sx={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}
         />
       ) : null}
-      {typeof points === "number" ? (
-        <Figure kind="pts" value={points} pnl align="left" />
-      ) : null}
+      {typeof points === "number" ? <Figure kind="pts" value={points} pnl align="left" /> : null}
     </Box>
   )
 }

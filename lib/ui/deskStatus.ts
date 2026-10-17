@@ -7,7 +7,7 @@ export type DeskStatusPayload = {
   tradingEnabled: boolean
   deskHalted: boolean
   haltReason: string | null
-  market: { session: MarketSessionState; isTradingDay: boolean }
+  market: { session: MarketSessionState; isTradingDay: boolean; nextChangeIst?: string | null }
   strategies: Record<
     RiskStrategyKey,
     {
@@ -86,9 +86,10 @@ export function deriveEntriesChip(status: DeskStatusPayload): EntriesChip {
   return { label: "Entries allowed", tone: "neutral" }
 }
 
-export function deriveStrategyDeskLine(
-  row: DeskStatusPayload["strategies"][RiskStrategyKey]
-): { label: string; tone: ChipTone } {
+export function deriveStrategyDeskLine(row: DeskStatusPayload["strategies"][RiskStrategyKey]): {
+  label: string
+  tone: ChipTone
+} {
   if (!row.enabled) {
     return { label: "Disabled — dark", tone: "danger" }
   }

@@ -24,6 +24,7 @@ import {
   ListItemIcon,
   ListItemText,
   ListSubheader,
+  Skeleton,
   Toolbar,
   Typography,
   useMediaQuery,
@@ -37,6 +38,7 @@ import useSWR from "swr"
 
 import fetchJson from "../lib/fetchJson"
 import useUser from "../lib/useUser"
+import StatusRail from "./shell/StatusRail"
 
 const DRAWER_WIDTH = 260
 
@@ -81,7 +83,8 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
   const [mobileOpen, setMobileOpen] = useState(false)
   const asPath = router.asPath
   const { data: alertSummary } = useSWR(user?.isLoggedIn ? "/api/desk/alerts?summary=1" : null)
-  const alertCount = Number(alertSummary?.errorCount ?? 0)
+  const alertCount =
+    Number(alertSummary?.errorCount ?? 0) + Number(alertSummary?.warnCount ?? 0)
 
   const close = () => setMobileOpen(false)
 
@@ -232,6 +235,18 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
         </ListItemButton>
         {user?.isLoggedIn ? (
           <>
+            <Box sx={{ px: 2, py: 1 }}>
+              {user.avatar_url ? (
+                <Avatar
+                  alt={user.user_shortname || "user"}
+                  src={user.avatar_url}
+                  sx={{ width: 28, height: 28, mb: 0.5 }}
+                />
+              ) : null}
+              <Typography variant="body2" noWrap>
+                {user.user_name || user.user_shortname || user.user_id}
+              </Typography>
+            </Box>
             <ListItemButton
               component={Link}
               href="/profile"
@@ -296,38 +311,17 @@ export default function AppShell({ children, title, maxWidth = "lg" }: AppShellP
           <Typography
             variant="h6"
             sx={{
-              flex: 1,
               minWidth: 0,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
+              mr: 2,
             }}
           >
             {title || "CM-Desk"}
           </Typography>
-          {user?.isLoggedIn ? (
-            <Chip
-              avatar={
-                user.avatar_url ? (
-                  <Avatar alt={user.user_shortname || "user"} src={user.avatar_url} />
-                ) : (
-                  <Avatar>{(user.user_shortname || "K").slice(0, 1)}</Avatar>
-                )
-              }
-              label={
-                compact
-                  ? user.user_shortname || user.user_id || "In"
-                  : user.user_name || user.user_id || "Signed in"
-              }
-              variant="outlined"
-              sx={{
-                maxWidth: { xs: 132, sm: 240 },
-                "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
-              }}
-            />
-          ) : (
-            <Chip label="Signed out" variant="outlined" />
-          )}
+          <StatusRail loggedIn={Boolean(user?.isLoggedIn)} compact={compact} />
+          {user === undefined ? <Skeleton variant="rounded" width={88} height={28} /> : null}
         </Toolbar>
       </AppBar>
       <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>

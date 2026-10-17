@@ -30,23 +30,20 @@ import IndexLists from "../components/desk/IndexLists"
 import RiskControls from "../components/desk/RiskControls"
 import SignalsPanel from "../components/desk/SignalsPanel"
 import StrategyReconcile from "../components/desk/StrategyReconcile"
+import Figure from "../components/figures/Figure"
 import Layout from "../components/Layout"
 import ConfirmDialog from "../components/lib/ConfirmDialog"
 import ScrollTable from "../components/lib/ScrollTable"
 import TradesForDay from "../components/TradesForDay"
 import fetchJson from "../lib/fetchJson"
 import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNotice"
+import { formatInr, formatIstDateTime } from "../lib/format"
 import type { FeedClearMode } from "../lib/trading/feedWindow"
 import { type HistoryPreset, historyRange } from "../lib/trading/historyRange"
 import { DEFAULT_RISK_SETTINGS } from "../lib/trading/riskEngine"
 import { groupStrategyRealized } from "../lib/trading/todayGroups"
 import type { PositionView } from "../lib/trading/types"
 import useUser from "../lib/useUser"
-import Figure from "../components/figures/Figure"
-import {
-  formatInr,
-  formatIstDateTime,
-} from "../lib/format"
 
 const deskTileSx = {
   textAlign: "left" as const,
@@ -118,7 +115,6 @@ export default function DeskPage() {
   }
   const [reconciling, setReconciling] = useState(false)
   const [reconMsg, setReconMsg] = useState<string | null>(null)
-  const [resumeOpen, setResumeOpen] = useState(false)
   const [phantomClear, setPhantomClear] = useState<{
     id: string
     symbol: string
@@ -132,7 +128,6 @@ export default function DeskPage() {
     book: string
     strategy: string
   } | null>(null)
-  const [riskBusy, setRiskBusy] = useState(false)
   const [tradeBook, setTradeBook] = useState<"ALL" | "PAPER" | "LIVE">("ALL")
   const [positionView, setPositionView] = useState<PositionView>("LIVE")
   const [historyPreset, setHistoryPreset] = useState<HistoryPreset>("today")
@@ -213,69 +208,13 @@ export default function DeskPage() {
     jobs: [],
   }
   const risk = riskData?.settings
-  const deskHalted = Boolean(risk?.deskHalted)
-
   return (
     <Layout title="Desk" maxWidth="xl">
-      <Stack
-        direction={{ xs: "column", md: "row" }}
-        spacing={2}
-        sx={{ mb: 2, alignItems: { md: "center" } }}
-      >
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h5">Desk</Typography>
-          <Typography color="text.secondary">
-            Ledger view of orders, positions, round-trips, and why they happened. Kite remains live
-            execution reality; this page is the application record.{" "}
-            <Link href="/help/desk#risk-flags">Risk flags</Link>
-          </Typography>
-        </Box>
-        {deskHalted ? (
-          <Tooltip title="Clears the desk halt and turns Trading enabled back on. New entries can open again. Per-strategy halt is a separate checkbox on Risk.">
-            <span>
-              <Button
-                color="warning"
-                variant="contained"
-                disabled={riskBusy}
-                onClick={() => setResumeOpen(true)}
-                sx={{ width: { xs: "100%", md: "auto" } }}
-              >
-                Resume trading
-              </Button>
-            </span>
-          </Tooltip>
-        ) : (
-          <Tooltip title="Stops new entries desk-wide (same idea as turning off Trading enabled, with a stored reason). Flatten and stop-loss still work.">
-            <span>
-              <Button
-                color="error"
-                variant="outlined"
-                disabled={riskBusy}
-                onClick={async () => {
-                  setRiskBusy(true)
-                  try {
-                    await fetchJson("/api/desk/risk", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "halt", reason: "Manual halt from desk" }),
-                    })
-                    await mutateRisk()
-                  } catch (e) {
-                    setReconMsg(e instanceof Error ? e.message : "Halt failed")
-                  } finally {
-                    setRiskBusy(false)
-                  }
-                }}
-                sx={{ width: { xs: "100%", md: "auto" } }}
-              >
-                Halt new entries
-              </Button>
-            </span>
-          </Tooltip>
-        )}
-      </Stack>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5">Desk</Typography>
+      </Box>
       {reconMsg ? (
-        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setReconMsg(null)}>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setReconMsg(null)}>
           {reconMsg}
         </Alert>
       ) : null}
@@ -413,31 +352,6 @@ export default function DeskPage() {
           }
         }}
       />
-      <ConfirmDialog
-        open={resumeOpen}
-        title="Resume trading?"
-        message="This clears the desk halt and allows new entries again. Flatten and stop-loss orders were still allowed while halted. Resume only after you have reviewed positions."
-        confirmLabel="Resume"
-        confirmColor="warning"
-        onCancel={() => setResumeOpen(false)}
-        onConfirm={async () => {
-          setResumeOpen(false)
-          setRiskBusy(true)
-          try {
-            await fetchJson("/api/desk/risk", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "resume" }),
-            })
-            await mutateRisk()
-          } catch (e) {
-            setReconMsg(e instanceof Error ? e.message : "Resume failed")
-          } finally {
-            setRiskBusy(false)
-          }
-        }}
-      />
-
       <Box
         sx={{
           position: "sticky",
@@ -448,59 +362,6 @@ export default function DeskPage() {
           mb: 1,
         }}
       >
-        <Box sx={{ display: "flex", gap: 1, mb: 1, alignItems: "center" }}>
-          <Box
-            component="button"
-            type="button"
-            onClick={() => setTab("risk")}
-            title={
-              deskHalted ? risk?.haltReason || "New entries are stopped" : "New entries allowed"
-            }
-            aria-label={
-              deskHalted ? "Halted. New entries are stopped." : "Armed. New entries allowed."
-            }
-            sx={{
-              font: "inherit",
-              color: deskHalted ? "error.main" : "success.main",
-              border: 1,
-              borderColor: deskHalted ? "error.main" : "success.main",
-              bgcolor: "background.paper",
-              borderRadius: 1,
-              px: 1,
-              py: 0.25,
-              cursor: "pointer",
-            }}
-          >
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-              {deskHalted ? "Halted" : "Armed"}
-            </Typography>
-          </Box>
-          <Box
-            component="button"
-            type="button"
-            onClick={() => setTab("alerts")}
-            aria-label={
-              alertErrors + alertWarns
-                ? `${alertErrors + alertWarns} open alerts`
-                : "No open alerts"
-            }
-            sx={{
-              font: "inherit",
-              color: alertErrors ? "error.main" : alertWarns ? "warning.main" : "text.secondary",
-              border: 1,
-              borderColor: alertErrors ? "error.main" : alertWarns ? "warning.main" : "divider",
-              bgcolor: "background.paper",
-              borderRadius: 1,
-              px: 1,
-              py: 0.25,
-              cursor: "pointer",
-            }}
-          >
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-              {alertErrors + alertWarns ? `Alerts ${alertErrors + alertWarns}` : "Alerts"}
-            </Typography>
-          </Box>
-        </Box>
         <Box
           sx={{
             display: "grid",
@@ -722,21 +583,13 @@ export default function DeskPage() {
                       <TableCell>{String(row.provenance || "—")}</TableCell>
                       <TableCell align="right">{String(row.quantity)}</TableCell>
                       <TableCell align="right">
-                        <Figure
-                          kind="price"
-                          value={row.averageEntryPrice as string}
-                          flat={flat}
-                        />
+                        <Figure kind="price" value={row.averageEntryPrice as string} flat={flat} />
                       </TableCell>
                       <TableCell align="right">
                         <Figure kind="price" value={row.markPrice as string} />
                       </TableCell>
                       <TableCell align="right">
-                        <Figure
-                          kind="inr"
-                          value={flat ? "0" : (row.unrealizedPnl as string)}
-                          pnl
-                        />
+                        <Figure kind="inr" value={flat ? "0" : (row.unrealizedPnl as string)} pnl />
                       </TableCell>
                       <TableCell align="right">
                         <Figure kind="inr" value={row.realizedPnl as string} pnl />
@@ -889,7 +742,8 @@ export default function DeskPage() {
                       {String(row.entryQty)} / {String(row.exitQty)}
                     </TableCell>
                     <TableCell align="right">
-                      {formatInr(row.averageEntry as string)} / {formatInr(row.averageExit as string)}
+                      {formatInr(row.averageEntry as string)} /{" "}
+                      {formatInr(row.averageExit as string)}
                     </TableCell>
                     <TableCell align="right">{formatInr(row.netPnl as string)}</TableCell>
                     <TableCell>{String(row.exitReason || "—")}</TableCell>

@@ -8,6 +8,7 @@ import {
   Chip,
   IconButton,
   LinearProgress,
+  Skeleton,
   MenuItem,
   Paper,
   Stack,
@@ -27,6 +28,7 @@ import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 
 import Layout from "../components/Layout"
+import { StrategyPermissionLine } from "../components/strategy/StrategyPermissionLine"
 import ScrollTable from "../components/lib/ScrollTable"
 import { useSnackbar } from "../components/lib/useSnackbar"
 import fetchJson from "../lib/fetchJson"
@@ -134,13 +136,7 @@ export default function DailyTrendPage() {
     budgetInr: "",
     entryStyle: "",
   })
-  const runtime = config ??
-    data?.config ?? {
-      active: false,
-      dataRefresh: false,
-      execution: "report" as const,
-      limitBufferPercent: 0.15,
-    }
+  const runtime = data ? (config ?? data.config) : null
 
   async function saveRuntime(next = runtime) {
     setBusy(true)
@@ -360,11 +356,32 @@ export default function DailyTrendPage() {
             symbol has its own on/off switch. Desk → Risk → Daily trend has to be enabled before an
             order is accepted.
           </Typography>
+          {runtime ? (
+            <StrategyPermissionLine
+              strategyKey="DAILY_TREND"
+              engineOn={runtime.active}
+              pageExecutionLabel={
+                runtime.execution === "report"
+                  ? "Report only"
+                  : runtime.execution === "manual"
+                    ? "Manual send"
+                    : "Auto"
+              }
+            />
+          ) : (
+            <Skeleton variant="text" width="70%" />
+          )}
         </Box>
+        {!runtime ? (
+          <Paper sx={{ p: 2 }}>
+            <Skeleton height={120} />
+          </Paper>
+        ) : (
         <Paper sx={{ p: 2 }}>
           <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-            <Typography variant="body2">Strategy on</Typography>
+            <Typography variant="body2">Engine on</Typography>
             <Switch
+              inputProps={{ "aria-label": "Engine on" }}
               checked={runtime.active}
               onChange={e => setConfig({ ...runtime, active: e.target.checked })}
             />
@@ -449,6 +466,7 @@ export default function DailyTrendPage() {
             </Box>
           ) : null}
         </Paper>
+        )}
         <Paper sx={{ p: 2 }}>
           <Typography variant="subtitle2" gutterBottom>
             Add a symbol
