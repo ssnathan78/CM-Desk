@@ -52,6 +52,7 @@ Before adding or changing a path that places, modifies, cancels, sizes, or refus
 
 - A failed Kite position read is **unknown**, not quantity 0. Do not enter, clear a live row, or switch Paper/Live on that read.
 - A flatten or stop is not an entry. Set `purpose` to `FLATTEN` / `SL` / `EXIT` or halt will block it. Do not mark the strategy flat until quantity is 0.
+- An entry placed as `SL` / `SL-M` / `SL-L` (Chase at the day’s high or low) sets `purpose: "ENTRY"`. `inferOrderRole` keeps that as `ENTRY`, so halt, trading-disabled, and Allow live orders still reject it. Do not turn that entry into a market order, and do not drop the purpose because the order type is a stop.
 - Cover size is this open book. Do not subtract an earlier same-day fill, and do not send a second market order after a cover has already filled.
 - Advance `orders.filled_qty` only after the fill row exists. A close with no open trade still writes a closed round-trip so Sessions Net can see it.
 - Qty 0 → unrealized 0. A missing mark on an open qty is not the average (that prints a fake 0). Label **Margin + open MTM** and **Realized lifetime** as those measures, not as Kite day P&L or Sessions net.
@@ -73,7 +74,8 @@ Treat every change as if it can lose real money. Happy-path tests are not enough
 | SL / flatten when the **active** book is flat | Qty falling back to configured lots (that **opens** a new position) |
 | Paper → Live with paper leftover | Using paper qty on Kite; leftover paper blocking a live book |
 | New paper entry while live/Kite still has size | Punching paper on top of a real book (`CHASE_OTHER_BOOK` / `OTHER_BOOK`) |
-| Halt / trading-disabled / strategy-disabled | Blocking flatten/SL when those roles must still work (except strategy **disabled**, which is fully dark) |
+| Halt / trading-disabled / strategy-disabled | Blocking flatten/SL when those roles must still work (except strategy **disabled**, which is fully dark). An entry stop (`purpose: "ENTRY"`, order type `SL`) must still be blocked |
+| Chase entry stop while Desk is halted | The resting SL filling and leaving a futures position. Status stays `AWAITING_*` |
 | One-way Nifty after a 9:20 short (one wing SL) | Flattening the leftover wing because the first SL hit. That leftover until ASO **is** the strategy (`*-920-one-way-holds-other-leg`) |
 | Restart, duplicate working order, partial fill, gap through stop | Overfill, double entry, or status that disagrees with ledger qty. Order `filled_qty` must not advance until the fill row exists |
 | Protective stop or market flatten already filled for this open book | A second MARKET that reverses. Same-day re-entry must not look already covered by the previous fill |

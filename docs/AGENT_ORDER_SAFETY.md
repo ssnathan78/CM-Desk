@@ -43,7 +43,25 @@ These are the failures that already sent, sized, or hid an order. New code keeps
 
 Set `purpose` to `FLATTEN`, `SL`, or `EXIT` on the order object before `placeOrder`. The 09:16 Chase exit uses `planChaseMorningExit`: purpose `FLATTEN`, and LONG/SHORT stays until that function returns `AWAITING_SIGNAL` (quantity is flat). A rejected order leaves the status unchanged.
 
-### 2. Do not move the book before the exit is accepted
+### 2. An entry placed as a stop order is still an entry
+
+Chase does not market-buy the hourly close. It places an `SL` at the day’s high or low, with `purpose: "ENTRY"`. That order type is the strategy. It is not a protective stop.
+
+`inferOrderRole` returns `ENTRY` when purpose is `ENTRY`, including `SL`, `SL-M`, and `SL-L`. Halt, trading-disabled, strategy halt, Allow live orders, max lots, max notional, and max positions then apply. A risk reject leaves Chase in `AWAITING_LONG` or `AWAITING_SHORT`. It does not become `LONG` or `SHORT`.
+
+| Order | Purpose | Role | Halt / trading-disabled |
+|---|---|---|---|
+| Chase entry at day’s high or low | `ENTRY` | `ENTRY` | blocked |
+| Protective stop after a fill | `SL` | `SL` | allowed |
+| Stop order type and no purpose | absent | `SL` | allowed |
+| 09:16 exit, rollover close, minute cover | `FLATTEN` | `FLATTEN` | allowed |
+| Strategy enabled off | any | any | **blocked**, including flatten and SL |
+
+Do not change the Chase entry to a market order so that halt will see it. Do not drop `purpose: "ENTRY"` because the order type is already `SL`. Do not special-case Chase inside `evaluateOrder`. The next strategy that enters with a stop uses the same purpose.
+
+The sim actor passes `role` itself and does not call `inferOrderRole`. The regression test is `__tests__/unit/trading/riskEngine.test.ts` (`Chase entry stop is an entry`). `placeOrder` is the production caller.
+
+### 3. Do not move the book before the exit is accepted
 
 Chase rollover uses `planChaseRollover`.
 
@@ -56,7 +74,7 @@ Chase rollover uses `planChaseRollover`.
 
 If the flatten or the next-month entry throws, do not move `chase_status` onto the next contract. A halt still allows the flatten and must reject the new-month entry.
 
-### 3. A paper book does not rewrite a Kite order
+### 4. A paper book does not rewrite a Kite order
 
 `placeSL` on a paper Chase book amends the paper stop or calls `placeOrder`. It does not read Kite positions to decide the side, and it does not `modifyOrder` a trigger-pending Kite stop.
 
@@ -64,7 +82,7 @@ If the flatten or the next-month entry throws, do not move `chase_status` onto t
 
 Rollover and the Chase stop-breach “convert working stop” path do the same: paper never touches Kite; a live convert calls `assertLiveBrokerMutation` and only for a Chase-owned tag.
 
-### 4. Square-off must name its strategy
+### 5. Square-off must name its strategy
 
 `doSquareOffPositions`, `squareOffOrder`, `squareOffTag`, and `doDeletePendingOrders` resolve the strategy from the job or from `strategyFromOrderTag`. `resolveSquareOffBook` then chooses the book.
 
@@ -75,13 +93,13 @@ Rollover and the Chase stop-breach “convert working stop” path do the same: 
 
 Straddle, strangle, and exit-order rollback call `doSquareOffPositions` with an order tag. The tag lookup is what keeps a filled live leg from being “rolled back” as a paper fill. If you add a caller, pass `strategy` and `orderTag`. Do not pass `{ orderTag }` and assume the default book.
 
-### 5. One strategy does not use another strategy’s quantity
+### 6. One strategy does not use another strategy’s quantity
 
 - Open-position caps use `countOpenStrategyPositions` for **this** strategy and **this** book (paper or live).
 - Chase stops and covers use `resolveChaseBookBreakdown` for that futures symbol. Paper ledger rows are filtered to Chase.
 - A Kite net is the whole account. Square-off may use it only for symbols that belong to **this** job, and only after the book is known to be live. `Math.min(order qty, abs(kite qty))` is this job’s size against that symbol, not a license to cancel another tag’s stop.
 
-### 6. Kill tells the truth
+### 7. Kill tells the truth
 
 `runDeskKill` sets `chasePaused` only after `pauseAllChaseBooks` resolves, and `deskHalted` only after `haltDesk` resolves. A status-reset failure does not erase a pause that already succeeded.
 
@@ -89,7 +107,7 @@ Straddle, strangle, and exit-order rollback call `doSquareOffPositions` with an 
 
 Kill all pauses every Chase index because Chase can be a hedge. Kill intraday does not. A live book left open because the market is closed keeps LONG/SHORT (`chaseBooksKeptOpen`). The pause, when it happened, is the thing the operator must be able to see.
 
-### 7. A failed risk read is not a paper fill
+### 8. A failed risk read is not a paper fill
 
 `getRiskSettings` throws `RiskSettingsUnavailableError`. `placeOrder` throws before it writes a fill. `assertOrderAllowed` maps that throw to `RISK_UNAVAILABLE`.
 
@@ -99,7 +117,7 @@ A failed **Kite position** read is a different rule: unknown quantity, not 0. Se
 
 ## How to implement a new feature or fix
 
-1. Name the order role before writing the call. Entry, flatten, stop, or exit. If you cannot name it, the path is not ready.
+1. Name the order role before writing the call. Entry, flatten, stop, or exit. If you cannot name it, the path is not ready. An entry that uses a stop order type is still an entry: set `purpose: "ENTRY"`. A protective stop sets `purpose: "SL"`. Do not infer the role from the order type alone.
 2. Name the book. Process mock, strategy Paper, or strategy Live. For a square-off, call `resolveSquareOffBook`. For a new entry, `isPaperStrategy` / `executionProvenance`. Pass the strategy. Look the tag up. Do not leave it blank.
 3. Size an exit from the open book (`chaseFlattenQty`, `chaseCoverOrderQty`, `flattenRowPlan`, ledger qty for that strategy and provenance). Configured lots are for a new entry on a flat book.
 4. Send a new order only through `placeOrder`, with `purpose` set. Change or cancel a resting Kite stop only through `assertLiveBrokerMutation`, and only when the book is live and the session is open.
@@ -110,6 +128,7 @@ A failed **Kite position** read is a different rule: unknown quantity, not 0. Se
    - Rejected entry does not leave LONG/SHORT with quantity 0.
    - Flat-book exit quantity is 0, not configured lots.
    - Halt and trading-disabled still allow `FLATTEN` and `SL`. Strategy disabled allows neither.
+   - An `SL` / `SL-M` / `SL-L` order with `purpose: "ENTRY"` is rejected by halt, trading-disabled, strategy halt, `LIVE_BLOCKED`, max lots, max notional, and max positions. The same order type with `purpose: "SL"` or no purpose is still allowed under halt.
    - A paper book does not call `kite.modifyOrder` or `kite.cancelOrder`.
    - A live flatten while the market is closed does not cancel the stop and does not send.
    - A square-off with no strategy is refused.

@@ -14,6 +14,7 @@ This desk loses real money if status, qty, and broker disagree.
 - LONG/SHORT requires a **fill**, not the candle alone.
 - After a protective stop **fills**, do not place a second MARKET flatten (that reverses into a new un-signaled position). Cover size is this open book (`chaseCoverOrderQty`); an earlier same-day fill does not count.
 - A flatten or stop must pass `purpose` `FLATTEN` / `SL` / `EXIT`. A bare MARKET is an entry, so halt blocks it. Do not mark the strategy flat until quantity is 0 (`planChaseMorningExit`).
+- An entry that is placed as `SL` or `SL-M` must pass `purpose` `ENTRY`. `inferOrderRole` keeps that as an entry, so halt, trading-disabled, and Allow live orders still reject it. A protective stop keeps `purpose` `SL`. Do not change the Chase day-high/low entry into a market order to make the halt apply.
 - A failed Kite position read is **unknown**, not 0. Do not enter, clear a live row, or report the broker flat. See [docs/AGENT_BOOKS_AND_PNL.md](../../docs/AGENT_BOOKS_AND_PNL.md).
 - A new order goes through `placeOrder`. A Kite modify or cancel of a stop goes through `assertLiveBrokerMutation`. A paper book does not call `kite.modifyOrder` or `kite.cancelOrder`.
 - Live flatten, SL, and exit while the market is closed are refused (`liveFlattenSessionBlock`). Do not cancel the stop first. Paper may still flatten. This does not follow the entry “require market hours” toggle.

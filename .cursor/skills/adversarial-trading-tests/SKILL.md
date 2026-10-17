@@ -16,6 +16,7 @@ Happy path is not enough. Encode failures that lose money.
 | Paper → Live with paper leftover | Using paper qty on Kite |
 | Paper entry while live still has size | Stacking paper on a real book |
 | Halt / trading-disabled | Blocking flatten/SL (except strategy **disabled**) |
+| Chase entry is an `SL` order with `purpose: "ENTRY"` | Treating it as a protective stop, so halt or trading-disabled lets it fill |
 | One-way Nifty after 9:20 short | Flattening the leftover wing (`*-920-one-way-holds-other-leg`) |
 | Restart, duplicate working order, partial, gap through stop | Overfill, double entry, status ≠ ledger qty |
 | Protective stop already filled | Second MARKET flatten that reverses |

@@ -56,7 +56,7 @@ Chase books are independent on `/chase`. Desk → Risk still has **one** Chase s
 | Control | Scope |
 |---|---|
 | Execution Paper / Live | All Chase indexes. You cannot paper Nifty and live BankNifty. Paper → Live archives every Chase paper position and resets **every** `chase_status` row. |
-| Strategy enabled / halted | All Chase orders (entry, and for disabled: even SL/flatten). Halt still allows flatten/SL. |
+| Strategy enabled / halted | All Chase orders (entry, and for disabled: even SL/flatten). Halt still allows flatten and a protective stop. The pending entry is an `SL` at the day’s high or low with `purpose: "ENTRY"`, so halt, trading-disabled, and Allow live orders still reject that order. It is not a protective stop. |
 | Max lots / max open positions / max notional | Shared across Chase. Two enabled indexes both count toward Chase open-position and notional caps. |
 | Reset Chase to fresh signal | All Chase indexes (`POST /api/chase-settings` `action: reset-signal` with no `instrument`). Chase page Reset is per index. |
 
