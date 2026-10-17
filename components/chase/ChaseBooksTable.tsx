@@ -18,14 +18,14 @@ import type { ReactNode } from "react"
 import { useMemo, useState } from "react"
 
 import {
+  type ChaseConfigField,
   chaseConfigDiffFields,
   chaseConfigPrimaryBook,
   chaseOpenClassifyShortLabel,
-  type ChaseConfigField,
 } from "../../lib/chase/chaseBookCompare"
 import type { ChaseBookConfig } from "../../lib/chaseDefaults"
-import { color } from "../../src/tokens"
 import { labelFor } from "../../lib/ui/labels"
+import { color } from "../../src/tokens"
 import BookBadge from "../figures/BookBadge"
 import Figure from "../figures/Figure"
 import ScrollTable from "../lib/ScrollTable"

@@ -68,7 +68,7 @@ export default function PositionDetailDrawer({
           </Typography>
         ) : null}
         {open ? (
-          <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ pt: 1 }}>
+          <Stack direction="row" spacing={1} sx={{ pt: 1, flexWrap: "wrap" }}>
             <ActionButton actionVariant="order" size="small" onClick={onSquareOff}>
               Square off {qty}…
             </ActionButton>
