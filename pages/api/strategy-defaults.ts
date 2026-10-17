@@ -2,7 +2,7 @@ import { sendApiError } from "../../lib/apiErrors"
 import { STRATEGIES } from "../../lib/constants"
 import logger from "../../lib/logger"
 import withSession from "../../lib/session"
-import { getMergedDefaults, upsertDefaults } from "../../lib/strategyDefaults"
+import { getMergedDefaults, resetDefaults, upsertDefaults } from "../../lib/strategyDefaults"
 import { validatePlanConfig } from "../../lib/strategyValidation"
 
 export default withSession(async (req, res) => {
@@ -20,6 +20,11 @@ export default withSession(async (req, res) => {
     if (req.method === "GET") {
       const config = await getMergedDefaults(strategy as STRATEGIES)
       return res.json({ strategy, config })
+    }
+
+    if (req.method === "DELETE") {
+      const config = await resetDefaults(strategy as STRATEGIES)
+      return res.json({ strategy, config, reset: true })
     }
 
     if (req.method === "PUT") {

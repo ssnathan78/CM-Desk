@@ -29,8 +29,7 @@ export default function InstrumentPicker({
   onChange: (instruments: Record<INSTRUMENTS, boolean>) => void
 }) {
   const selected =
-    (Object.keys(instruments) as INSTRUMENTS[]).find(key => instruments[key]) ||
-    enabledInstruments[0]
+    (Object.keys(instruments || {}) as INSTRUMENTS[]).find(key => instruments?.[key]) || ""
 
   return (
     <FormControl component="fieldset">

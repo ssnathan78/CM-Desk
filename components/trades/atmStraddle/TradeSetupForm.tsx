@@ -1,4 +1,5 @@
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -28,6 +29,7 @@ import {
   SCHEDULEABLE_EXIT_STRATEGIES,
   validateLots,
   validateSelectedInstruments,
+  withIndexTick,
 } from "../../../lib/strategyValidation"
 import type { ATM_STRADDLE_CONFIG, AvailablePlansConfig } from "../../../types/plans"
 import ExpiryTypeComponent from "../../lib/ExpiryTypeComponent"
@@ -46,6 +48,7 @@ interface ATMStraddleTradeSetupFormProps {
   state: ATM_STRADDLE_CONFIG
   isRunnable?: boolean
   embedded?: boolean
+  notice?: string | null
   onChange: (changedProps: Partial<ATM_STRADDLE_CONFIG>) => void
   onCancel: () => void
   onSubmit: (data: AvailablePlansConfig | null) => void
@@ -64,6 +67,7 @@ const TradeSetupForm = ({
   onCancel,
   isRunnable = true,
   embedded = false,
+  notice = null,
   enabledInstruments: enabledInstrumentsProp,
   exitStrategies: exitStrategiesProp,
 }: ATMStraddleTradeSetupFormProps) => {
@@ -95,19 +99,21 @@ const TradeSetupForm = ({
 
   const handleFormSubmit = e => {
     e.preventDefault()
-    const lotsCheck = validateLots(state.lots)
+    const next = embedded ? withIndexTick(state) : state
+    if (next !== state) onChange(next)
+    const lotsCheck = validateLots(next.lots)
     if (!lotsCheck.ok) {
       setLotsError(lotsCheck.error)
       return
     }
-    const instrumentsCheck = validateSelectedInstruments(state.instruments)
+    const instrumentsCheck = validateSelectedInstruments(next.instruments)
     if (!instrumentsCheck.ok) {
       setInstrumentError(instrumentsCheck.error)
       return
     }
     setLotsError(null)
     setInstrumentError(null)
-    onSubmit(formatFormDataForApi({ strategy, data: state }))
+    onSubmit(formatFormDataForApi({ strategy, data: next }))
   }
 
   const body = (
@@ -120,7 +126,9 @@ const TradeSetupForm = ({
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr" },
+          gridTemplateColumns: embedded
+            ? { xs: "1fr", lg: "1fr 1fr" }
+            : { xs: "1fr", md: "1fr 1fr", xl: "1fr 1fr 1fr" },
           gap: 2,
         }}
       >
@@ -144,7 +152,7 @@ const TradeSetupForm = ({
             <Grid size={12}>
               <InstrumentPicker
                 single={embedded}
-                instruments={state.instruments}
+                instruments={(embedded ? withIndexTick(state) : state).instruments}
                 enabledInstruments={enabledInstruments}
                 disabled={state.disableInstrumentChange}
                 error={instrumentError}
@@ -430,6 +438,11 @@ const TradeSetupForm = ({
         </FormSection>
 
         <FormSection title="Save" span>
+          {notice || instrumentError || lotsError ? (
+            <Alert severity="error" sx={{ mb: 1 }}>
+              {notice || instrumentError || lotsError}
+            </Alert>
+          ) : null}
           <Box
             sx={{
               display: "flex",

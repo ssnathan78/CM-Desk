@@ -1,3 +1,5 @@
+import { withIndexTick } from "./strategyValidation"
+
 export const PLAN_STRATEGY_NAMES: Record<string, string> = {
   ATM_STRADDLE: "ATM Straddle",
   ATM_STRANGLE: "ATM Strangle",
@@ -123,13 +125,13 @@ export function mapPlanFromDb(row: Record<string, any>) {
     )
   )
 
-  return {
+  return withIndexTick({
     ...extras,
     ...normalizedRow,
     autoSquareOffProps: row.autoSquareOffTime
       ? { time: row.autoSquareOffTime, deletePendingOrders: true }
       : undefined,
-  }
+  })
 }
 
 export function planApiErrorMessage(err: any): string {

@@ -88,6 +88,21 @@ export function validateSelectedInstruments(
   return { ok: true }
 }
 
+/** A saved template stores the index on `instrument`. The tick map is not a column. */
+export function withIndexTick<
+  T extends {
+    instrument?: string
+    instruments?: Record<string, boolean | undefined> | null
+  },
+>(state: T): T {
+  if (selectedTradeInstruments(state.instruments).length > 0) return state
+  if (!state.instrument) return state
+  return {
+    ...state,
+    instruments: { ...(state.instruments || {}), [state.instrument]: true },
+  }
+}
+
 export function validateLots(lots: unknown, maxLots?: number): TradeValidationResult {
   const n = Number(lots)
   if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {

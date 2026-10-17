@@ -44,6 +44,36 @@ export function groupTodayBooks(input: {
   return rows
 }
 
+export type StrategyRealizedRow = {
+  id: string
+  label: string
+  realized: string
+}
+
+/** Lifetime realized already stored on position rows, grouped like the Today tile. */
+export function groupStrategyRealized(
+  rows: { strategy: string | null; realized: string | null }[]
+): StrategyRealizedRow[] {
+  const known = new Set<string>(TODAY_GROUPS.flatMap(group => group.strategies))
+  const grouped: StrategyRealizedRow[] = TODAY_GROUPS.map(group => {
+    const strategies = new Set<string>(group.strategies)
+    return {
+      id: group.id,
+      label: group.label,
+      realized: moneyToString(sum(rows, strategies, row => row.realized)),
+    }
+  })
+  const other = rows.filter(row => !known.has(row.strategy || ""))
+  if (other.length) {
+    grouped.push({
+      id: "other",
+      label: "Other",
+      realized: moneyToString(sum(other, null, row => row.realized)),
+    })
+  }
+  return grouped
+}
+
 function sum<T extends { strategy: string | null }>(
   rows: T[],
   strategies: Set<string> | null,

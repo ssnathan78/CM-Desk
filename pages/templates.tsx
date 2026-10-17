@@ -145,6 +145,10 @@ export default function TemplatesPage() {
 
   async function saveStarter() {
     if (!state?.strategy) return
+    const yes = window.confirm(
+      "Replace the blank form used by the next new template of this type? Templates you already saved stay as they are."
+    )
+    if (!yes) return
     try {
       await axios.put("/api/strategy-defaults", { strategy: state.strategy, config: state })
       showMessage("Saved as the blank starter for a new template.")
@@ -153,12 +157,28 @@ export default function TemplatesPage() {
     }
   }
 
+  async function resetStarter() {
+    if (!state?.strategy) return
+    const yes = window.confirm(
+      "Put the blank form back to the built-in one? Templates you already saved stay as they are."
+    )
+    if (!yes) return
+    setError(null)
+    try {
+      await axios.delete("/api/strategy-defaults", { data: { strategy: state.strategy } })
+      showMessage("Starter reset. The next new template uses the built-in form.")
+      if (!editingId) setState(blankState(state.strategy))
+    } catch (e) {
+      setError(apiErrorMessage(e, "Could not reset starter"))
+    }
+  }
+
   const strategy = (state?.strategy || typeQuery || STRATEGIES.ATM_STRADDLE) as STRATEGIES
   const Form = strategy === STRATEGIES.ATM_STRANGLE ? ATMStrangleTradeForm : ATMStraddleTradeForm
 
   return (
-    <Layout>
-      <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
+    <Layout maxWidth="xl">
+      <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: "center", flexWrap: "wrap" }}>
         <Typography variant="h5" sx={{ flex: 1 }}>
           Templates
         </Typography>
@@ -168,64 +188,72 @@ export default function TemplatesPage() {
           Schedules
         </Button>
       </Stack>
-      {error ? (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+      {error && !state ? (
+        <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       ) : null}
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <Paper sx={{ p: 1, width: { md: 280 }, flexShrink: 0 }}>
-          {visible.length === 0 ? (
-            <Typography color="text.secondary" sx={{ p: 1 }}>
-              No templates yet.
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mb: 1 }}>
+        {visible.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No templates yet.
+          </Typography>
+        ) : (
+          visible.map(row => (
+            <Button
+              key={row.id}
+              size="small"
+              variant={editingId === row.id ? "contained" : "outlined"}
+              onClick={() => {
+                setError(null)
+                setEditingId(row.id)
+                setState(hydratePlanConfig(row))
+              }}
+            >
+              {row.name || "Untitled"} · {row.instrument}
+            </Button>
+          ))
+        )}
+      </Box>
+      {state ? (
+        <Box>
+          <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: "center", flexWrap: "wrap" }}>
+            <Typography variant="h6" sx={{ flex: 1 }}>
+              {editingId ? `Editing ${state.name || "template"}` : "New template"}
             </Typography>
-          ) : (
-            visible.map(row => (
-              <Button
-                key={row.id}
-                fullWidth
-                sx={{ justifyContent: "flex-start" }}
-                onClick={() => {
-                  setEditingId(row.id)
-                  setState(hydratePlanConfig(row))
-                }}
-              >
-                {row.name || "Untitled"} · {row.instrument}
-              </Button>
-            ))
-          )}
-        </Paper>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          {state ? (
-            <>
-              <Typography variant="h6">Editing template {state.name || ""}</Typography>
-              <Stack direction="row" spacing={1} sx={{ my: 1 }}>
-                <Button variant="outlined" onClick={runNow}>
-                  Run now
-                </Button>
-                <Button onClick={saveStarter}>Save as starter</Button>
-              </Stack>
-              <Form
-                strategy={strategy}
-                state={state as never}
-                embedded
-                isRunnable={false}
-                onChange={changed =>
-                  setState(current => (current ? { ...current, ...changed } : current))
-                }
-                onSubmit={save}
-                onCancel={() => setState(null)}
-              />
-            </>
-          ) : (
-            <Paper sx={{ p: 3 }}>
-              <Typography>
-                Select a template or start a new one. Chase stays on its own page.
-              </Typography>
-            </Paper>
-          )}
+            <Button size="small" variant="outlined" onClick={runNow}>
+              Run now
+            </Button>
+            <Button size="small" onClick={saveStarter}>
+              Save as starter
+            </Button>
+            <Button size="small" onClick={resetStarter}>
+              Reset starter
+            </Button>
+          </Stack>
+          <Form
+            strategy={strategy}
+            state={state as never}
+            embedded
+            notice={error}
+            isRunnable={false}
+            onChange={changed =>
+              setState(current => (current ? { ...current, ...changed } : current))
+            }
+            onSubmit={save}
+            onCancel={() => {
+              setError(null)
+              setState(null)
+            }}
+          />
         </Box>
-      </Stack>
+      ) : (
+        <Paper sx={{ p: 3 }}>
+          <Typography>
+            Select a template or start a new one. Chase stays on its own page.
+          </Typography>
+        </Paper>
+      )}
       {SnackbarAlert}
     </Layout>
   )

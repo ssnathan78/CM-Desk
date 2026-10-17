@@ -338,8 +338,10 @@ const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
       <Box
         sx={{
           display: "flex",
+          alignItems: "center",
           gap: 1,
           flexWrap: "wrap",
+          mt: 2.5,
           mb: 1.5,
         }}
       >
@@ -347,25 +349,28 @@ const KillDeskButtons = ({ onDone }: { onDone: () => Promise<void> }) => {
           color="warning"
           variant="contained"
           loading={loading}
+          startIcon={<Stop />}
           onClick={() => setPendingScope("flatten")}
         >
-          <Stop /> Square off all open
+          Square off all open
         </Button>
         <Button
           color="warning"
           variant="outlined"
           loading={loading}
+          startIcon={<Stop />}
           onClick={() => setPendingScope("intraday")}
         >
-          <Stop /> Kill intraday
+          Kill intraday
         </Button>
         <Button
           color="error"
           variant="outlined"
           loading={loading}
+          startIcon={<Stop />}
           onClick={() => setPendingScope("all")}
         >
-          <Stop /> Kill all (incl. Chase)
+          Kill all (incl. Chase)
         </Button>
       </Box>
     </>

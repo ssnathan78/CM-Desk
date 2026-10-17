@@ -32,6 +32,11 @@ export async function getMergedDefaults(strategy: STRATEGIES): Promise<Record<st
   }
 }
 
+export async function resetDefaults(strategy: STRATEGIES): Promise<Record<string, unknown>> {
+  await db.delete(strategyDefaults).where(eq(strategyDefaults.strategy, strategy))
+  return codeDefaultsFor(strategy)
+}
+
 export async function upsertDefaults(
   strategy: STRATEGIES,
   config: Record<string, unknown>

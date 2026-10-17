@@ -121,6 +121,17 @@ describe("mapPlanToDb", () => {
     expect(fromDb.inverted).toBe(true)
     expect(fromDb).not.toHaveProperty("extras")
   })
+
+  it("treats the stored index as ticked when the tick map was not saved", () => {
+    const fromDb = mapPlanFromDb({
+      strategy: "ATM_STRADDLE",
+      instrument: "NIFTY",
+      name: "Morning",
+      lots: 1,
+      extras: {},
+    })
+    expect(fromDb.instruments).toEqual({ NIFTY: true })
+  })
 })
 
 describe("planApiErrorMessage", () => {

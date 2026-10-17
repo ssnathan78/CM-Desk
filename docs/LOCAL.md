@@ -20,6 +20,8 @@ cd CM-Desk
 
 If you already cloned, `cd` into that folder instead.
 
+Git stores text as LF. `.gitattributes` checks those files out as LF on Windows as well, so a file does not show up as modified only because an editor saved CRLF. Leave `next-env.d.ts` uncommitted: `yarn dev` rewrites it to the dev type paths.
+
 ## 2. Create `.env` (secrets live only on your machine)
 
 ```powershell

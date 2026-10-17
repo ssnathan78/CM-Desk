@@ -40,7 +40,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         id: "ledger",
         title: "Desk — orders, positions, history",
         body: [
-          "Desk is home. It opens on Positions. Today lists jobs and schedules that are due and not queued yet. Armed and Alerts are small status chips. The Today tile counts open books and shows what closed today next to the open mark, by Intraday, Chase, Daily trend, and Momentum. Cash, lifetime realized, unrealized, portfolio, gross exposure, and drawdown share the other tile. Realized and unrealized stay separate numbers. Closed today is not added to the open mark.",
+          "Desk is home. It opens on Positions. Today lists jobs and schedules that are due and not queued yet. Armed and Alerts are small status chips. The Today tile lists Intraday, Chase, Daily trend, and Momentum. The count in parentheses is open books. Closed is round-trips finished today. Mark is from the entry price. The Realized tile is the realized already stored on those books, same groups, not today's closed column and not Kite's day P&L. Cash, lifetime realized, unrealized, portfolio, gross exposure, and drawdown share the money tile. Realized and unrealized stay separate numbers. Closed today is not added to the open mark.",
           "Desk → Orders is only the blotter: instructions that reached placeOrder (paper, mock, live, or reconciled). A Sunday or after-hours live “Schedule now” never creates an order. That reject is on Desk → Alerts. Mock punches still need at least one index ticked; otherwise nothing is sent.",
           "Desk → Contracts shows the Kite NFO futures and option expiries the strategies will use today (front/next month FUT for Chase, current/next/monthly option dates for straddles and strangles). The contract list is fetched from Kite and cached until 07:00 IST — it is not a Postgres table. Chase stores only the selected indexes and, once in a trade, the tradingsymbol on chase_status.",
           "Desk → Orders, Trades, Alerts, Signals, Lists, Decisions, Activity, and Sessions open on today (IST). The same Period menu on each of those tabs also offers this month, this quarter, this year, all time, and a custom range. Sessions is one row per day, so Today is that session. Positions opens on Live only and is not date-filtered, so an overnight book stays visible. All (Live + reconciled) adds broker-reconciled and migrated rows. Paper / mock is separate. Lists is the Nifty 100 and Nifty Total Market constituent check. It is not date-filtered.",
@@ -83,7 +83,7 @@ export const HELP_PAGES: Record<HelpTopic, HelpPage> = {
         body: [
           "Save writes the template only. Jobs already created keep the lots, stops, and expiry rule they were copied with.",
           "Update from template is a separate action, and it is refused once any order for that job has filled.",
-          "Save as starter sets the blank form for the next new template. It is not a traded strategy.",
+          "Save as starter replaces the blank form for the next new template of that type. Reset starter puts that blank form back to the built-in one. Neither action changes a template you already saved.",
         ],
       },
       {

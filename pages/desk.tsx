@@ -39,8 +39,23 @@ import { type FlattenOpenResult, flattenOperatorNotice } from "../lib/flattenNot
 import type { FeedClearMode } from "../lib/trading/feedWindow"
 import { type HistoryPreset, historyRange } from "../lib/trading/historyRange"
 import { DEFAULT_RISK_SETTINGS } from "../lib/trading/riskEngine"
+import { groupStrategyRealized } from "../lib/trading/todayGroups"
 import type { PositionView } from "../lib/trading/types"
 import useUser from "../lib/useUser"
+
+const deskTileSx = {
+  textAlign: "left" as const,
+  font: "inherit",
+  color: "inherit",
+  border: 1,
+  borderColor: "divider",
+  bgcolor: "background.paper",
+  borderRadius: 1,
+  px: 1,
+  py: 0.5,
+  cursor: "pointer",
+  minWidth: 0,
+}
 
 function money(value: string | number | null | undefined) {
   if (value == null || value === "") return "—"
@@ -187,6 +202,7 @@ export default function DeskPage() {
 
   const p = portfolioData?.portfolio
   const todayRows = portfolioData?.today ?? []
+  const realizedRows = groupStrategyRealized(p?.strategyPnl ?? [])
   const todayOpen = todayRows.reduce((count, row) => count + row.open, 0)
   const sessions = portfolioData?.sessions ?? []
   const positions = positionData?.positions ?? []
@@ -497,7 +513,7 @@ export default function DeskPage() {
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+            gridTemplateColumns: { xs: "1fr", md: "1.2fr 0.9fr 1.1fr" },
             gap: 1,
             mb: 1,
           }}
@@ -507,26 +523,14 @@ export default function DeskPage() {
             type="button"
             onClick={() => setTab("sessions")}
             title="Closed is round-trips finished today. Mark is from the entry price, so an overnight Chase book includes earlier days."
-            aria-label="Today by strategy. Closed is round-trips finished today. Open mark is from the entry price."
-            sx={{
-              textAlign: "left",
-              font: "inherit",
-              color: "inherit",
-              border: 1,
-              borderColor: "divider",
-              bgcolor: "background.paper",
-              borderRadius: 1,
-              px: 1.25,
-              py: 0.75,
-              cursor: "pointer",
-              minWidth: 0,
-            }}
+            aria-label="Today by strategy. The number in parentheses is open books. Closed is round-trips finished today. Open mark is from the entry price."
+            sx={deskTileSx}
           >
             <Box
               sx={{
                 display: "grid",
                 gridTemplateColumns: "1fr auto auto",
-                columnGap: 1.5,
+                columnGap: 1,
                 alignItems: "baseline",
               }}
             >
@@ -542,11 +546,7 @@ export default function DeskPage() {
               {todayRows.map(row => (
                 <Box key={row.id} sx={{ display: "contents" }}>
                   <Typography variant="body2" noWrap>
-                    {row.label}
-                    <Typography component="span" variant="caption" color="text.secondary">
-                      {" "}
-                      {row.open}
-                    </Typography>
+                    {row.label} ({row.open})
                   </Typography>
                   <Typography variant="caption" sx={{ color: pnlColor(row.closedToday) }}>
                     {money(row.closedToday)}
@@ -562,21 +562,37 @@ export default function DeskPage() {
             component="button"
             type="button"
             onClick={() => setTab("positions")}
+            title="Realized already stored on the books. It is not today's closed column, and it is not Kite's day P&L."
+            aria-label="Realized on the books by strategy. This is not today's closed round-trips."
+            sx={deskTileSx}
+          >
+            <Typography variant="caption" color="text.secondary">
+              Realized
+            </Typography>
+            {realizedRows.map(row => (
+              <Box
+                key={row.id}
+                sx={{ display: "flex", justifyContent: "space-between", gap: 1, minWidth: 0 }}
+              >
+                <Typography variant="body2" noWrap>
+                  {row.label}
+                </Typography>
+                <Typography variant="caption" sx={{ color: pnlColor(row.realized) }} noWrap>
+                  {money(row.realized)}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setTab("positions")}
             aria-label={`Cash ${money(p?.availableCash)}. Realized ${money(p?.realizedPnl)}. Unrealized ${money(p?.unrealizedPnl)}. Portfolio ${money(p?.portfolioValue)}. Gross exposure ${money(p?.grossExposure)}. Drawdown ${money(p?.drawdown)}.`}
             sx={{
-              textAlign: "left",
-              font: "inherit",
-              color: "inherit",
-              border: 1,
-              borderColor: "divider",
-              bgcolor: "background.paper",
-              borderRadius: 1,
-              px: 1.25,
-              py: 0.75,
-              cursor: "pointer",
+              ...deskTileSx,
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
-              columnGap: 2,
+              columnGap: 1.5,
               rowGap: 0.25,
             }}
           >
@@ -590,8 +606,11 @@ export default function DeskPage() {
                 ["Drawdown", money(p?.drawdown)],
               ] as const
             ).map(([label, value]) => (
-              <Box key={label} sx={{ minWidth: 0 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+              <Box
+                key={label}
+                sx={{ display: "flex", justifyContent: "space-between", gap: 0.5, minWidth: 0 }}
+              >
+                <Typography variant="caption" color="text.secondary" noWrap>
                   {label}
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
