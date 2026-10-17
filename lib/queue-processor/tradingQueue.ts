@@ -78,7 +78,7 @@ const worker = new Worker(
       throw new Error(`Late trading job discarded — scheduled for ${scheduledAt.toISOString()}`)
     }
     const result = await processJob(job)
-    await armEntryFollowUps(job, result)
+    await armEntryFollowUps(job, result ?? null)
     // console.log(`processed tradingQueue id ${job.id}`, result)
     return result
   },

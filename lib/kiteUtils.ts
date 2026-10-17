@@ -1203,7 +1203,7 @@ export const getTradingSymbolsByOptionPrice = async ({
 export const remoteOrderSuccessEnsurer = async (args: {
   _kite?: Record<string, unknown>
   ensureOrderState: string
-  orderProps: Partial<KiteOrder>
+  orderProps: Partial<KiteOrder> & { intentSlice?: string | null }
   instrument: INSTRUMENTS
   onFailureRetryAfterMs?: number
   retryAttempts?: number

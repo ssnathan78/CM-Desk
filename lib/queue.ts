@@ -84,7 +84,7 @@ export async function addToNextQueue(jobData, jobResponse): Promise<Job | undefi
     }
 
     case EXIT_TRADING_Q_NAME: {
-      const queueOptions = getQueueOptionsForExitStrategy(jobData.exitStrategy)
+      const queueOptions = getQueueOptionsForExitStrategy(jobData.exitStrategy) as JobsOptions
       if (executionId) queueOptions.jobId = followUpJobId("exit", executionId)
       return addQueueJob(
         exitTradesQueue,
